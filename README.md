@@ -23,10 +23,20 @@ $$
 We can project it to atomic orbital basis $| i \alpha \rangle$ as:
 
 $$
-H^{QP}_{i\alpha, j\beta} = \sum_{nk} \sum_{i\alpha, j\beta}  \epsilon^{QP} \langle i\alpha | nk \rangle  \langle nk | j\beta \rangle 
+H^{QP}_{ia, jb} = \sum_{nk} \sum_{ia, jb}  \epsilon^{QP} \langle ia | nk \rangle  \langle nk | jb \rangle 
 $$
 
-In term of tight-binding model, $H^{QP}_{i\alpha, j\beta}$ can be understood as a hopping term between two nodes. To learn this hopping term, we can first build a graph structure on crystal system {$v_i$, $e_{ij}$}, where node feature $v_i=0\oplus 0\oplus 0...$ embeds element information, $e_{ij}=0\oplus 1 \oplus 2...$ embeds geometry information between two codes. Then, e3nn convolution layer can conduct message passing for this graph and map it to hopping term $H^{QP}=e^{L}_{ij}$.
+In term of tight-binding model, $H^{QP}_{ia, jb}$ can be understood as a hopping term between two nodes. To learn this hopping term, we can first build a graph structure on crystal system { $v_i$, $e_{ij}$ }, where node feature $v_i=0\oplus 0\oplus 0...$ embeds element information, $e_{ij}=0\oplus 1 \oplus 2...$ embeds geometry information between two codes. Then, e3nn convolution layer can conduct message passing for this graph and map it to hopping term $H^{QP}=e^{L}_{ij}$.
+
+### Useful Reference:
+- e3nn: https://arxiv.org/abs/1802.08219
+- DeepH: https://www.nature.com/articles/s43588-022-00265-6
+- DeepH-e3nn: https://www.nature.com/articles/s41467-023-38468-8
+- HamGNN: https://iopscience.iop.org/article/10.1088/0256-307X/41/7/077103/meta
+- el-ph GNN: https://www.nature.com/articles/s43588-024-00668-7
+- Planewave2Orbital: https://www.nature.com/articles/s43588-024-00701-9
+
+
 
 ## Installation
 To install Deep-GWBSE, clone the repository and install the required dependencies:
