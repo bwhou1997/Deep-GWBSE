@@ -20,13 +20,17 @@ $$
 H^{QP} = \sum_{nk} | nk \rangle  \left( \epsilon^{DFT} + \epsilon^{G_0W_0} \right)  \langle nk |
 $$
 
-We can project the QP Hamiltonian to atomic orbital basis $| i \alpha \rangle$ as:
+We can project the QP Hamiltonian to atomic orbital basis $| l \alpha \rangle$ as:
 
 $$
-H_{ia, jb} = \sum_{nk}  \epsilon^{QP} \langle ia | nk \rangle  \langle nk | jb \rangle 
+H_{la, jb} = \sum_{nk}  \epsilon^{QP} \langle la | nk \rangle  \langle nk | jb \rangle 
 $$
 
-In term of tight-binding model, $H_{ia, jb}$ can be understood as a hopping term between two nodes. To learn this hopping term, we can first build a graph structure on crystal system { $v_i$, $e_{ij}$ }, where node feature $v_i=0\oplus 0\oplus 0...$ embeds element information, $e_{ij}=0\oplus 1 \oplus 2...$ embeds geometry information between two nodes. Then, e3nn convolution layer can conduct message passing for this graph and map it to hopping term $H_{ia, jb}=e^{L}_{ij}$.
+$$
+= \sum_{nk}  \epsilon^{QP} \langle a | nk \rangle  \langle nk | b \rangle e^{ikR(l-j)}
+$$
+
+In term of tight-binding model, $H_{la, jb}$ can be understood as a hopping term between two nodes. To learn this hopping term, we can first build a graph structure on crystal system { $v_l$, $e_{lj}$ }, where node feature $v_i=0\oplus 0\oplus 0...$ embeds element information, $e_{lj}=0\oplus 1 \oplus 2...$ embeds geometry information between two nodes. Then, e3nn convolution layer can conduct message passing for this graph and map it to hopping term $H_{la, jb}=e^{L}_{lj}$, where L denotes the last layer
 
 ### Useful Reference:
 - e3nn: https://arxiv.org/abs/1802.08219
