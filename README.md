@@ -43,6 +43,24 @@ In term of tight-binding model, $H_{la, jb}$ can be understood as a hopping term
 - LCAO Hamiltonian: https://gpaw.readthedocs.io/tutorialsexercises/localorbitals/localorbitals.html
 ### Useful GPAW function
 
+Hamiltonian with atomic orbitals basis (see Bezene_LCAO.py)
+```
+...calc...
+
+# (1) LCAO Hamiltonian
+from gpaw.lcao.pwf2 import LCAOwrap
+lcao = LCAOwrap(calc)
+H = lcao.get_hamiltonian()
+S = lcao.get_overlap()
+
+# (2) LO Hamiltonian
+from gpaw.lcao.local_orbitals import LocalOrbitals
+los = LocalOrbitals(calc)
+los = LocalOrbitals(calc)
+H = los.get_hamiltonian()
+S = los.get_overlap()
+```
+
 Coefficient $\langle nk | l \alpha \rangle$
 
 dos.py 
@@ -50,12 +68,6 @@ dos.py
 (line 113): def raw_orbital_LDOS(paw, a, spin, angular='spdf', nbands=None)
 ```
 
-calculator.py
-```
-(line 1642): get_orbital_ldos(self, a,
-                         spin=0, angular='spdf', npts=201, width=None,
-                         nbands=None, spinorbit=False)
-```
 
 
 ## Installation
