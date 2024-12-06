@@ -39,7 +39,23 @@ In term of tight-binding model, $H_{la, jb}$ can be understood as a hopping term
 - HamGNN: https://iopscience.iop.org/article/10.1088/0256-307X/41/7/077103/meta
 - el-ph GNN: https://www.nature.com/articles/s43588-024-00668-7
 - Planewave2Orbital: https://www.nature.com/articles/s43588-024-00701-9
+- AO basis: https://journals.aps.org/prb/pdf/10.1103/PhysRevB.80.195112, https://gpaw.readthedocs.io/documentation/lcao/lcao.html#lcao
+- LCAO Hamiltonian: https://gpaw.readthedocs.io/tutorialsexercises/localorbitals/localorbitals.html
+### Useful GPAW function
 
+Coefficient $\langle nk | l \alpha \rangle$
+
+dos.py 
+```
+(line 113): def raw_orbital_LDOS(paw, a, spin, angular='spdf', nbands=None)
+```
+
+calculator.py
+```
+(line 1642): get_orbital_ldos(self, a,
+                         spin=0, angular='spdf', npts=201, width=None,
+                         nbands=None, spinorbit=False)
+```
 
 
 ## Installation
@@ -47,8 +63,7 @@ To install Deep-GWBSE, clone the repository and install the required dependencie
 
 ```bash
 git clone https://github.com/yourusername/Deep-GWBSE.git
-cd Deep-GWBSE
-pip install -r requirements.txt
+todo
 ```
 
 ## Usage
