@@ -5,6 +5,8 @@ from gpaw import GPAW, PW, FermiDirac
 from ase.parallel import parprint
 import numpy as np
 import matplotlib.pyplot as plt
+from ase.build import molecule
+import scipy as sp
 
 def get_angular_projectors(setup, angular, type='bound'):
     """Determine the projector indices which have specified angula
@@ -92,18 +94,14 @@ def raw_orbital_LDOS(wfs, a, spin, angular='spdf', nbands=None):
         weights = np.take(weights_xi,
                                  indices=projectors, axis=1)
         return energies, weights
-
-
+    
 Hartree2eV = 27.21138602
 
 
+###### Build structure #######
+
 structure = mx2(formula='MoS2', kind='2H', a=3.184, thickness=3.127,
                 size=(1, 1, 1), vacuum=3.5)
-
-
-
-print('start GS')
-start_time_gs = time.time()
 
 calc = GPAW(mode=PW(ecut=300),
             # parallel={'domain': 1},
@@ -117,16 +115,10 @@ calc = GPAW(mode=PW(ecut=300),
 
 structure.calc = calc
 structure.get_potential_energy()
-# calc.write('MoS2_gs.gpw', 'all')
+
 
 calc.diagonalize_full_hamiltonian()
-# calc.write('MoS2_fulldiag.gpw', 'all')
 
-
-
-# e, P = calc.get_orbital_ldos(a=0, angular='d')
-# eig_k = calc.get_eigenvalues(kpt=0)
-# setups = calc.wfs.setups # setup for each atom
 
 
 ###### Build Ham #######
@@ -138,56 +130,22 @@ nk = len(wfs.kd.weight_k)
 nvalence_band = calc.get_number_of_electrons() // 2
 fermi_energy = calc.get_fermi_level()
 
-# shape(nk, nb, -1)
 _, weights_Mo = raw_orbital_LDOS(wfs, 0, 0, 'spd')
 _, weights_S1 = raw_orbital_LDOS(wfs, 1, 0, 'spd')
 energies, weights_S2 = raw_orbital_LDOS(wfs, 2, 0, 'spd')
 
 energies = energies * Hartree2eV
 
+# c_ni = <n|i>, where |n> is eigenvector and |i> is the AO
+# |n> = sum_i c_ni |i>, which is othornomal Bloch basis
+# |i> is not orthonormal. So we need to transform this to a general eigenvalue problem
 kn_overlap_a = np.concatenate((weights_Mo, weights_S1, weights_S2), axis=1)
 
 # only select Gamma point for debugging:
 kn_overlap_a = kn_overlap_a.reshape(nk, nb, -1)[0, :int(nvalence_band)*2, :]
 energies = energies.reshape(nk, nb)[0, :int(nvalence_band)*2]
 
-Ham_unit_cell = np.einsum("na, nb, n -> ab", kn_overlap_a.conj(), kn_overlap_a, energies)
+Ham_unit_cell = np.einsum("an, nb, n -> ab", kn_overlap_a.conj().transpose(), kn_overlap_a, energies)
+S_unit_cell = np.einsum("an, nb -> ab", kn_overlap_a.conj().transpose(), kn_overlap_a)
 
-# repeat the Ham_unit_cell to by 3x3
-# Ham = np.kron(np.ones((24, 24)), Ham_unit_cell)
-
-# get eigenvalues of ham
-# eig_Ham = np.linalg.eigvalsh(Ham)
-eig_Ham = np.linalg.eigvalsh(Ham_unit_cell)
-
-###############################
-
-
-
-
-
-
-
-
-
-
-# print('start GW')
-# start_time_gw = time.time()
-
-# for ecut in [80]:
-#     gw = G0W0(calc='MoS2_fulldiag.gpw',
-#               bands=(8, 18),
-#               ecut=ecut,
-#               truncation='2D',
-#               nblocksmax=True,
-#               q0_correction=True,
-#               filename=f'MoS2_g0w0_{ecut}')
-
-#     result = gw.calculate()
-
-# end_time_gw = time.time()
-# print(f'GW step completed in {end_time_gw - start_time_gw:.2f} seconds')
-
-
-
-
+eigvals, eigvecs = sp.linalg.eigh(Ham_unit_cell, S_unit_cell)
