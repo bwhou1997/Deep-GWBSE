@@ -32,6 +32,11 @@ $$
 
 In term of tight-binding model, $H_{la, jb}$ can be understood as a hopping term between two nodes. To learn this hopping term, we can first build a graph structure on crystal system { $v_l$, $e_{lj}$ }, where node feature $v_i=0\oplus 0\oplus 0...$ embeds element information, $e_{lj}=0\oplus 1 \oplus 2...$ embeds geometry information between two nodes. Then, e3nn convolution layer can conduct message passing for this graph and map it to hopping term $H_{la, jb}=e^{L}_{lj}$, where L denotes the last layer
 
+### Hamiltonian reconstructed by Atomic Orbital basis:
+
+![Hamiltonian Reconstruction](./01-TBM-QPH/Hamiltonian_matrix_CH3CH2OH.png)
+
+
 ### Useful Reference:
 Papers:
 - e3nn: https://arxiv.org/abs/1802.08219
