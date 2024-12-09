@@ -10,6 +10,8 @@ import scipy as sp
 from sklearn.metrics import r2_score
 import os
 from ase.collections import g2, s22, dcdft
+import json
+import h5py as h5
 
 def get_angular_projectors(setup, angular, type='bound'):
     """Determine the projector indices which have specified angula
@@ -135,6 +137,7 @@ class Molecule_TBM():
         self.pos_def_shift_for_S_ab = 1E-8 # Force S_ab to be positive definite by add a small diagonal term
         self.rotation = [] # rotation parameter
         self.ecut_gw = 50
+        self.near_distance_thres = 20 # [Angstrom] for nearest neighbor
 
         # Build molecule
         self.symbol = symbol
@@ -167,18 +170,19 @@ class Molecule_TBM():
         self.n_overlap_a = np.concatenate(self.weights, axis=1)
         self.delta_nm = None
 
-        self.build_Ham_TBM_DFT()
+        self.build_Ham_TBM()
         self.analyse_orbitals()
 
         # self.energy_r2_n_min = min(np.min(len(self.e_n)), np.min(len(self.eigvals)))
         print('R2 score of energies:', r2_score(self.e_n[:min(np.min(len(self.e_n)), np.min(len(self.eigvals)))], 
                                                 self.eigvals[:min(np.min(len(self.e_n)), np.min(len(self.eigvals)))]))
 
-        self.plot_Ham_TBM_DFT()
+        # self.plot_Ham_TBM()
 
         # GW calculation
         self.gw = None
         self.gw_result = None
+        # TODO: finish GW Hamiltonian
 
     def collect_c_ni(self,):
         self.weights = []
@@ -197,7 +201,7 @@ class Molecule_TBM():
                 self.orbitals[i] = self.orbitals.get(i, {})
                 self.orbitals[i][j] = get_angular_projectors(self.setup[i], orb_type)
         
-    def build_Ham_TBM_DFT(self):
+    def build_Ham_TBM(self):
         # c_ni = <n|i>, where |n> is eigenvector and |i> is the AO
         # |n> = sum_i c_ni |i>, which is othornomal Bloch basis
         # |i> is not orthonormal. So we need to transform this to a general eigenvalue problem
@@ -213,6 +217,27 @@ class Molecule_TBM():
             self.S_ab_posdef = self.S_ab + np.eye(self.S_ab.shape[0]) * self.pos_def_shift_for_S_ab
 
         self.eigvals, self.eigvecs = sp.linalg.eigh(self.H_ab, self.S_ab_posdef)
+
+    def partition_Ham_TBM_for_Aij(self, atom_i=0, atom_j=0):
+        if self.mol.get_distance(atom_i, atom_j) > self.near_distance_thres:
+            return None, None
+        
+        key = [0, 0, 0, atom_i, atom_j] # [Rx, Ry, Rz, atom_i, atom_j] in hamiltonian.h5
+        # partition the Hamiltonian matrix by atom_i and atom_j
+        atom_i_index_min = sum(self.norbitals[:atom_i])
+        atom_i_index_max = sum(self.norbitals[:atom_i+1])
+        atom_j_index_min = sum(self.norbitals[:atom_j])
+        atom_j_index_max = sum(self.norbitals[:atom_j+1])
+        if self.H_ab is None:
+            print('Hamiltonian matrix is not built yet')
+            print('Building Hamiltonian matrix...')
+            self.build_Ham_TBM()
+        H_ia_jb = self.H_ab[atom_i_index_min:atom_i_index_max, atom_j_index_min:atom_j_index_max]
+
+        # visualize the Hamiltonian matrix (verify the partition)
+        # plt.imshow(np.real(H_ia_jb), cmap='RdBu_r', vmin=-np.real(abs(self.H_ab)).max()*0.6, vmax=np.real(abs(self.H_ab)).max()*0.6)
+
+        return key, H_ia_jb
     
     def plot_delta_nm(self,):
         """
@@ -226,7 +251,7 @@ class Molecule_TBM():
         plt.colorbar()
         plt.show()
     
-    def plot_Ham_TBM_DFT(self,):
+    def plot_Ham_TBM(self, path='./'):
         """
         Characterize the Hamiltonian matrix by atomic orbitals
         """
@@ -257,7 +282,9 @@ class Molecule_TBM():
         cbar = plt.colorbar()
         cbar.set_label(r'$|H_{\alpha, \beta}|$ (eV)', labelpad=-20, y=1.1, rotation=0)
         # save figure
-        plt.savefig('Hamiltonian_matrix.png')
+        # Adjust layout
+        plt.tight_layout()
+        plt.savefig(path+'Hamiltonian_matrix.png')
         plt.show()
 
     def calculate_GW_energies(self):
@@ -287,12 +314,89 @@ class Molecule_TBM():
 
         end_time_gw = time.time()
         print(f'GW step completed in {end_time_gw - start_time_gw:.2f} seconds')
+    
+    def gpaw2deephe3(self, filename='./deeph3_raw_data'):
+        """
+        Convert the GPAW output to deehe3 input
 
-def collect_Learnable_Ham():
-    pass
+        output:
+        1. element.dat: atomic number of each element in the system [H=1, He=2, ...]
+        2. hamiltonian.h5: 
+            - [Rx, Ry, Rz, atom_i, atom_j] -> H_ia_jb (TBM Hamiltonian)
+            - Rx, Ry, Rz: near unit cell, [0,0,0] fro molecule
+        3. info.json: {"fermi_level": float, "isspinful":False}
+        4. lat.dat: lattice vectors (3x3)
+        5. orbital_type.dat [0, 0, ..., 1, 1, ..., 2, 2, ...]
+            - 0: s, 1: p, 2: d, 3: f
+            - example: 0 0 0 1 1 2 2 -> s3p2d2
+        6. R_list.dat: list of R vectors (It seems not neccesary)
+        7. site_positions.dat: atomic positions (natoms x 3)                
+        """
+
+        # 0. Check if the file exists
+        self.path_g2d = filename + '/' + self.symbol + '/'
+        # path = filename + '/' + self.symbol + '/'
+        if not os.path.exists(self.path_g2d):
+            os.makedirs(self.path_g2d)
+
+        # 1. element.dat
+        np.savetxt(self.path_g2d + 'element.dat', self.mol.get_atomic_numbers().astype(int), fmt='%d')
+
+        # 2. hamiltonian.h5
+        # write the Hamiltonian matrix to an h5 file
+        # Todo: only save Hamiltonian matrix for nearest neighbor
+        h_cnt = 0
+        with h5.File(self.path_g2d + 'hamiltonian.h5', 'w') as f:
+            for i in range(self.natom):
+                for j in range(self.natom):
+                    key, H_ia_jb = self.partition_Ham_TBM_for_Aij(i, j)
+                    if key == None:
+                        # skip if the partition is empty (no nearest neighbor)
+                        continue
+                    f.create_dataset(str(key), data=H_ia_jb)
+                    h_cnt += 1
+        print(f'{h_cnt} / {self.natom**2} sub-Hamiltonian matrices are saved')
+
+        # 3. info.json
+        info = {"fermi_level": self.fermi_energy if self.fermi_energy != float('inf') else 'inf', "isspinful":False}
+        with open(self.path_g2d + 'info.json', 'w') as f:
+            json.dump(info, f, indent=4)
+
+        # 4. lat.dat (Molecule system)
+        np.savetxt(self.path_g2d + 'lat.dat', mol.mol.cell[:], fmt='%.16f')
+
+        # 5. orbital_type.dat
+        with open(self.path_g2d + 'orbital_type.dat', 'w') as f:
+            for i in range(self.natom):
+                atom_orb = []
+                for j in range(len(self.orbitals[i])):
+                    num_orb = len(self.orbitals[i][j])
+                    if num_orb % (j*2+1) != 0:
+                        raise ValueError('Fractional orbital number is not allowed, atom%s, l=%s'%(i, j))
+                    atom_orb = atom_orb + [j]* (num_orb // (j*2+1))
+                f.write(' '.join(map(str, atom_orb)) + '\n')
+
+        # 6. R_list.dat (not neccessary)
+        # Not implemented yet
+
+        # 7. site_positions.dat
+        np.savetxt(self.path_g2d + 'site_positions.dat', mol.mol.positions.T, fmt='%.16f')
+
+        pass
+
 
 if __name__ == "__main__":
-    mol = Molecule_TBM('CH3CH2OH')
+    # Generate g2 dataset
+    # for name in g2.names[54:]:
+    #     # print(name)
+    #     mol = Molecule_TBM(name)
+    #     mol.gpaw2deephe3()
+    #     mol.plot_Ham_TBM(mol.path_g2d)
 
-    # mol = Molecule_TBM('H2O')
+    mol = Molecule_TBM('C6H6')
+    mol.plot_Ham_TBM()
+    mol.gpaw2deephe3()
     # mol.calculate_GW_energies()
+
+    # Make a demo in group meeting
+    # TODO: finish this

@@ -9,8 +9,12 @@ Deep-GWBSE is a deep learning model designed for GW+BSE calculations. This model
 - [Contributing](#contributing)
 - [License](#license)
 
+---------------------------
+
 ## Introduction
 GW+BSE (Green's function and Bethe-Salpeter Equation) are advanced methods used in computational materials science to study the electronic properties of materials. Deep-GWBSE leverages deep learning techniques to enhance the accuracy and efficiency of these calculations.
+
+---------------------------
 
 ### Idea
 
@@ -32,10 +36,20 @@ $$
 
 In term of tight-binding model, $H_{la, jb}$ can be understood as a hopping term between two nodes. To learn this hopping term, we can first build a graph structure on crystal system { $v_l$, $e_{lj}$ }, where node feature $v_i=0\oplus 0\oplus 0...$ embeds element information, $e_{lj}=0\oplus 1 \oplus 2...$ embeds geometry information between two nodes. Then, e3nn convolution layer can conduct message passing for this graph and map it to hopping term $H_{la, jb}=e^{L}_{lj}$, where L denotes the last layer
 
-### Hamiltonian reconstructed by Atomic Orbital basis:
+In principle, we can even generalize this to two-particle vertex function, such as electron-hol kernel $K_{cvk,c'v'k'}$
+
+---
+
+### 1. Molecule System (only $k=\Gamma$)
+- **Step 1**. Build AO Hamiltonian reconstructed from PW :
+(01-TBM-QPH/molecule_TBM.py is prototype)
 
 ![Hamiltonian Reconstruction](./01-TBM-QPH/Hamiltonian_matrix_CH3CH2OH.png)
 
+- **Step 2**. Build Graph for Molecule Systems
+Doing!
+
+---------------------------
 
 ### Useful Reference:
 Papers:
@@ -86,7 +100,7 @@ dos.py
 ```
 (line 113): def raw_orbital_LDOS(paw, a, spin, angular='spdf', nbands=None)
 ```
-
+---------------------------
 
 
 ## Installation
@@ -104,9 +118,11 @@ Example command:
 ```bash
 Todo
 ```
-
+---------------------------
 ## Contributing
 We welcome contributions to Deep-GWBSE. Please fork the repository and submit pull requests for any enhancements or bug fixes.
+
+
 
 ## License
 This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
