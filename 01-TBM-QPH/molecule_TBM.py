@@ -134,7 +134,7 @@ class Molecule_TBM():
         self.orbtype = 'spdf'
         self.Hartree2eV = 27.21138602
         self.nbands_gpaw = '100%'
-        self.pos_def_shift_for_S_ab = 1E-8 # Force S_ab to be positive definite by add a small diagonal term
+        self.pos_def_shift_for_S_ab = 1E-9 # Force S_ab to be positive definite by add a small diagonal term
         self.rotation = [] # rotation parameter
         self.ecut_gw = 50
         self.near_distance_thres = 20 # [Angstrom] for nearest neighbor
@@ -208,12 +208,15 @@ class Molecule_TBM():
         self.H_ab = np.einsum("an, nb, n -> ab", self.n_overlap_a.conj().transpose(), self.n_overlap_a, self.e_n)
         self.S_ab = np.einsum("an, nb -> ab", self.n_overlap_a.conj().transpose(), self.n_overlap_a)
         # Check if self.S_ab is positive definite
-        if np.all(np.linalg.eigvals(self.S_ab) > 0):
+        # if np.all(np.real(np.linalg.eigvals(self.S_ab)) > 0):
+        if None:
             print('Overlap matrix is positive definite')
+            print('The min eigenvalue of S_ab:', np.linalg.eigvals(self.S_ab).min())
             self.S_ab_posdef = self.S_ab
             pass
         else:
-            print('Overlap matrix is not positive definite, add a small diagonal term %s'%self.pos_def_shift_for_S_ab)
+            print('A shift %s is applied to force S matrix postive definite'%self.pos_def_shift_for_S_ab)
+            print('The min eigenvalue of S_ab:', np.real(np.linalg.eigvals(self.S_ab)).min())
             self.S_ab_posdef = self.S_ab + np.eye(self.S_ab.shape[0]) * self.pos_def_shift_for_S_ab
 
         self.eigvals, self.eigvecs = sp.linalg.eigh(self.H_ab, self.S_ab_posdef)
@@ -222,7 +225,8 @@ class Molecule_TBM():
         if self.mol.get_distance(atom_i, atom_j) > self.near_distance_thres:
             return None, None
         
-        key = [0, 0, 0, atom_i, atom_j] # [Rx, Ry, Rz, atom_i, atom_j] in hamiltonian.h5
+        # It seems atom_i in e3nn starts from 1
+        key = [0, 0, 0, atom_i+1, atom_j+1] # [Rx, Ry, Rz, atom_i, atom_j] in hamiltonian.h5 
         # partition the Hamiltonian matrix by atom_i and atom_j
         atom_i_index_min = sum(self.norbitals[:atom_i])
         atom_i_index_max = sum(self.norbitals[:atom_i+1])
@@ -326,7 +330,7 @@ class Molecule_TBM():
             - Rx, Ry, Rz: near unit cell, [0,0,0] fro molecule
         3. info.json: {"fermi_level": float, "isspinful":False}
         4. lat.dat: lattice vectors (3x3)
-        5. orbital_type.dat [0, 0, ..., 1, 1, ..., 2, 2, ...]
+        5. orbital_types.dat [0, 0, ..., 1, 1, ..., 2, 2, ...]
             - 0: s, 1: p, 2: d, 3: f
             - example: 0 0 0 1 1 2 2 -> s3p2d2
         6. R_list.dat: list of R vectors (It seems not neccesary)
@@ -346,7 +350,7 @@ class Molecule_TBM():
         # write the Hamiltonian matrix to an h5 file
         # Todo: only save Hamiltonian matrix for nearest neighbor
         h_cnt = 0
-        with h5.File(self.path_g2d + 'hamiltonian.h5', 'w') as f:
+        with h5.File(self.path_g2d + 'hamiltonians.h5', 'w') as f:
             for i in range(self.natom):
                 for j in range(self.natom):
                     key, H_ia_jb = self.partition_Ham_TBM_for_Aij(i, j)
@@ -358,7 +362,7 @@ class Molecule_TBM():
         print(f'{h_cnt} / {self.natom**2} sub-Hamiltonian matrices are saved')
 
         # 3. info.json
-        info = {"fermi_level": self.fermi_energy if self.fermi_energy != float('inf') else 'inf', "isspinful":False}
+        info = {"fermi_level": self.fermi_energy if self.fermi_energy != float('inf') else self.e_n[-1]+0.001, "isspinful":False}
         with open(self.path_g2d + 'info.json', 'w') as f:
             json.dump(info, f, indent=4)
 
@@ -366,7 +370,7 @@ class Molecule_TBM():
         np.savetxt(self.path_g2d + 'lat.dat', mol.mol.cell[:], fmt='%.16f')
 
         # 5. orbital_type.dat
-        with open(self.path_g2d + 'orbital_type.dat', 'w') as f:
+        with open(self.path_g2d + 'orbital_types.dat', 'w') as f:
             for i in range(self.natom):
                 atom_orb = []
                 for j in range(len(self.orbitals[i])):
@@ -384,19 +388,16 @@ class Molecule_TBM():
 
         pass
 
-
 if __name__ == "__main__":
-    # Generate g2 dataset
-    # for name in g2.names[54:]:
-    #     # print(name)
-    #     mol = Molecule_TBM(name)
-    #     mol.gpaw2deephe3()
-    #     mol.plot_Ham_TBM(mol.path_g2d)
-
-    mol = Molecule_TBM('C6H6')
-    mol.plot_Ham_TBM()
-    mol.gpaw2deephe3()
+    # mol = Molecule_TBM('C6H6')
+    # mol.plot_Ham_TBM()
+    
+    # mol.gpaw2deephe3()
     # mol.calculate_GW_energies()
 
-    # Make a demo in group meeting
-    # TODO: finish this
+    # Generate g2 dataset
+    for idx, name in enumerate(g2.names[:69]):
+        # print(name)
+        mol = Molecule_TBM(name)
+        mol.gpaw2deephe3(filename='./deeph3_raw_data')
+        mol.plot_Ham_TBM(mol.path_g2d)

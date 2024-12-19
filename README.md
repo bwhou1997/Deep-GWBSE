@@ -70,8 +70,8 @@ GPAW Documents:
 ### Useful GPAW function
 
 Hamiltonian with atomic orbitals basis (see Bezene_LCAO.py)
-```
-...calc...
+```python
+#...calc...
 
 # (1) LCAO Hamiltonian
 from gpaw.lcao.pwf2 import LCAOwrap
@@ -88,7 +88,7 @@ S = los.get_overlap()
 ```
 
 Useful Note for LCAOwrap
-```
+```python
 lcao.pwf2 (line 375): LCAOwrap.get_hamiltonian()
 lcao.tools (line 283): get_lcao_hamiltonian(calc) 
 ```
@@ -97,9 +97,20 @@ lcao.tools (line 283): get_lcao_hamiltonian(calc)
 Coefficient $\langle nk | l \alpha \rangle$
 
 dos.py 
-```
+```python
 (line 113): def raw_orbital_LDOS(paw, a, spin, angular='spdf', nbands=None)
 ```
+
+### Useful DeepH-e3
+data.py: build a graph
+utils.py: 
+```python
+line(338): 
+def orbital_analysis(atom_orbitals, required_block_type, spinful, targets=None, element_pairs=None, no_parity=False, verbose=''): 
+# example of atom_orbitals: {'42': [0, 0, 0, 1, 1, 2, 2], '16': [0, 0, 1, 1, 2]}
+```
+
+
 ---------------------------
 
 
