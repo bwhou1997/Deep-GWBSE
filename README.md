@@ -42,12 +42,19 @@ In principle, we can even generalize this to two-particle vertex function, such 
 
 ### 1. Molecule System (only $k=\Gamma$)
 - **Step 1**. Build AO Hamiltonian reconstructed from PW :
-(01-TBM-QPH/molecule_TBM.py is prototype)
+  - use `01-TBM-QPH/molecule_TBM.py` generate data
 
 ![Hamiltonian Reconstruction](./01-TBM-QPH/Hamiltonian_matrix_CH3CH2OH.png)
 
 - **Step 2**. Build Graph for Molecule Systems
-Doing!
+  - See `02-Graph-NN/data.py`
+
+
+- **step 3**. Use DeepH-e3 to predict Hamiltonian
+  - Install deeph-e3
+  - build graph: `deephe3-preprocess.py XX.ini`
+  - train model: `deephe3-train.py XX.ini`
+![Hamiltonian Prediction](./03-train/03-H2O-xyz/CH_train/2024-12-22_08-24-27/H_pred_H2O.png)
 
 ---------------------------
 
