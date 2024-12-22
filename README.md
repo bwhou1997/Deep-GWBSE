@@ -101,7 +101,7 @@ dos.py
 ```python
 (line 113): def raw_orbital_LDOS(paw, a, spin, angular='spdf', nbands=None)
 ```
-The "m" order
+The "m" order in GPAW follows y, z, x; while x, y, z seems right order in e3nn (to be verified)
 
 ```python
 class DOSCalculator:

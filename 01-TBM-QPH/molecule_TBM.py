@@ -13,13 +13,17 @@ from ase.collections import g2, s22, dcdft
 import json
 import h5py as h5
 
-def get_angular_projectors(setup, angular, type='bound'):
-    """Determine the projector indices which have specified angula
+def get_angular_projectors(setup, angular, type='bound', xyz_order = True):
+    """
+    Determine the projector indices which have specified angula
     quantum number.
 
     angular can be s, p, d, f, or a list of these.
     If type is 'bound', only bound state projectors are considered, otherwise
     all projectors are included.
+
+    The m order of the projector is y, z, x if xyz_order is False (default by GPAW)
+
     """
     # Get the number of relevant j values
     if type == 'bound':
@@ -34,7 +38,13 @@ def get_angular_projectors(setup, angular, type='bound'):
     for j in range(nj):
         m = 2 * setup.l_j[j] + 1
         if 'spdf'[setup.l_j[j]] in angular:
-            projectors.extend(range(i, i + m))
+            # todo:figure out the order of l=2 (d-orbital)
+            if 'spdf'[setup.l_j[j]] == 'p' and xyz_order:
+                pm = list(range(i, i + m))
+                projectors.extend([pm[2], pm[0], pm[1]])
+            else:
+                # follow y z x by default
+                projectors.extend(range(i, i + m))
         j += 1
         i += m
 
@@ -389,15 +399,16 @@ class Molecule_TBM():
         pass
 
 if __name__ == "__main__":
-    mol = Molecule_TBM('H2O')
-    mol.plot_Ham_TBM()
+    # mol = Molecule_TBM('H2O')
+    # mol.plot_Ham_TBM()
+    # mol.gpaw2deephe3(filename='./deeph3_raw_data')
     
     # mol.gpaw2deephe3()
     # mol.calculate_GW_energies()
 
     # Generate g2 dataset
-    # for idx, name in enumerate(g2.names[:69]):
-    #     # print(name)
-    #     mol = Molecule_TBM(name)
-    #     mol.gpaw2deephe3(filename='./deeph3_raw_data')
-    #     mol.plot_Ham_TBM(mol.path_g2d)
+    for idx, name in enumerate(g2.names[:]):
+        # print(name)
+        mol = Molecule_TBM(name)
+        mol.gpaw2deephe3(filename='./deeph3_raw_data')
+        mol.plot_Ham_TBM(mol.path_g2d)
