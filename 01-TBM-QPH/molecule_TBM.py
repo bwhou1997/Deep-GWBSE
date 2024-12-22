@@ -389,15 +389,15 @@ class Molecule_TBM():
         pass
 
 if __name__ == "__main__":
-    # mol = Molecule_TBM('C6H6')
-    # mol.plot_Ham_TBM()
+    mol = Molecule_TBM('H2O')
+    mol.plot_Ham_TBM()
     
     # mol.gpaw2deephe3()
     # mol.calculate_GW_energies()
 
     # Generate g2 dataset
-    for idx, name in enumerate(g2.names[:69]):
-        # print(name)
-        mol = Molecule_TBM(name)
-        mol.gpaw2deephe3(filename='./deeph3_raw_data')
-        mol.plot_Ham_TBM(mol.path_g2d)
+    # for idx, name in enumerate(g2.names[:69]):
+    #     # print(name)
+    #     mol = Molecule_TBM(name)
+    #     mol.gpaw2deephe3(filename='./deeph3_raw_data')
+    #     mol.plot_Ham_TBM(mol.path_g2d)

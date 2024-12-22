@@ -66,6 +66,7 @@ GPAW Documents:
 - LCAO Calculation: https://gpaw.readthedocs.io/tutorialsexercises/structureoptimization/water/water.html#lcao-calculations,
 - LCAO mode: https://gpaw.readthedocs.io/documentation/lcao/lcao.html#lcao
 - Atomic Basis Set: https://gpaw.readthedocs.io/documentation/basic.html#atomic-basis-set
+- "m" Order in GPAW: https://gpaw.readthedocs.io/_modules/gpaw/dos.html#
 
 ### Useful GPAW function
 
@@ -100,6 +101,37 @@ dos.py
 ```python
 (line 113): def raw_orbital_LDOS(paw, a, spin, angular='spdf', nbands=None)
 ```
+The "m" order
+
+```python
+class DOSCalculator:
+    ...
+    def raw_pdos(self,
+                 energies: Sequence[float],
+                 a: int,
+                 l: int,
+                 m: Optional[int] = None,
+                 spin: Optional[int] = None,
+                 width: float = 0.1) -> Array1D:
+        """Calculate projected density of states.
+
+        a:
+            Atom index.
+        l:
+            Angular momentum quantum number.
+        m:
+            Magnetic quantum number.  Default is None meaning sum over all m.
+            For p-orbitals, m=0,1,2 translates to y, z and x.
+            For d-orbitals, m=0,1,2,3,4 translates to xy, yz, 3z2-r2,
+            zx and x2-y2.
+        spin:
+            Must be 0, 1 or None meaning spin-up, down or total respectively.
+        width: float
+            Width of Gaussians in eV.  Use width=0.0 to use the
+            linear-tetrahedron-interpolation method.
+        """
+```
+
 
 ### Useful DeepH-e3
 data.py: build a graph
