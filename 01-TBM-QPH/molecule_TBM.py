@@ -123,12 +123,17 @@ class Molecule_TBM():
     self.eigvals = eigenvalues by TBM
     self.H_ab = Hamiltonian matrix
     self.S_ab = Overlap matrix
+    self.GW_Ham = Hamiltonian matrix for GW calculation (comparable to DFT Hamiltonian)
+    self.GW_S = Overlap matrix for GW Hamiltonian (comparable to DFT Overlap matrix)
+    self.e_n_GW = eigenvalues by GW
+    self.eigvals_GW = eigenvalues by GW TBM
 
     # Useful methods
     self.plot_ortho() to plot the overlap matrix
     self.plot_Ham() to plot the Hamiltonian matrix
 
     self.calculate_GW_energies() to calculate the GW energies
+    slef.build_GW_Ham_TBM() to build the Hamiltonian matrix for GW calculation
 
     """    
     def __init__(self, symbol):
@@ -137,7 +142,7 @@ class Molecule_TBM():
         ii) Build the tight-binding Hamiltonian
         iii) Analyse the orbitals
         """
-        # Parameters
+        # -> Parameters
         self.ecut = 100
         self.vacuum = 5
         self.basis = 'dzp'
@@ -146,10 +151,10 @@ class Molecule_TBM():
         self.nbands_gpaw = '100%'
         self.pos_def_shift_for_S_ab = 1E-9 # Force S_ab to be positive definite by add a small diagonal term
         self.rotation = [] # rotation parameter
-        self.ecut_gw = 50
+        self.ecut_gw = 20
         self.near_distance_thres = 20 # [Angstrom] for nearest neighbor
 
-        # Build molecule
+        #->  Build molecule
         self.symbol = symbol
         self.mol = molecule(symbol, vacuum=self.vacuum)
 
@@ -160,7 +165,7 @@ class Molecule_TBM():
                          nbands=self.nbands_gpaw,)
         self.mol.calc = self.calc
 
-        # DFT calculation
+        # -> DFT calculation
         self.mol.get_potential_energy()
         self.wfs = self.calc.wfs
         self.nb = self.wfs.bd.nbands # number of eigenstates in DFT
@@ -169,7 +174,7 @@ class Molecule_TBM():
         self.fermi_energy = self.calc.get_fermi_level()
         self.natom = len(self.wfs.setups)
 
-        # Collect orbital LDOS
+        # -> Collect orbital LDOS
         self.setup = [setup for setup in self.wfs.setups]
         self.weights = []
         self.orbitals = {} # {atom1:{l=0:n1, l=1:n2}, atom2:{}...}
@@ -184,15 +189,15 @@ class Molecule_TBM():
         self.analyse_orbitals()
 
         # self.energy_r2_n_min = min(np.min(len(self.e_n)), np.min(len(self.eigvals)))
-        print('R2 score of energies:', r2_score(self.e_n[:min(np.min(len(self.e_n)), np.min(len(self.eigvals)))], 
-                                                self.eigvals[:min(np.min(len(self.e_n)), np.min(len(self.eigvals)))]))
 
         # self.plot_Ham_TBM()
 
-        # GW calculation
+        # -> GW calculation related
         self.gw = None
         self.gw_result = None
-        # TODO: finish GW Hamiltonian
+        self.e_n_GW = None
+        self.H_ab_GW = None
+        self.S_ab_GW = None
 
     def collect_c_ni(self,):
         self.weights = []
@@ -230,6 +235,32 @@ class Molecule_TBM():
             self.S_ab_posdef = self.S_ab + np.eye(self.S_ab.shape[0]) * self.pos_def_shift_for_S_ab
 
         self.eigvals, self.eigvecs = sp.linalg.eigh(self.H_ab, self.S_ab_posdef)
+        print('R2 score of energies:', r2_score(self.e_n[:min(np.min(len(self.e_n)), np.min(len(self.eigvals)))], 
+                                                self.eigvals[:min(np.min(len(self.e_n)), np.min(len(self.eigvals)))]))
+
+
+    def build_GW_Ham_TBM(self):
+        if self.gw is None:
+            print('GW calculation is not done yet')
+            print('Calculate GW energies')
+            self.calculate_GW_energies()
+            print('GW calculation is done')
+            print('QP energies:', self.gw_result['qp'])
+            assert (self.gw_result['qp'].squeeze() == self.e_n_GW).all()
+        
+        if self.norbitals == []:
+            raise ValueError('Orbitals are not collected yet')
+        
+        self.H_ab_GW = np.einsum("an, nb, n -> ab", self.n_overlap_a.conj().transpose(), self.n_overlap_a, self.e_n_GW)
+        self.S_ab_GW = np.einsum("an, nb -> ab", self.n_overlap_a.conj().transpose(), self.n_overlap_a)
+                
+        print('A shift %s is applied to force S matrix postive definite'%self.pos_def_shift_for_S_ab)
+        print('The min eigenvalue of S_ab:', np.real(np.linalg.eigvals(self.S_ab_GW)).min())
+        self.S_ab_GW_posdef = self.S_ab_GW + np.eye(self.S_ab_GW.shape[0]) * self.pos_def_shift_for_S_ab
+
+        self.eigvals_GW, self.eigvecs_GW = sp.linalg.eigh(self.H_ab_GW, self.S_ab_GW_posdef)
+        print('R2 score of energies:', r2_score(self.e_n_GW[:min(np.min(len(self.e_n_GW)), np.min(len(self.eigvals_GW)))], 
+                                                self.eigvals_GW[:min(np.min(len(self.e_n_GW)), np.min(len(self.eigvals_GW)))]))
 
     def partition_Ham_TBM_for_Aij(self, atom_i=0, atom_j=0):
         if self.mol.get_distance(atom_i, atom_j) > self.near_distance_thres:
@@ -321,10 +352,10 @@ class Molecule_TBM():
                   filename=f'{self.symbol}_g0w0_{self.ecut_gw}',
                 #   truncation='0D',
                 #   ppa=True,
-                  bands=(0,8),
+                  bands=(0, self.nb), # make it consistent with the number of bands in DFT
                   nbands=self.nb*10)
         self.gw_result = self.gw.calculate()
-
+        self.e_n_GW = self.gw_result['qp'].squeeze()
 
         end_time_gw = time.time()
         print(f'GW step completed in {end_time_gw - start_time_gw:.2f} seconds')
@@ -399,16 +430,18 @@ class Molecule_TBM():
         pass
 
 if __name__ == "__main__":
-    # mol = Molecule_TBM('H2O')
-    # mol.plot_Ham_TBM()
+    mol = Molecule_TBM('H2O')
+    mol.plot_Ham_TBM()
+
+    mol.build_GW_Ham_TBM()
+    
+    # mol.calculate_GW_energies()
     # mol.gpaw2deephe3(filename='./deeph3_raw_data')
     
-    # mol.gpaw2deephe3()
-    # mol.calculate_GW_energies()
 
     # Generate g2 dataset
-    for idx, name in enumerate(g2.names[:]):
-        # print(name)
-        mol = Molecule_TBM(name)
-        mol.gpaw2deephe3(filename='./deeph3_raw_data')
-        mol.plot_Ham_TBM(mol.path_g2d)
+    # for idx, name in enumerate(g2.names[:]):
+    #     # print(name)
+    #     mol = Molecule_TBM(name)
+    #     mol.gpaw2deephe3(filename='./deeph3_raw_data')
+    #     mol.plot_Ham_TBM(mol.path_g2d)

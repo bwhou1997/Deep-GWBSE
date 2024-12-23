@@ -41,12 +41,12 @@ In principle, we can even generalize this to two-particle vertex function, such 
 ---
 
 ### 1. Molecule System (only $k=\Gamma$)
-- **Step 1**. Build AO Hamiltonian reconstructed from PW :
+- **step 1**. Build AO Hamiltonian reconstructed from PW :
   - use `01-TBM-QPH/molecule_TBM.py` generate data
 
 ![Hamiltonian Reconstruction](./01-TBM-QPH/Hamiltonian_matrix_CH3CH2OH.png)
 
-- **Step 2**. Build Graph for Molecule Systems
+- **step 2**. Build Graph for Molecule Systems
   - See `02-Graph-NN/data.py`
 
 
@@ -56,7 +56,19 @@ In principle, we can even generalize this to two-particle vertex function, such 
   - train model: `deephe3-train.py XX.ini`
 ![Hamiltonian Prediction](./03-train/03-H2O-xyz/CH_train/2024-12-22_08-24-27/H_pred_H2O.png)
 
+- **step 4**. Construct $G_0W_0$ Tight-binding Model
+
+  - Todo
+
+
+### 2. Crystal System
+
+- Todo
+
+
 ---------------------------
+
+## Appendix
 
 ### Useful Reference:
 Papers:

@@ -131,34 +131,34 @@ calc.diagonalize_full_hamiltonian()
 
 ###### Build Ham #######
 
-wfs = calc.wfs
+# wfs = calc.wfs
 
-nb =wfs.bd.nbands
-nk = len(wfs.kd.weight_k)
-nvalence_band = calc.get_number_of_electrons() // 2
-fermi_energy = calc.get_fermi_level()
+# nb =wfs.bd.nbands
+# nk = len(wfs.kd.weight_k)
+# nvalence_band = calc.get_number_of_electrons() // 2
+# fermi_energy = calc.get_fermi_level()
 
-# shape(nk, nb, -1)
-_, weights_Mo = raw_orbital_LDOS(wfs, 0, 0, 'spd')
-_, weights_S1 = raw_orbital_LDOS(wfs, 1, 0, 'spd')
-energies, weights_S2 = raw_orbital_LDOS(wfs, 2, 0, 'spd')
+# # shape(nk, nb, -1)
+# _, weights_Mo = raw_orbital_LDOS(wfs, 0, 0, 'spd')
+# _, weights_S1 = raw_orbital_LDOS(wfs, 1, 0, 'spd')
+# energies, weights_S2 = raw_orbital_LDOS(wfs, 2, 0, 'spd')
 
-energies = energies * Hartree2eV
+# energies = energies * Hartree2eV
 
-kn_overlap_a = np.concatenate((weights_Mo, weights_S1, weights_S2), axis=1)
+# kn_overlap_a = np.concatenate((weights_Mo, weights_S1, weights_S2), axis=1)
 
-# only select Gamma point for debugging:
-kn_overlap_a = kn_overlap_a.reshape(nk, nb, -1)[0, :int(nvalence_band)*2, :]
-energies = energies.reshape(nk, nb)[0, :int(nvalence_band)*2]
+# # only select Gamma point for debugging:
+# kn_overlap_a = kn_overlap_a.reshape(nk, nb, -1)[0, :int(nvalence_band)*2, :]
+# energies = energies.reshape(nk, nb)[0, :int(nvalence_band)*2]
 
-Ham_unit_cell = np.einsum("na, nb, n -> ab", kn_overlap_a.conj(), kn_overlap_a, energies)
+# Ham_unit_cell = np.einsum("na, nb, n -> ab", kn_overlap_a.conj(), kn_overlap_a, energies)
 
-# repeat the Ham_unit_cell to by 3x3
-# Ham = np.kron(np.ones((24, 24)), Ham_unit_cell)
+# # repeat the Ham_unit_cell to by 3x3
+# # Ham = np.kron(np.ones((24, 24)), Ham_unit_cell)
 
-# get eigenvalues of ham
-# eig_Ham = np.linalg.eigvalsh(Ham)
-eig_Ham = np.linalg.eigvalsh(Ham_unit_cell)
+# # get eigenvalues of ham
+# # eig_Ham = np.linalg.eigvalsh(Ham)
+# eig_Ham = np.linalg.eigvalsh(Ham_unit_cell)
 
 ###############################
 
