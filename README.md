@@ -42,7 +42,8 @@ In principle, we can even generalize this to two-particle vertex function, such 
 
 ### 1. Molecule System (only $k=\Gamma$)
 - **step 1**. Build AO Hamiltonian reconstructed from PW :
-  - use `01-TBM-QPH/molecule_TBM.py` generate data
+  - use `"DFT"` setup in `01-TBM-QPH/molecule_TBM.py` to generate data
+  - todo: d-orbital
 
 ![Hamiltonian Reconstruction](./01-TBM-QPH/Hamiltonian_matrix_CH3CH2OH.png)
 
@@ -58,8 +59,10 @@ In principle, we can even generalize this to two-particle vertex function, such 
 
 - **step 4**. Construct $G_0W_0$ Tight-binding Model
 
-  - Todo
+  - use `"GW"` setup in `01-TBM-QPH/molecule_TBM.py` to generate data
+  - todo: parallel computation
 
+![GW Hamiltonian Prediction](./01-TBM-QPH/GW_Hamiltonian_matrix_CH3CH2OH.png)
 
 ### 2. Crystal System
 
