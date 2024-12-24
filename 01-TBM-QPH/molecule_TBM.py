@@ -12,6 +12,9 @@ import os
 from ase.collections import g2, s22, dcdft
 import json
 import h5py as h5
+from mpi4py import MPI
+
+
 
 def get_angular_projectors(setup, angular, type='bound', xyz_order = True):
     """
@@ -130,7 +133,7 @@ class Molecule_TBM():
 
     # Useful methods
     self.gpaw2deephe3() to convert the GPAW output to deephe3 input
-    self.build_Ham_TBM() to build the Hamiltonian matrix for TBM
+    self.build_Ham_TBM() (by default) to build the Hamiltonian matrix for TBM
     slef.build_GW_Ham_TBM() to build the Hamiltonian matrix for GW calculation
 
     self.plot_Ham() to plot the Hamiltonian matrix
@@ -144,6 +147,14 @@ class Molecule_TBM():
         ii) Build the tight-binding Hamiltonian
         iii) Analyse the orbitals
         """
+        self.comm = MPI.COMM_WORLD
+        self.rank = self.comm.Get_rank()
+        self.size = self.comm.Get_size()
+
+        print('Rank:', self.rank)
+        print('Size:', self.size)
+
+
         # -> Parameters
         self.ecut = 100
         self.vacuum = 5
@@ -155,6 +166,8 @@ class Molecule_TBM():
         self.rotation = [] # rotation parameter
         self.ecut_gw = 20
         self.near_distance_thres = 20 # [Angstrom] for nearest neighbor
+        self.parallel = {'band':self.size}
+        self.gpaw_path = 'gpaw_gw'
 
         #->  Build molecule
         self.symbol = symbol
@@ -164,7 +177,8 @@ class Molecule_TBM():
 
         self.calc = GPAW(mode=PW(ecut=self.ecut, force_complex_dtype=True), 
                          basis=self.basis,
-                         nbands=self.nbands_gpaw,)
+                         nbands=self.nbands_gpaw,
+                         parallel=self.parallel,)
         self.mol.calc = self.calc
 
         # -> DFT calculation
@@ -195,6 +209,7 @@ class Molecule_TBM():
         self.build_Ham_TBM() # by default, we calculate the DFT Hamiltonian
         self.analyse_orbitals()
 
+        # print('DFT energies:', self.e_n)
 
         # -> GW calculation related
         self.gw = None
@@ -250,7 +265,7 @@ class Molecule_TBM():
             self.calculate_GW_energies()
             parprint('GW calculation is done')
             parprint('QP energies:', self.gw_result['qp'])
-            assert (self.gw_result['qp'].squeeze() == self.e_n_GW).all()
+            # assert (self.gw_result['qp'].squeeze() == self.e_n_GW).all()
         
         if self.norbitals == []:
             raise ValueError('Orbitals are not collected yet')
@@ -272,16 +287,16 @@ class Molecule_TBM():
             return None, None
         
         if Ham_type == 'DFT':
-            if self.H_ab is None:
-                parprint('Hamiltonian matrix is not built yet')
-                parprint('Building Hamiltonian matrix...')
-                self.build_Ham_TBM()
+            assert self.H_ab is not None
+                # parprint('Hamiltonian matrix is not built yet')
+                # parprint('Building Hamiltonian matrix...')
+                # self.build_Ham_TBM()
             Ham_ab = self.H_ab
         elif Ham_type == 'GW':
-            if self.H_ab_GW is None:
-                parprint('GW Hamiltonian matrix is not built yet')
-                parprint('Building GW Hamiltonian matrix...')
-                self.build_GW_Ham_TBM()
+            assert self.H_ab_GW is not None
+                # parprint('GW Hamiltonian matrix is not built yet')
+                # parprint('Building GW Hamiltonian matrix...')
+                # self.build_GW_Ham_TBM()
             Ham_ab = self.H_ab_GW
 
         # It seems atom_i in e3nn starts from 1
@@ -306,99 +321,103 @@ class Molecule_TBM():
         """
         Sum_a <n|a><a|m> = delta_nm
         """
-        self.delta_nm = np.einsum("na, ma -> nm", self.n_overlap_a, self.n_overlap_a.conj())
-        plt.xlabel('n')
-        plt.ylabel('m')
-        plt.title(r'<n|m>')
-        plt.imshow(np.abs(self.delta_nm))
-        plt.colorbar()
-        plt.show()
+        if self.rank == 0:
+            self.delta_nm = np.einsum("na, ma -> nm", self.n_overlap_a, self.n_overlap_a.conj())
+            plt.xlabel('n')
+            plt.ylabel('m')
+            plt.title(r'<n|m>')
+            plt.imshow(np.abs(self.delta_nm))
+            plt.colorbar()
+            plt.show()
+        else:
+            pass
     
     def plot_Ham_TBM(self, path='./', Ham_type='DFT'):
         """
         Characterize the Hamiltonian matrix by atomic orbitals
         Ham_type: 'DFT' or 'GW'
         """
+        if self.rank == 0: # only master node plot the figure
+            if Ham_type == 'DFT':
+                assert self.H_ab is not None
+                r2_dft = r2_score(self.e_n[:min(np.min(len(self.e_n)), np.min(len(self.eigvals)))], 
+                                                    self.eigvals[:min(np.min(len(self.e_n)), np.min(len(self.eigvals)))])
+                vmin = -np.real(abs(self.H_ab)).max()*1.0
+                vmax = np.real(abs(self.H_ab)).max()*1.0
+                        
+            elif Ham_type == 'GW':
+                assert self.H_ab is not None
+                assert self.H_ab_GW is not None
+                r2_dft = r2_score(self.e_n[:min(np.min(len(self.e_n)), np.min(len(self.eigvals)))], 
+                                        self.eigvals[:min(np.min(len(self.e_n)), np.min(len(self.eigvals)))])
+                r2_gw = r2_score(self.e_n_GW[:min(np.min(len(self.e_n_GW)), np.min(len(self.eigvals_GW)))], 
+                                        self.eigvals_GW[:min(np.min(len(self.e_n_GW)), np.min(len(self.eigvals_GW)))])
+                vmin = -np.real(abs(self.H_ab_GW)).max()*1.0
+                vmax = np.real(abs(self.H_ab_GW)).max()*1.0
 
-        if Ham_type == 'DFT':
-            assert self.H_ab is not None
-            r2_dft = r2_score(self.e_n[:min(np.min(len(self.e_n)), np.min(len(self.eigvals)))], 
-                                                self.eigvals[:min(np.min(len(self.e_n)), np.min(len(self.eigvals)))])
-            vmin = -np.real(abs(self.H_ab)).max()*1.0
-            vmax = np.real(abs(self.H_ab)).max()*1.0
-                    
-        elif Ham_type == 'GW':
-            assert self.H_ab is not None
-            assert self.H_ab_GW is not None
-            r2_dft = r2_score(self.e_n[:min(np.min(len(self.e_n)), np.min(len(self.eigvals)))], 
-                                    self.eigvals[:min(np.min(len(self.e_n)), np.min(len(self.eigvals)))])
-            r2_gw = r2_score(self.e_n_GW[:min(np.min(len(self.e_n_GW)), np.min(len(self.eigvals_GW)))], 
-                                    self.eigvals_GW[:min(np.min(len(self.e_n_GW)), np.min(len(self.eigvals_GW)))])
-            vmin = -np.real(abs(self.H_ab_GW)).max()*1.0
-            vmax = np.real(abs(self.H_ab_GW)).max()*1.0
+            x_label = []
+            y_label = []
 
-        x_label = []
-        y_label = []
+            for i in range(self.natom):
+                for j in range(len(self.orbitals[i])):
+                    for k in range(len(self.orbitals[i][j])):
+                        if j != 0:
+                            x_label.append('l=%s'%j)
+                            y_label.append('l=%s'%j)
+                        else:
+                            y_label.append(self.mol[i].symbol+r'$_{%s}$'%(i+1) + ', l=%s'%j)
+                            x_label.append(self.mol[i].symbol+r'$_{%s}$'%(i+1) + ', l=%s'%j)
+                        pass
 
-        for i in range(self.natom):
-            for j in range(len(self.orbitals[i])):
-                for k in range(len(self.orbitals[i][j])):
-                    if j != 0:
-                        x_label.append('l=%s'%j)
-                        y_label.append('l=%s'%j)
-                    else:
-                        y_label.append(self.mol[i].symbol+r'$_{%s}$'%(i+1) + ', l=%s'%j)
-                        x_label.append(self.mol[i].symbol+r'$_{%s}$'%(i+1) + ', l=%s'%j)
-                    pass
+            if Ham_type == 'DFT': # only plot DFT Hamiltonian
+                plt.imshow(np.real(self.H_ab), cmap='RdBu_r', vmin=vmin, vmax=vmax)
+                plt.xticks(range(len(x_label)), x_label, rotation=-90)
+                # plt.gcf().autofmt_xdate()
+                # plt.gcf().autofmt_ydate()
+                plt.gca().xaxis.set_ticks_position('top')
+                plt.gca().xaxis.set_label_position('top')
+                plt.yticks(range(len(y_label)), y_label)
+                plt.title(Ham_type + ' Hamiltonian matrix, Fitting '+ r"$R^2$=%.2f"%r2_dft)
+                cbar = plt.colorbar()
+                cbar.set_label(r'$|H_{\alpha, \beta}|$ (eV)', labelpad=-20, y=1.1, rotation=0)
+                # save figure
+                # Adjust layout
+                plt.tight_layout()
+                plt.savefig(path + Ham_type +'_Hamiltonian_matrix.png')
+                plt.show()
+            elif Ham_type == 'GW': # plot both DFT and GW Hamiltonian
+                fig, ax = plt.subplots(1, 2, figsize=(10, 5))
+                im0 = ax[0].imshow(np.real(self.H_ab), cmap='RdBu_r', vmin=vmin, vmax=vmax)
+                ax[0].set_xticks(range(len(x_label)))
+                ax[0].set_xticklabels(x_label, rotation=-90)
+                ax[0].xaxis.set_ticks_position('top')
+                ax[0].xaxis.set_label_position('top')
+                ax[0].set_yticks(range(len(y_label)))
+                ax[0].set_yticklabels(y_label)
+                ax[0].set_title('DFT Hamiltonian matrix, Fitting '+ r"$R^2$=%.2f"%r2_dft)
+                # cbar = ax[0].figure.colorbar(im0)
+                # cbar.set_label(r'$|H_{\alpha, \beta}|$ (eV)', labelpad=-20, y=1.1, rotation=0)
+                fig.colorbar(im0, ax=ax[0], shrink=0.7)
 
-        if Ham_type == 'DFT': # only plot DFT Hamiltonian
-            plt.imshow(np.real(self.H_ab), cmap='RdBu_r', vmin=vmin, vmax=vmax)
-            plt.xticks(range(len(x_label)), x_label, rotation=-90)
-            # plt.gcf().autofmt_xdate()
-            # plt.gcf().autofmt_ydate()
-            plt.gca().xaxis.set_ticks_position('top')
-            plt.gca().xaxis.set_label_position('top')
-            plt.yticks(range(len(y_label)), y_label)
-            plt.title(Ham_type + ' Hamiltonian matrix, Fitting '+ r"$R^2$=%.2f"%r2_dft)
-            cbar = plt.colorbar()
-            cbar.set_label(r'$|H_{\alpha, \beta}|$ (eV)', labelpad=-20, y=1.1, rotation=0)
-            # save figure
-            # Adjust layout
-            plt.tight_layout()
-            plt.savefig(path + Ham_type +'_Hamiltonian_matrix.png')
-            plt.show()
-        elif Ham_type == 'GW': # plot both DFT and GW Hamiltonian
-            fig, ax = plt.subplots(1, 2, figsize=(10, 5))
-            im0 = ax[0].imshow(np.real(self.H_ab), cmap='RdBu_r', vmin=vmin, vmax=vmax)
-            ax[0].set_xticks(range(len(x_label)))
-            ax[0].set_xticklabels(x_label, rotation=-90)
-            ax[0].xaxis.set_ticks_position('top')
-            ax[0].xaxis.set_label_position('top')
-            ax[0].set_yticks(range(len(y_label)))
-            ax[0].set_yticklabels(y_label)
-            ax[0].set_title('DFT Hamiltonian matrix, Fitting '+ r"$R^2$=%.2f"%r2_dft)
-            # cbar = ax[0].figure.colorbar(im0)
-            # cbar.set_label(r'$|H_{\alpha, \beta}|$ (eV)', labelpad=-20, y=1.1, rotation=0)
-            fig.colorbar(im0, ax=ax[0], shrink=0.7)
-
-            im1 = ax[1].imshow(np.real(self.H_ab_GW), cmap='RdBu_r', vmin=vmin, vmax=vmax)
-            ax[1].imshow(np.real(self.H_ab_GW), cmap='RdBu_r', vmin=vmin, vmax=vmax)
-            ax[1].set_xticks(range(len(x_label)))
-            ax[1].set_xticklabels(x_label, rotation=-90)
-            ax[1].xaxis.set_ticks_position('top')
-            ax[1].xaxis.set_label_position('top')
-            ax[1].set_yticks(range(len(y_label)))
-            ax[1].set_yticklabels(y_label)
-            ax[1].set_title('GW Hamiltonian matrix, Fitting '+ r"$R^2$=%.2f"%r2_gw)
-            fig.colorbar(im1, ax=ax[1], shrink=0.7)
-            # cbar = ax[1].figure.colorbar(im1)
-            # cbar.set_label(r'$|H_{\alpha, \beta}|$ (eV)', labelpad=-20, y=1.1, rotation=0)
-            # save figure
-            # Adjust layout
-            plt.tight_layout()
-            plt.savefig(path + Ham_type +'_Hamiltonian_matrix.png')
-            plt.show()
-
+                im1 = ax[1].imshow(np.real(self.H_ab_GW), cmap='RdBu_r', vmin=vmin, vmax=vmax)
+                ax[1].imshow(np.real(self.H_ab_GW), cmap='RdBu_r', vmin=vmin, vmax=vmax)
+                ax[1].set_xticks(range(len(x_label)))
+                ax[1].set_xticklabels(x_label, rotation=-90)
+                ax[1].xaxis.set_ticks_position('top')
+                ax[1].xaxis.set_label_position('top')
+                ax[1].set_yticks(range(len(y_label)))
+                ax[1].set_yticklabels(y_label)
+                ax[1].set_title('GW Hamiltonian matrix, Fitting '+ r"$R^2$=%.2f"%r2_gw)
+                fig.colorbar(im1, ax=ax[1], shrink=0.7)
+                # cbar = ax[1].figure.colorbar(im1)
+                # cbar.set_label(r'$|H_{\alpha, \beta}|$ (eV)', labelpad=-20, y=1.1, rotation=0)
+                # save figure
+                # Adjust layout
+                plt.tight_layout()
+                plt.savefig(path + Ham_type +'_Hamiltonian_matrix.png')
+                plt.show()
+        else:
+            pass
 
 
     def calculate_GW_energies(self):
@@ -406,25 +425,35 @@ class Molecule_TBM():
         Calculate the GW energies
         TODO: debug this
         """
+
+        # put calculated result to gpaw_gw dir
+        gpaw_path = self.gpaw_path
+        if not os.path.exists(gpaw_path) and self.rank == 0:
+            os.makedirs(gpaw_path)
+        
         start_time_gw = time.time()
         #if '%s_fulldiag.gpw'%self.symbol exists, use it
         #else calculate it
-        if '%s_fulldiag.gpw'%self.symbol in os.listdir():
+
+        # sync the calculation
+        self.comm.Barrier()
+
+        if gpaw_path+'/%s_fulldiag.gpw'%self.symbol in os.listdir():
             parprint('Use existing full diagonalized Hamiltonian')
         else:
             parprint('Calculate full diagonalized Hamiltonian')
             self.calc.diagonalize_full_hamiltonian(nbands=self.nb*20)
-            self.calc.write('%s_fulldiag.gpw'%self.symbol, 'all')
+            self.calc.write(gpaw_path+'/%s_fulldiag.gpw'%self.symbol, 'all')
 
-        self.gw = G0W0(calc='%s_fulldiag.gpw'%self.symbol,
+        self.gw = G0W0(calc=gpaw_path+'/%s_fulldiag.gpw'%self.symbol,
                   ecut=self.ecut_gw,
-                  filename=f'{self.symbol}_g0w0_{self.ecut_gw}',
+                  filename=gpaw_path+'/'+f'{self.symbol}_g0w0_{self.ecut_gw}',
                 #   truncation='0D',
                 #   ppa=True,
                   bands=(0, self.nb), # make it consistent with the number of bands in DFT
                   nbands=self.nb*10)
         self.gw_result = self.gw.calculate()
-        self.e_n_GW = self.gw_result['qp'].squeeze()
+        self.e_n_GW = self.gw_result['qp'][0,0,:] # todo (all spin) here is only spin=0
 
         end_time_gw = time.time()
         parprint(f'GW step completed in {end_time_gw - start_time_gw:.2f} seconds')
@@ -447,76 +476,84 @@ class Molecule_TBM():
         7. site_positions.dat: atomic positions (natoms x 3)                
         """
 
-        # 0. Check if the file exists
-        self.path_g2d = filename + '/' + self.symbol + '/'
-        # path = filename + '/' + self.symbol + '/'
-        if not os.path.exists(self.path_g2d):
-            os.makedirs(self.path_g2d)
 
-        # 1. element.dat
-        np.savetxt(self.path_g2d + 'element.dat', self.mol.get_atomic_numbers().astype(int), fmt='%d')
+        # Tight-binding model for Hamiltonian is built by default, no need to check that.
+        if Ham_type == 'GW':
+            self.build_GW_Ham_TBM()
 
-        # 2. hamiltonian.h5
-        # Build TBM Hamiltonian (GW/BSE)
-        #  - calculate DFT or GW
-        #  - projection to atomic orbitals
-        # Write the Hamiltonian matrix to an h5 file
-        #  - partition the Hamiltonian matrix by atom_i and atom_j
-        h_cnt = 0
-        with h5.File(self.path_g2d + 'hamiltonians.h5', 'w') as f:
-            for i in range(self.natom):
-                for j in range(self.natom):
-                    key, H_ia_jb = self.partition_Ham_TBM_for_Aij(i, j, Ham_type=Ham_type)
-                    if key == None:
-                        # skip if the partition is empty (no nearest neighbor)
-                        continue
-                    f.create_dataset(str(key), data=H_ia_jb)
-                    h_cnt += 1
-        parprint(f'{h_cnt} / {self.natom**2} sub-Hamiltonian matrices are saved')
+        if self.rank == 0:
 
-        # 3. info.json
-        info = {"fermi_level": self.fermi_energy if self.fermi_energy != float('inf') else self.e_n[-1]+0.001, "isspinful":False}
-        with open(self.path_g2d + 'info.json', 'w') as f:
-            json.dump(info, f, indent=4)
+            # 0. Check if the file exists
+            self.path_g2d = filename + '/' + self.symbol + '/'
+            # path = filename + '/' + self.symbol + '/'
+            if not os.path.exists(self.path_g2d):
+                os.makedirs(self.path_g2d)
 
-        # 4. lat.dat (Molecule system)
-        np.savetxt(self.path_g2d + 'lat.dat', mol.mol.cell[:], fmt='%.16f')
+            # 1. element.dat
+            np.savetxt(self.path_g2d + 'element.dat', self.mol.get_atomic_numbers().astype(int), fmt='%d')
 
-        # 5. orbital_type.dat
-        with open(self.path_g2d + 'orbital_types.dat', 'w') as f:
-            for i in range(self.natom):
-                atom_orb = []
-                for j in range(len(self.orbitals[i])):
-                    num_orb = len(self.orbitals[i][j])
-                    if num_orb % (j*2+1) != 0:
-                        raise ValueError('Fractional orbital number is not allowed, atom%s, l=%s'%(i, j))
-                    atom_orb = atom_orb + [j]* (num_orb // (j*2+1))
-                f.write(' '.join(map(str, atom_orb)) + '\n')
+            # 2. hamiltonian.h5
+            # Build TBM Hamiltonian (GW/BSE)
+            #  - calculate DFT or GW
+            #  - projection to atomic orbitals
+            # Write the Hamiltonian matrix to an h5 file
+            #  - partition the Hamiltonian matrix by atom_i and atom_j
+            h_cnt = 0
+            with h5.File(self.path_g2d + 'hamiltonians.h5', 'w') as f:
+                for i in range(self.natom):
+                    for j in range(self.natom):
+                        key, H_ia_jb = self.partition_Ham_TBM_for_Aij(i, j, Ham_type=Ham_type)
+                        if key == None:
+                            # skip if the partition is empty (no nearest neighbor)
+                            continue
+                        f.create_dataset(str(key), data=H_ia_jb)
+                        h_cnt += 1
+            parprint(f'{h_cnt} / {self.natom**2} sub-Hamiltonian matrices are saved')
 
-        # 6. R_list.dat (not neccessary)
-        # Not implemented yet
+            # 3. info.json
+            info = {"fermi_level": self.fermi_energy if self.fermi_energy != float('inf') else self.e_n[-1]+0.001, "isspinful":False}
+            with open(self.path_g2d + 'info.json', 'w') as f:
+                json.dump(info, f, indent=4)
 
-        # 7. site_positions.dat
-        np.savetxt(self.path_g2d + 'site_positions.dat', mol.mol.positions.T, fmt='%.16f')
+            # 4. lat.dat (Molecule system)
+            np.savetxt(self.path_g2d + 'lat.dat', mol.mol.cell[:], fmt='%.16f')
 
-        # 8. Ham_plot
-        self.plot_Ham_TBM(path=self.path_g2d, Ham_type=Ham_type)
+            # 5. orbital_type.dat
+            with open(self.path_g2d + 'orbital_types.dat', 'w') as f:
+                for i in range(self.natom):
+                    atom_orb = []
+                    for j in range(len(self.orbitals[i])):
+                        num_orb = len(self.orbitals[i][j])
+                        if num_orb % (j*2+1) != 0:
+                            raise ValueError('Fractional orbital number is not allowed, atom%s, l=%s'%(i, j))
+                        atom_orb = atom_orb + [j]* (num_orb // (j*2+1))
+                    f.write(' '.join(map(str, atom_orb)) + '\n')
 
-        pass
+            # 6. R_list.dat (not neccessary)
+            # Not implemented yet
+
+            # 7. site_positions.dat
+            np.savetxt(self.path_g2d + 'site_positions.dat', mol.mol.positions.T, fmt='%.16f')
+
+            # 8. Ham_plot
+            self.plot_Ham_TBM(path=self.path_g2d, Ham_type=Ham_type)
+
+        else:
+            pass
 
 if __name__ == "__main__":
-    # mol = Molecule_TBM('CH3CH2OH')
+    mol = Molecule_TBM('C2H2')
     # mol.build_Ham_TBM()
     # mol.plot_Ham_TBM(Ham_type='DFT')
     # mol.build_GW_Ham_TBM()
     # mol.plot_Ham_TBM(Ham_type='GW')
-    # mol.gpaw2deephe3(filename='./deeph3_raw_data_GW', Ham_type='GW')
+    mol.gpaw2deephe3(filename='./parallel_test', Ham_type='GW')
     
     # Generate g2 dataset
     # g2.names[:]
-    CH_dataset = ['C2H2','C2H3', 'C2H4','C2H5','C2H6','C3H8',
-    'C3H9C','C6H6','CH','CH4']
+    # CH_dataset = ['C2H2','C2H3', 'C2H4','C2H5','C2H6','C3H8',
+    # 'C3H9C','C6H6','CH','CH4']
 
-    for idx, name in enumerate(CH_dataset):
-        mol = Molecule_TBM(name)
-        mol.gpaw2deephe3(filename='./deeph3_raw_data_GW', Ham_type='GW')
+    # for idx, name in enumerate(CH_dataset):
+    #     mol = Molecule_TBM(name)
+    #     mol.gpaw2deephe3(filename='./deeph3_raw_data_GW', Ham_type='GW')
