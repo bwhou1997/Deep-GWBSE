@@ -161,7 +161,7 @@ class Molecule_TBM():
         self.basis = 'dzp'
         self.orbtype = 'spdf'
         self.Hartree2eV = 27.21138602
-        self.nbands_gpaw = '100%'
+        self.nbands_gpaw = '600%'
         self.pos_def_shift_for_S_ab = 1E-9 # Force S_ab to be positive definite by add a small diagonal term
         self.rotation = [] # rotation parameter
         self.ecut_gw = 20
@@ -317,26 +317,62 @@ class Molecule_TBM():
 
         return key, H_ia_jb
     
-    def plot_delta_nm(self,):
+    def plot_delta_nm(self, type='ab'):
         """
+        type = 'nm' or 'ab'
+
+        "nm":
         Sum_a <n|a><a|m> = delta_nm
+
+        "ab":
+        Sum_n <a|n><n|b> = delta_ab
+
+        "na::
+        <n|a>
         """
+        assert type in ['nm', 'ab', 'na']
+
         if self.rank == 0:
-            self.delta_nm = np.einsum("na, ma -> nm", self.n_overlap_a, self.n_overlap_a.conj())
-            plt.xlabel('n')
-            plt.ylabel('m')
-            plt.title(r'<n|m>')
-            plt.imshow(np.abs(self.delta_nm))
-            plt.colorbar()
-            plt.show()
-        else:
-            pass
+            plt.figure(figsize=(24, 12))
+            if type == 'nm':
+                self.delta_nm = np.einsum("na, ma -> nm", self.n_overlap_a, self.n_overlap_a.conj())
+                vmin = -np.real(abs(self.delta_nm)).max()*1.0
+                vmax = np.real(abs(self.delta_nm)).max()*1.0
+                plt.xlabel('n')
+                plt.ylabel('m')
+                plt.title(r'<n|m>')
+                plt.imshow(np.abs(self.delta_nm), cmap='RdBu_r',vmin=vmin, vmax=vmax)
+                plt.colorbar(shrink=0.7)
+                plt.show()
+            elif type == 'ab':
+                self.delta_ab = np.einsum("na, nb -> ab", self.n_overlap_a, self.n_overlap_a.conj())
+                vmin = -np.real(abs(self.delta_ab)).max()*1.0
+                vmax = np.real(abs(self.delta_ab)).max()*1.0
+                plt.xlabel('a')
+                plt.ylabel('b')
+                plt.title(r'<a|b>')
+                plt.imshow(np.abs(self.delta_ab), cmap='RdBu_r',vmin=vmin, vmax=vmax)
+                plt.colorbar(shrink=0.7)
+                plt.show()
+            elif type == 'na':
+                vmin = -np.real(abs(self.n_overlap_a)).max()*1.0
+                vmax = np.real(abs(self.n_overlap_a)).max()*1.0
+                plt.xlabel('Orbital Index - a')
+                plt.xticks(range(self.n_overlap_a.shape[1]))
+                plt.ylabel('Energy index - n')
+                plt.yticks(range(self.n_overlap_a.shape[0]))
+                plt.title(r'<n|a>')
+                plt.imshow(np.abs(self.n_overlap_a), cmap='RdBu_r',vmin=vmin, vmax=vmax)
+                plt.colorbar(shrink=0.7)
+                plt.show()
+
     
     def plot_Ham_TBM(self, path='./', Ham_type='DFT'):
         """
         Characterize the Hamiltonian matrix by atomic orbitals
         Ham_type: 'DFT' or 'GW'
         """
+        assert Ham_type in ['DFT', 'GW']
         if self.rank == 0: # only master node plot the figure
             if Ham_type == 'DFT':
                 assert self.H_ab is not None
@@ -542,18 +578,19 @@ class Molecule_TBM():
             pass
 
 if __name__ == "__main__":
-    mol = Molecule_TBM('C2H2')
-    # mol.build_Ham_TBM()
-    # mol.plot_Ham_TBM(Ham_type='DFT')
+    mol = Molecule_TBM('CH3CH2OH')
+    mol.build_Ham_TBM()
+    mol.plot_Ham_TBM(Ham_type='DFT')
     # mol.build_GW_Ham_TBM()
     # mol.plot_Ham_TBM(Ham_type='GW')
-    mol.gpaw2deephe3(filename='./parallel_test', Ham_type='GW')
+    # mol.gpaw2deephe3(filename='./deeph3_raw_data_GW', Ham_type='GW')
     
     # Generate g2 dataset
     # g2.names[:]
     # CH_dataset = ['C2H2','C2H3', 'C2H4','C2H5','C2H6','C3H8',
     # 'C3H9C','C6H6','CH','CH4']
+    # CH_dataset = [ 'H2', 'C', 'C3H7', 'CH3',  'H',  'CCH', 'C5H8', ]
 
-    # for idx, name in enumerate(CH_dataset):
+    # for idx, name in enumerate(CH_dataset[5:]):
     #     mol = Molecule_TBM(name)
     #     mol.gpaw2deephe3(filename='./deeph3_raw_data_GW', Ham_type='GW')
