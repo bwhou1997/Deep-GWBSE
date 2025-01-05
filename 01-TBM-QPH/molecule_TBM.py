@@ -578,8 +578,8 @@ class Molecule_TBM():
             pass
 
 if __name__ == "__main__":
-    mol = Molecule_TBM('CH3CH2OH')
-    mol.build_Ham_TBM()
+    mol = Molecule_TBM('H2O')
+    # mol.build_Ham_TBM()
     mol.plot_Ham_TBM(Ham_type='DFT')
     # mol.build_GW_Ham_TBM()
     # mol.plot_Ham_TBM(Ham_type='GW')
