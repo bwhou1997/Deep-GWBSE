@@ -273,6 +273,11 @@ class RevertDecayLR:
             
 
 def process_targets(orbital_types, index_to_Z, targets): 
+    """
+    Shape of equivariant_blocks: [n_targets][N_M_str: block_slice]
+    Shape of out_js_list: [n_targets][l1, l2]
+    Shape of out_slices: [n_targets + 1]
+    """
     Z_to_index = torch.full((100,), -1, dtype=torch.int64)
     Z_to_index[index_to_Z] = torch.arange(len(index_to_Z))
     
@@ -357,7 +362,7 @@ def orbital_analysis(atom_orbitals, required_block_type, spinful, targets=None, 
                     assert l1 == atom_orbitals[atom1][block_indices[0]] and l2 == atom_orbitals[atom2][block_indices[1]], f'Hamiltonian block angular quantum numbers not all the same in target {target}'
                     
     else:
-        hoppings_list = [] # [{'42 16': [4, 3]}, ...]
+        hoppings_list = [] # [{'42 16': [4, 3]}, ...] # len: n_atom * n_orbital * n_atom * n_orbital
         for atom1, orbitals1 in atom_orbitals.items():
             for atom2, orbitals2 in atom_orbitals.items():
                 hopping_key = atom1 + ' ' + atom2

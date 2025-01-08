@@ -177,6 +177,7 @@ class DeepHE3Kernel:
         print('\n------- Preparation of training data -------')
         dataset = self.get_graph(config)
 
+        # Bowen (2025/01/06): set target of net (orbital analysis, irreps_out analysis)
         self.config_set_target(verbose=os.path.join(config.save_dir, 'targets.txt'))
         
         # set dataset mask

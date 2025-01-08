@@ -185,14 +185,27 @@ raw_data_dir
         spinful = data_list[0].spinful
         for d in data_list:
             assert spinful == d.spinful
-            
-        _, orbital_types = load_orbital_types(path=os.path.join(folder_list[0], 'orbital_types.dat'),
-                                           return_orbital_types=True) 
-        elements = np.loadtxt(os.path.join(folder_list[0], 'element.dat'))
-        orbital_types_new = []
+        
+        # Bowen TODO_done: handle differnt orbital types. 2025/01/05 
+
+        orbital_types = []
+        elements = np.array([])
+        for folder in folder_list: # 读取所有的orbital_types.dat和element.dat Bowen Hou
+            _, orbital_types_temp = load_orbital_types(path=os.path.join(folder, 'orbital_types.dat'),
+                                            return_orbital_types=True) 
+            elements_temp = np.loadtxt(os.path.join(folder, 'element.dat'))
+            # make elements an array even if that is a number
+            if len(elements_temp.shape) == 0:
+                elements_temp = elements_temp[None]
+            orbital_types = orbital_types + orbital_types_temp
+            elements = np.concatenate((elements, elements_temp))
+        #######################################################################
+
+        orbital_types_new = [] # 重新排序orbital_types根据index_to_Z
+        
         for i in range(len(index_to_Z)):
-            orbital_types_new.append(orbital_types[np.where(elements == index_to_Z[i].numpy())[0][0]])
-        #TODO 数据集包含不同元素
+            orbital_types_new.append(orbital_types[np.where(elements == index_to_Z[i].numpy())[0][0]]) 
+        #TODO_done 数据集包含不同元素
 
         begin = time.time()
         data, slices = self.collate(data_list)
@@ -200,8 +213,12 @@ raw_data_dir
         print('Finished saving %d structures to save_graph_dir, have cost %d seconds' % (len(data_list), time.time() - begin))
 
     def element_statistics(self, data_list):
-        # Bowen TODO 没有处理数据集包括不同元素组成的情况
-        index_to_Z, inverse_indices = torch.unique(data_list[0].x, sorted=True, return_inverse=True)
+        # Bowen TODO_done 已经处理数据集包括不同元素组成的情况 2025/01/05
+        # TODO: generalize to unseen elements in dataset
+        index_to_Z, inverse_indices = torch.unique(torch.tensor([int(x) for data_set in data_list for x in data_set.x]), 
+                                                   sorted=True, return_inverse=True)
+        print(f"index_to_Z: {index_to_Z}")
+        # index_to_Z, inverse_indices = torch.unique(data_list[0].x, sorted=True, return_inverse=True)
         Z_to_index = torch.full((100,), -1, dtype=torch.int64)
         Z_to_index[index_to_Z] = torch.arange(len(index_to_Z))
 
@@ -304,7 +321,7 @@ raw_data_dir
 
 if __name__ == "__main__":
     aij = AijData(
-        raw_data_dir = '/pscratch/sd/b/bwhou/12-deepGWBSE/Deep-GWBSE/02-Graph-NN/deeph3_raw_data', 
+        raw_data_dir = '/pscratch/sd/b/bwhou/12-deepGWBSE/Deep-GWBSE/02-Graph-NN/CH-data-3-mat', 
         graph_dir = '/pscratch/sd/b/bwhou/12-deepGWBSE/Deep-GWBSE/02-Graph-NN/g2graph', 
         target = 'hamiltonian',
         dataset_name = 'g2_set', 
@@ -313,7 +330,7 @@ if __name__ == "__main__":
         max_num_nbr = 0, 
         edge_Aij = True,
         default_dtype_torch = torch.float32, 
-        nums= 2, 
+        nums= 3, 
         inference = False, 
         only_ij= False, 
         load_graph=False)

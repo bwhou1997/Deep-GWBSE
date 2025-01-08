@@ -391,7 +391,9 @@ def get_graph(cart_coords, frac_coords, numbers, stru_id, r, max_num_nbr, edge_A
                 if edge_fea.shape[0] < 0.9 * len(Aij_dict):
                     warnings.warn("Too many Aijs are not included within the radius")
                 Aij_mask = torch.zeros(edge_fea.shape[0], dtype=torch.bool)  # Aij_mask[i]代表第 i 个边是否计算了hopping等
-                # TODO 没有处理数据集包括不同元素组成的情况
+                # TODO 没有处理数据集包括不同元素组成的情况 (Bowen will handle this later 2025/01/07)
+                # Solution1: update shape of Aij in data.py instead of here
+                # Solution2: make all Aij shape the same in DFT step.
                 if spinful:
                     # Aij = torch.full([edge_fea.shape[0], max_num_orbital, max_num_orbital, 8], np.nan,
                     #                  dtype=default_dtype_torch)

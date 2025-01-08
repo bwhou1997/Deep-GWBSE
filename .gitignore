@@ -23,3 +23,8 @@ __pycache__/
 *.gpw
 deeph3_raw_data_GW
 deephe3_1
+g2graph
+CH-data-3-mat
+02-Graph-NN/g2graph/*
+02-Graph-NN/g2graph/HGraph-g2_set-5r0mn-edge=Aij.pkl
+03-train/04-all-mat-xyz

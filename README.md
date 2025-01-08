@@ -49,6 +49,9 @@ In principle, we can even generalize this to two-particle vertex function, such 
 
 - **step 2**. Build Graph for Molecule Systems
   - See `02-Graph-NN/data.py`
+  - todo: adatpt it to multiple types of elements
+    - overall element/orbital statistics has done (to test first)
+    - Aij shape needed be syncrhonized (training & evaluating)
 
 
 - **step 3**. Use DeepH-e3 to predict Hamiltonian
@@ -60,7 +63,7 @@ In principle, we can even generalize this to two-particle vertex function, such 
 - **step 4**. Construct $G_0W_0$ Tight-binding Model
 
   - use `"GW"` setup in `01-TBM-QPH/molecule_TBM.py` to generate data
-  - todo: parallel computation
+  - todo: parallel computation (decouple DFT and GW)
 
 ![GW Hamiltonian Prediction](./01-TBM-QPH/GW_Hamiltonian_matrix_CH3CH2OH.png)
 
