@@ -578,19 +578,25 @@ class Molecule_TBM():
             pass
 
 if __name__ == "__main__":
-    mol = Molecule_TBM('H2O')
+    # mol = Molecule_TBM('H2O')
     # mol.build_Ham_TBM()
-    mol.plot_Ham_TBM(Ham_type='DFT')
+    # mol.plot_Ham_TBM(Ham_type='DFT')
     # mol.build_GW_Ham_TBM()
     # mol.plot_Ham_TBM(Ham_type='GW')
     # mol.gpaw2deephe3(filename='./deeph3_raw_data_GW', Ham_type='GW')
     
     # Generate g2 dataset
-    # g2.names[:]
-    # CH_dataset = ['C2H2','C2H3', 'C2H4','C2H5','C2H6','C3H8',
-    # 'C3H9C','C6H6','CH','CH4']
+    # g2_dataset = g2.names[:]
+    # CH_dataset = ['C2H2','C2H3', 'C2H4','C2H5','C2H6','C3H8', 'C3H9C','C6H6','CH','CH4']
     # CH_dataset = [ 'H2', 'C', 'C3H7', 'CH3',  'H',  'CCH', 'C5H8', ]
+    CHON_dataset = ['C2H4', 'C3H4_C2v', 'CH3COOH', 'N2H4', 'CH3CH2OCH3', 'C3H6_D3h', 'CH3CO', 'CH3', 'CCH', 
+                    'CH3ONO', 'C5H5N', 'N2O', 'C4H4NH', 'C2H6', 'CH3NO2', 'CH', 'C2H5', 'NH2', 'C3H4_C3v', 
+                    'C2H2', 'CH3CONH2', 'CH3OCH3', 'CH2_s3B1d', 'C3H4_D2d', 'CH3CN', 'CH4', 'NH', 'CH3CH2O', 
+                    'CH3CH2NH2', 'C2H3', 'C3H9N', 'CN', 'C6H6', 'NH3', 'C', 'C3H6_Cs', 'CH3O', 'CH2OCH2', 
+                    'CH3CHO', 'CH3CH2OH', 'C3H7', 'CH2_s1A1d', 'C5H8', 'CO', 'CH3COCH3', 'CO2', 'C3H8', 
+                    'C4H4O', 'N2', 'C3H9C', 'CH2NHCH2', 'C2H6CHOH', 'CH3OH']
 
-    # for idx, name in enumerate(CH_dataset[5:]):
-    #     mol = Molecule_TBM(name)
-    #     mol.gpaw2deephe3(filename='./deeph3_raw_data_GW', Ham_type='GW')
+    for idx, name in enumerate(CHON_dataset):
+        parprint('===> idx%s: %s'%(idx, name))
+        mol = Molecule_TBM(name)
+        mol.gpaw2deephe3(filename='./CHON_GW', Ham_type='GW')
