@@ -595,8 +595,10 @@ if __name__ == "__main__":
                     'CH3CH2NH2', 'C2H3', 'C3H9N', 'CN', 'C6H6', 'NH3', 'C', 'C3H6_Cs', 'CH3O', 'CH2OCH2', 
                     'CH3CHO', 'CH3CH2OH', 'C3H7', 'CH2_s1A1d', 'C5H8', 'CO', 'CH3COCH3', 'CO2', 'C3H8', 
                     'C4H4O', 'N2', 'C3H9C', 'CH2NHCH2', 'C2H6CHOH', 'CH3OH']
+    
+    CHON_dataset = ['C2H6CHOH', 'C3H8', 'C3H9C', 'C3H9N', 'C4H4O', 'C6H6', 'CH2NHCH2', 'CH3CH2OCH3', 'CH3COCH3', 'CH3OH', 'CO', 'CO2', 'N2']
 
-    for idx, name in enumerate(CHON_dataset):
+    for idx, name in enumerate(CHON_dataset[9:]):
         parprint('===> idx%s: %s'%(idx, name))
         mol = Molecule_TBM(name)
         mol.gpaw2deephe3(filename='./CHON_GW', Ham_type='GW')

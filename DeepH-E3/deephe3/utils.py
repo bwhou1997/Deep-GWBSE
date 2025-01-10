@@ -286,8 +286,8 @@ def process_targets(orbital_types, index_to_Z, targets):
                                                                 np.cumsum(2 * x + 1)]), orbital_types))
 
     # = process the orbital indices into block slices =
-    equivariant_blocks, out_js_list = [], []
-    out_slices = [0]
+    equivariant_blocks, out_js_list = [], [] # equivariant_blocks: [n_targets][N_M_str: block_slice]; out_js_list: [n_targets][l1, l2]
+    out_slices = [0] # [n_targets + 1]
     for target in targets:
         out_js = None
         equivariant_block = dict()
@@ -362,7 +362,7 @@ def orbital_analysis(atom_orbitals, required_block_type, spinful, targets=None, 
                     assert l1 == atom_orbitals[atom1][block_indices[0]] and l2 == atom_orbitals[atom2][block_indices[1]], f'Hamiltonian block angular quantum numbers not all the same in target {target}'
                     
     else:
-        hoppings_list = [] # [{'42 16': [4, 3]}, ...] # len: n_atom * n_orbital * n_atom * n_orbital
+        hoppings_list = [] # [{'42 16': [4, 3]}, ...] # len: (atom, atom_orbital) * (atom, atom_orbital)
         for atom1, orbitals1 in atom_orbitals.items():
             for atom2, orbitals2 in atom_orbitals.items():
                 hopping_key = atom1 + ' ' + atom2

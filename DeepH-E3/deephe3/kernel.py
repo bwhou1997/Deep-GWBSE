@@ -180,7 +180,7 @@ class DeepHE3Kernel:
         # Bowen (2025/01/06): set target of net (orbital analysis, irreps_out analysis)
         self.config_set_target(verbose=os.path.join(config.save_dir, 'targets.txt'))
         
-        # set dataset mask
+        # set dataset mask, Bowen: convert Aij to label (The shape of Aij doesn't matter only if it is larger than max orbital number)
         dataset.set_mask(config.target_blocks, convert_to_net=config.convert_net_out)
         
         # = data loader =

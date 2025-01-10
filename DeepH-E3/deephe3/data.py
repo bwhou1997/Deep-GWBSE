@@ -212,7 +212,7 @@ raw_data_dir
 
     def element_statistics(self, data_list):
         # Bowen TODO_done 已经处理数据集包括不同元素组成的情况 2025/01/05
-        # TODO: generalize to unseen elements in dataset
+        # TODO: generalize to elements not included dataset
         index_to_Z, inverse_indices = torch.unique(torch.tensor([int(x) for data_set in data_list for x in data_set.x]), 
                                                    sorted=True, return_inverse=True)
         print(f"index_to_Z: {index_to_Z}")
@@ -239,7 +239,8 @@ raw_data_dir
                 dtype = torch.complex128
             else:
                 raise ValueError(f'Unsupported dtype: {dtype}')
-        
+
+        # equivariant_blocks: [n_targets][N_M_str: block_slice]; out_js_list: [n_targets][l1, l2]        
         equivariant_blocks, out_js_list, out_slices = process_targets(self.info['orbital_types'], self.info["index_to_Z"], targets)
         if convert_to_net:
             construct_kernel = e3TensorDecomp(None, out_js_list, torch.get_default_dtype(), spinful=spinful, if_sort=True) # todo: dtype
