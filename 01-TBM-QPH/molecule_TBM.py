@@ -362,7 +362,7 @@ class Molecule_TBM():
                 plt.ylabel('Energy index - n')
                 plt.yticks(range(self.n_overlap_a.shape[0]))
                 plt.title(r'<n|a>')
-                plt.imshow(np.abs(self.n_overlap_a), cmap='RdBu_r',vmin=vmin, vmax=vmax)
+                plt.imshow(np.abs(self.n_overlap_a), cmap='Blues')
                 plt.colorbar(shrink=0.7)
                 plt.show()
 
@@ -578,7 +578,7 @@ class Molecule_TBM():
             pass
 
 if __name__ == "__main__":
-    # mol = Molecule_TBM('H2O')
+    mol = Molecule_TBM('H2O')
     # mol.build_Ham_TBM()
     # mol.plot_Ham_TBM(Ham_type='DFT')
     # mol.build_GW_Ham_TBM()
@@ -596,9 +596,9 @@ if __name__ == "__main__":
                     'CH3CHO', 'CH3CH2OH', 'C3H7', 'CH2_s1A1d', 'C5H8', 'CO', 'CH3COCH3', 'CO2', 'C3H8', 
                     'C4H4O', 'N2', 'C3H9C', 'CH2NHCH2', 'C2H6CHOH', 'CH3OH']
     
-    CHON_dataset = ['C2H6CHOH', 'C3H8', 'C3H9C', 'C3H9N', 'C4H4O', 'C6H6', 'CH2NHCH2', 'CH3CH2OCH3', 'CH3COCH3', 'CH3OH', 'CO', 'CO2', 'N2']
+    # CHON_dataset = ['C2H6CHOH', 'C3H8', 'C3H9C', 'C3H9N', 'C4H4O', 'C6H6', 'CH2NHCH2', 'CH3CH2OCH3', 'CH3COCH3', 'CH3OH', 'CO', 'CO2', 'N2']
 
-    for idx, name in enumerate(CHON_dataset[9:]):
-        parprint('===> idx%s: %s'%(idx, name))
-        mol = Molecule_TBM(name)
-        mol.gpaw2deephe3(filename='./CHON_GW', Ham_type='GW')
+    # for idx, name in enumerate(CHON_dataset[9:]):
+    #     parprint('===> idx%s: %s'%(idx, name))
+    #     mol = Molecule_TBM(name)
+    #     mol.gpaw2deephe3(filename='./CHON_GW', Ham_type='GW')
