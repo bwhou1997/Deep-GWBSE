@@ -1,11 +1,11 @@
-from from_bgwpy import Structure, EpsilonTask, GWFlow
+from from_bgwpy import Structure, EpsilonTask, GWFlow, Workflow
 from config import fp_config
 
 class fpflow:
     """
     
     """
-    def __init__(self):
+    def __init__(self, fp_input_dir='./fp-input', ml_train_dir='./ml-input'):
         pass
 
     def write(self):
@@ -15,7 +15,7 @@ class fpflow:
 
 # flow = GWFlow(
 #     dirname='GW-workflow',
-#     structure = Structure.from_file('./input/mat-1/SiH4.cif'),
+#     structure = Structure.from_file('./fp-input/mat-2/stru.cif'),
 #     ecuteps = 30.0,
 #     ibnd_min = 1,
 #     ibnd_max = 8,
