@@ -26,7 +26,6 @@ class fp_config:
         self.qshift = self.config['qshift']
         self.nbnd = self.config['nbnd'] # nscf
         self.ecutwfc = self.config['ecutwfc']
-        self.prefix = self.config['SiH']
         
         # finish reading
         self.read_fpconfig = True
@@ -45,6 +44,26 @@ class fp_config:
 
         self.read_dir = True
 
-    def generate_fpconfig_default(self):
-        # todo: for test reason
-        pass
+    def generate_fpconfig_default(self, out_path='./fpconfig_default.json'):        
+        # Create a default structure using the current class attributes
+        default_config = {
+            'ibnd_min': 1, # -1: adaptive
+            'ibnd_max': 8, # -1: adaptive
+            'ecuteps': 30,
+            'ngkpt': [4,4,4],
+            'qshift': [0.0,0.0,0.001],
+            'nbnd': 400,
+            'ecutwfc': 60,
+        }
+        
+        # Optionally, print out the default config for verification
+        print("Generated Default fpconfig:")
+        with open(out_path, 'w') as file:
+            js.dump(default_config, file, indent=2, ensure_ascii=False, separators=(', ', ': '))
+        
+        return default_config
+
+if __name__ == "__main__":
+    config = fp_config()
+    config.generate_fpconfig_default()
+
