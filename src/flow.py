@@ -1,7 +1,10 @@
 from from_bgwpy import Structure, EpsilonTask, GWFlow
-from config import config
+from config import fp_config
 
-class flow:
+class fpflow:
+    """
+    
+    """
     def __init__(self):
         pass
 

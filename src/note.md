@@ -1,8 +1,8 @@
 ## Folder Structure
 Here is the basic workflow
 ```
-fp-input ──(QE/SIESTA/GW + HPRO)─>─┌── ml-train-set──(ML)──> model
-                                   └── ml-test-set
+external src──(collect)─>fp-input ──(QE/SIESTA/GW + HPRO)─>─┌── ml-train-set──(ML)─> model
+                                                            └── ml-test-set
 ```
                                               
 
