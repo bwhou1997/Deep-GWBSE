@@ -8,22 +8,15 @@ class single_mat:
     """
     information of each material directory
     mat-1/
-    ├── stru.cif
-    ├── pseudo_qe/
-    |   ├── ele1.upf
-    |   └── ...
-    ├── pseudo_siesta/
-    |   ├── ele1.psf/psml
-    |   └── ...
-    └──
+    └── stru.cif
+
     """
     def __init__(self, root='./fp-input/mat-2'):
         # make root to absolute path
         self.root = os.path.abspath(root)
         self.prefix = root.split('/')[-1]
         self.atoms : Atoms = ase.io.read(self.root + '/stru.cif')
-        self.pseudo_qe = os.listdir(self.root + '/pseudo_qe')
-        self.pseudo_siesta = os.listdir(self.root + '/pseudo_siesta')
+
         self.natoms = len(self.atoms)
         self.elements_order = self.atoms.get_chemical_symbols() # ['Si', 'H', 'H', 'H', 'H']
         self.unique_elements_order = [] # ['Si', 'H']
@@ -31,6 +24,20 @@ class single_mat:
             if ele not in self.unique_elements_order:
                 self.unique_elements_order.append(ele)
         self.nelements = len(set(self.elements_order))
+
+class pseudo:
+    """
+    pseudo/
+    ├── pseudo_qe/
+    |   ├── ele1.upf
+    |   └── ...
+    ├── pseudo_siesta/
+    |   ├── ele1.psf/psml
+    |   └── ...
+    """
+    def __init__(self):
+        self.pseudo_qe = os.listdir(self.root + '/pseudo_qe')
+        self.pseudo_siesta = os.listdir(self.root + '/pseudo_siesta')
 
 class fp_config:
     """
@@ -68,7 +75,7 @@ class fp_config:
         # analyze fp-input
 
         self.mats = [] # {'prefix/stru.cif':[ele1.upf, ele2.upf...]}
-        total = len(os.listdir(self.root)) - 1
+        total = len(os.listdir(self.root)) - 1 # exclude config file
         for root, dirs, files in tqdm.tqdm(os.walk(self.root), desc='read fp-input', total=total):
             if 'stru.cif' in files:
                 self.mats.append(single_mat(root))

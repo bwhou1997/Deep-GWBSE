@@ -251,44 +251,21 @@ class DFT_GW_HPRO_Flow(Workflow):
 if __name__ == "__main__":
     pass
 
+    flow = DFT_GW_HPRO_Flow(
+        dirname='flow',
+        structure = Structure.from_file('./fp-input/mat-2/stru.cif'),
+        ecuteps = 30.0,
+        ibnd_min = 1,
+        ibnd_max = 8,
+        ngkpt = [8,8,8],
+        qshift = [.0,.0,.001],
+        nbnd = 400,
+        ecutwfc = 200.0,
+        prefix = 'SiH',
+        pseudo_dir = './pseudo/pseudo_qe',
+        pseudos = ['Si.upf','H.upf'],
+    )
+
+    flow.write()
 
 
-
-
-
-
-# from from_bgwpy import Structure, EpsilonTask, GWFlow, Workflow
-# from config import fp_config
-
-# class fpflow:
-#     """
-    
-#     """
-#     def __init__(self, fp_input_dir='./fp-input', 
-#                        ml_train_dir='./ml-input'):
-#         pass
-
-#     def write(self):
-#         pass
-    
-
-
-# # flow = GWFlow(
-# #     dirname='GW-workflow',
-# #     structure = Structure.from_file('./fp-input/mat-2/stru.cif'),
-# #     ecuteps = 30.0,
-# #     ibnd_min = 1,
-# #     ibnd_max = 8,
-# #     ngkpt = [8,8,8],
-# #     qshift = [.0,.0,.001],
-# #     nbnd = 400,
-# #     ecutwfc = 200.0,
-# #     prefix = 'SiH',
-# #     pseudo_dir = './input/mat-1/pseudo_qe',
-# #     pseudos = ['Si.upf','H.upf'],
-# # )
-
-# # flow.write()
-
-# if __name__ == "__main__":
-#     pass
