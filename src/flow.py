@@ -10,7 +10,7 @@ from from_bgwpy.QE import QeScfTask, QeBgwFlow
 from ase import Atoms
 import ase.io
 
-from fptask import AobasisTask
+from fptask import AobasisTask, HPROTask
 
 from config import fp_config
 
@@ -129,8 +129,15 @@ class DFT_GW_HPRO_Flow(Workflow):
         # TODO: use pseudobands.py
 
         # ==== SIESTA/HPRO ==========
-        self.make_aobasis_tasks_siesta(**kwargs)
+        self.aobasis_task = AobasisTask(
+             dirname = pjoin(self.dirname, '05-aobasis'),
+             **kwargs)
+        self.add_task(self.aobasis_task)
 
+        self.hpro_task = HPROTask(
+            dirname = pjoin(self.dirname, '16-reconstruction'),
+             **kwargs)
+        self.add_task(self.hpro_task)
         # ==== GW calculations ==== #
 
         # Set some common variables for Epsilon and Sigma
@@ -270,16 +277,16 @@ class DFT_GW_HPRO_Flow(Workflow):
         return fnames
 
     
-    def make_reconstruction_tasks_hpro(self, **kwargs):
-        pass
+    # def make_reconstruction_tasks_hpro(self, **kwargs):
+    #     pass
 
     
-    def make_aobasis_tasks_siesta(self, **kwargs):
-        self.aobasis_task = AobasisTask(
-             dirname = pjoin(self.dirname, '05-aobasis'),
-             **kwargs)
-        self.add_task(self.aobasis_task)
-        return
+    # def make_aobasis_tasks_siesta(self, **kwargs):
+    #     self.aobasis_task = AobasisTask(
+    #          dirname = pjoin(self.dirname, '05-aobasis'),
+    #          **kwargs)
+    #     self.add_task(self.aobasis_task)
+    #     return
 
 
 if __name__ == "__main__":

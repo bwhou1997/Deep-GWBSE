@@ -2,9 +2,15 @@ from os.path import join as pjoin
 import ase.io
 from ase.calculators.siesta import Siesta
 from from_bgwpy.core import MPITask, IOTask
+import os
 
 
-class AobasisTask(MPITask):
+class DeepTask(MPITask, IOTask):
+    _TAG_JOB_COMPLETED = 'TOTAL'
+    pass
+
+
+class AobasisTask(DeepTask):
     """
         Arguments
         ---------
@@ -45,13 +51,13 @@ class AobasisTask(MPITask):
     
 
 
-class HPROTask:
-    def __init__(self):
-        pass
-        self.input = {}
+class HPROTask(DeepTask):
+    def __init__(self, dirname, **kwargs):
+        super(HPROTask, self).__init__(dirname, **kwargs)
+        self.dirnamt = dirname
 
     def write(self):
-        pass
+        os.mkdir(self.dirname)
 
 if __name__ == "__main__":
     aobasistask = AobasisTask(dirname='./aobasis', 
