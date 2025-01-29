@@ -1,9 +1,10 @@
 from os.path import join as pjoin
 import ase.io
 from ase.calculators.siesta import Siesta
+from from_bgwpy.core import MPITask, IOTask
 
 
-class AobasisTask:
+class AobasisTask(MPITask):
     """
         Arguments
         ---------
@@ -19,7 +20,8 @@ class AobasisTask:
         ----------
     """
     def __init__(self, dirname, **kwargs):
-        pass
+        super(AobasisTask, self).__init__(dirname, **kwargs)
+
         self.dirname = dirname
         self.atoms = ase.io.read(kwargs['stru_file'])
         self.symbols = str(self.atoms.symbols)
@@ -38,8 +40,9 @@ class AobasisTask:
         self.atoms.calc = self.calc
 
     def write(self):
-        print('write siesta:', self.calc.getpath())
+        # print('write siesta:', self.calc.getpath())
         self.calc.write_input(self.atoms,'density')
+    
 
 
 class HPROTask:

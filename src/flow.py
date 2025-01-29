@@ -126,6 +126,10 @@ class DFT_GW_HPRO_Flow(Workflow):
         assert is_dft_flavor_espresso(self.dft_flavor), "Only Quantum Espresso is supported for DFT calculations."
         fnames = self.make_dft_tasks_espresso(**kwargs)
         kwargs.update(fnames)
+        # TODO: use pseudobands.py
+
+        # ==== SIESTA/HPRO ==========
+        self.make_aobasis_tasks_siesta(**kwargs)
 
         # ==== GW calculations ==== #
 
@@ -271,7 +275,11 @@ class DFT_GW_HPRO_Flow(Workflow):
 
     
     def make_aobasis_tasks_siesta(self, **kwargs):
-        pass
+        self.aobasis_task = AobasisTask(
+             dirname = pjoin(self.dirname, '05-aobasis'),
+             **kwargs)
+        self.add_task(self.aobasis_task)
+        return
 
 
 if __name__ == "__main__":
@@ -288,8 +296,12 @@ if __name__ == "__main__":
         nbnd = 400,
         ecutwfc = 200.0,
         prefix = 'SiH',
-        pseudo_dir = './pseudo/pseudo_qe',
+        pseudo_dir = './pseudo/',
         pseudos = ['Si.upf','H.upf'],
+        basis_set_siesta = 'DZP',
+        mesh_cutoff_siesta = 320,
+        dm_tolerance_siesta = 1e-6, 
+        max_scf_iter_siesta = 300,
     )
 
     flow.write()

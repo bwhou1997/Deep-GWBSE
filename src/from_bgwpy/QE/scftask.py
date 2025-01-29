@@ -93,8 +93,8 @@ class QeScfTask(QeTask):
         self.input.fname = self._input_fname
 
         # Run script
-        self.runscript.append('$MPIRUN $PW $PWFLAGS -in {} &> {}'.format(
-                              self._input_fname, self._output_fname))
+        # self.runscript.append('$MPIRUN $PW $PWFLAGS -in {} &> {}'.format(
+        #                       self._input_fname, self._output_fname))
 
     @property
     def charge_density_fname(self):
