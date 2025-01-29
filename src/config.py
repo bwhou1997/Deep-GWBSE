@@ -7,12 +7,12 @@ import tqdm
 class single_mat:
     """
     information of each material directory
-    mat-1
+    mat-1/
     ├── stru.cif
-    ├── pseudo_qe
+    ├── pseudo_qe/
     |   ├── ele1.upf
     |   └── ...
-    ├── pseudo_siesta
+    ├── pseudo_siesta/
     |   ├── ele1.psf/psml
     |   └── ...
     └──
@@ -32,10 +32,16 @@ class single_mat:
                 self.unique_elements_order.append(ele)
         self.nelements = len(set(self.elements_order))
 
-
 class fp_config:
     """
     Read fpconfig.json and analyze the fp-input directory
+
+    fp-input/
+    ├── fpconfig.json
+    ├── mat-1/
+    ├── mat-2/
+    └── ...
+    ```
     key attributes:
         mats = [mat1, mat2, ...], mat1 is a single_mat object
         fp_keywardxxx: xxx in fpconfig.json
@@ -116,7 +122,4 @@ if __name__ == "__main__":
     # config.generate_fpconfig_default('./fp-input/fpconfig_default.json')
     config.read_fpconfig('./fp-input/')
     config.summary_mats()
-
-    # print(root)
-
     # sm = single_mat()
