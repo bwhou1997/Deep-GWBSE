@@ -12,7 +12,7 @@ The fp-input folder serves as the starting point for the workflow. It contains t
 fp-input
 ├── fpconfig.json
 ├── mat-1
-|   ├── mat-1.cif
+|   ├── stru.cif
 |   ├── pseudo_qe
 |   |   ├── ele1.upf
 |   |   ├── ele2.upf
@@ -30,6 +30,7 @@ fp-input
 ```bash
 ml-train/test
 ├── mat-1
+|   ├── stru.cif
 |   ├── pseudo_qe
 |   |   ├── ele1.upf
 |   |   ├── ele2.upf

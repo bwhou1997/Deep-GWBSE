@@ -1,0 +1,17 @@
+{
+  "ibnd_min": 1,
+  "ibnd_max": 8,
+  "ecuteps": 30.0,
+  "ngkpt": [
+    4,
+    4,
+    4
+  ],
+  "qshift": [
+    0.0,
+    0.0,
+    0.001
+  ],
+  "nbnd": 400,
+  "ecutwfc": 60.0
+}

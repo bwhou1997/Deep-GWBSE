@@ -3,3 +3,6 @@ python packages:
 - gpaw
 - siesta
 - HPRO
+
+
+- pymatgen
