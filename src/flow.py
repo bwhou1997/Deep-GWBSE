@@ -7,6 +7,10 @@ from from_bgwpy.external import Structure
 from from_bgwpy.core import Workflow
 from from_bgwpy.BGW import EpsilonTask, SigmaTask
 from from_bgwpy.QE import QeScfTask, QeBgwFlow
+from ase import Atoms
+import ase.io
+
+from fptask import AobasisTask
 
 from config import fp_config
 
@@ -24,18 +28,21 @@ class DFT_GW_HPRO_Flow(Workflow):
     def __init__(self, **kwargs):
         """
         Keyword arguments
-        -----------------
-        (All mandatory unless specified otherwise)
 
+        General:
+        -----------------
         dirname : str
             Directory in which the files are written and the code is executed.
             Will be created if needed.
-        structure : pymatgen.Structure
-            Structure object containing information on the unit cell.
-        dft_flavor : 'espresso' 
-            Choice of DFT code for density and wavefunctions calculations.
+        stru_file : str
+            structure file of crystal
         prefix : str
             Prefix required by QE as a rootname.
+
+        QE:
+        -----------------
+        dft_flavor : 'espresso' 
+            Choice of DFT code for density and wavefunctions calculations.
         pseudo_dir : str
             Directory in which pseudopotential files are found.
         pseudos : list, str
@@ -58,6 +65,18 @@ class DFT_GW_HPRO_Flow(Workflow):
             Minimum band index for GW corrections.
         ibnd_max : int
             Maximum band index for GW corrections.
+
+        SIESTA:
+        -----------------
+        basis_set_siesta : str
+            Basis precision set (single or double Zeta)
+        mesh_cutoff_siesta : float (Ry)
+            xxx
+        dm_tolerance_siesta : float           
+            Self consistent calculation tolerance
+        
+        Optional:
+        -----------------        
         truncation_flag : str, optional
             Which truncation flag to use in BerkeleyGW, e.g. "cell_slab_truncation".
         sigma_kpts : list of list(3), optional
@@ -72,12 +91,19 @@ class DFT_GW_HPRO_Flow(Workflow):
         sigma_extra_variables : dict, optional
             Any other variables that should be declared in the sigma input file.
 
+        max_scf_iter_siesta : int
+            Max SCF Iteration steps            
         """
+        # add "structure" to kwargs (historic reason)
+        kwargs.update({'structure':Structure.from_file(kwargs['stru_file'])})
+
         super(DFT_GW_HPRO_Flow, self).__init__(**kwargs)
 
         kwargs.pop('dirname', None)
 
         self.structure = kwargs['structure']
+        self.atoms = ase.io.read(kwargs['stru_file'])
+
         self.ngkpt = kwargs.pop('ngkpt')
         self.kshift = kwargs.pop('kshift', [.0,.0,.0])
         self.qshift = kwargs.pop('qshift', [.0,.0,.0])
@@ -253,7 +279,7 @@ if __name__ == "__main__":
 
     flow = DFT_GW_HPRO_Flow(
         dirname='flow',
-        structure = Structure.from_file('./fp-input/mat-2/stru.cif'),
+        stru_file = './fp-input/mat-2/stru.cif',
         ecuteps = 30.0,
         ibnd_min = 1,
         ibnd_max = 8,

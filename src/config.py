@@ -51,7 +51,7 @@ class fp_config:
     ```
     key attributes:
         mats = [mat1, mat2, ...], mat1 is a single_mat object
-        fp_keywardxxx: xxx in fpconfig.json
+        kwargs: dict {'fp_config':xx, ...}
     """
     def __init__(self):
         self.fpconfig_read = False
@@ -62,16 +62,21 @@ class fp_config:
         self.root = os.path.abspath(root)
         self.config_fname = self.root + '/fpconfig.json'
         with open(self.config_fname, 'r') as file:
-            self.config = js.load(file)
-
+            self.kwargs = js.load(file)
+            
         # key fp configuration
-        self.fp_ibnd_min = self.config['ibnd_min']
-        self.fp_ibnd_max = self.config['ibnd_max']
-        self.fp_ecuteps = self.config['ecuteps']
-        self.fp_ngkpt = self.config['ngkpt']
-        self.fp_qshift = self.config['qshift']
-        self.fp_nbnd = self.config['nbnd'] # nscf
-        self.fp_ecutwfc = self.config['ecutwfc']
+        # registered name
+        self.ibnd_min = self.kwargs['ibnd_min']
+        self.ibnd_max = self.kwargs['ibnd_max']
+        self.ecuteps = self.kwargs['ecuteps']
+        self.ngkpt = self.kwargs['ngkpt']
+        self.qshift = self.kwargs['qshift']
+        self.nbnd = self.kwargs['nbnd'] # nscf
+        self.ecutwfc = self.kwargs['ecutwfc']
+        self.basis_set_siesta = self.kwargs['basis_set_siesta']
+        self.mesh_cutoff_siesta = self.kwargs['mesh_cutoff_siesta']
+        self.dm_tolerance_siesta = self.kwargs['dm_tolerance_siesta']
+        self.max_scf_iter_siesta = self.kwargs['max_scf_iter_siesta']
         # analyze fp-input
 
         self.mats = [] # {'prefix/stru.cif':[ele1.upf, ele2.upf...]}
@@ -103,7 +108,7 @@ class fp_config:
         print('===> mats <===')
 
         print('===> fp config <===')
-        print(js.dumps(self.config, indent=1, ensure_ascii=False))
+        print(js.dumps(self.kwargs, indent=1, ensure_ascii=False))
         print('===> fp config <===')
         print('==========> summary <==========\n')
 
@@ -117,6 +122,10 @@ class fp_config:
             'qshift': [0.0, 0.0, 0.001],  # Example data
             'nbnd': 400,
             'ecutwfc': 60.0,
+            'basis_set_siesta' : 'DZP',
+            'mesh_cutoff_siesta' : 320,
+            'dm_tolerance_siesta' : 1e-6, 
+            'max_scf_iter_siesta' : 300
         }
 
         with open(output_path, 'w') as file:
@@ -126,7 +135,7 @@ class fp_config:
 
 if __name__ == "__main__":
     config = fp_config()
-    # config.generate_fpconfig_default('./fp-input/fpconfig_default.json')
+    config.generate_fpconfig_default('./fpconfig_default.json')
     config.read_fpconfig('./fp-input/')
     config.summary_mats()
     # sm = single_mat()
