@@ -17,29 +17,26 @@ fp-input
 └── ...
 
 pseudo/ # (built-in)
-├── pseudo_qe/
-|   ├── ele1.upf
-|   ├── ele2.upf
-|   └── ...
-├── pseudo_siesta/
-|   ├── ele1.psf/psml
-|   ├── ele2.psf/psml
-└── └── ...
+├── ele1.upf
+├── ele2.upf
+├── ...
+├── ele1.psf/psml
+├── ele2.psf/psml
+└── ...
 ```
 
 ### 2. **ml-train/test** folder
 ```bash
 ml-train/test
+├── pseudo/ # (built-in)
+|   ├── ele1.upf
+|   ├── ele2.upf
+|   ├── ...
+|   ├── ele1.psf/psml
+|   ├── ele2.psf/psml
+|   └── ...
 ├── mat-1
 |   ├── stru.cif
-|   ├── pseudo_qe
-|   |   ├── ele1.upf
-|   |   ├── ele2.upf
-|   |   └── ...
-|   ├── pseudo_siesta
-|   |   ├── ele1.psf/psml
-|   |   ├── ele2.psf/psml
-|   |   └── ...
 |   ├──01-density
 |   |   ├── VSC # (DFT Ham.)
 |   |   └── ...

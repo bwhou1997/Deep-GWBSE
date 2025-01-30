@@ -6,7 +6,7 @@ from from_bgwpy.config import is_dft_flavor_espresso, check_dft_flavor
 from from_bgwpy.external import Structure
 from from_bgwpy.core import Workflow
 from from_bgwpy.BGW import EpsilonTask, SigmaTask
-from from_bgwpy.QE import QeScfTask, QeBgwFlow
+from from_bgwpy.QE import QeScfTask, QeBgwFlow, Qe2BgwTask, QeWfnTask
 from ase import Atoms
 import ase.io
 
@@ -128,16 +128,6 @@ class DFT_GW_HPRO_Flow(Workflow):
         kwargs.update(fnames)
         # TODO: use pseudobands.py
 
-        # ==== SIESTA/HPRO ==========
-        self.aobasis_task = AobasisTask(
-             dirname = pjoin(self.dirname, '05-aobasis'),
-             **kwargs)
-        self.add_task(self.aobasis_task)
-
-        self.hpro_task = HPROTask(
-            dirname = pjoin(self.dirname, '16-reconstruction'),
-             **kwargs)
-        self.add_task(self.hpro_task)
         # ==== GW calculations ==== #
 
         # Set some common variables for Epsilon and Sigma
@@ -156,7 +146,6 @@ class DFT_GW_HPRO_Flow(Workflow):
             extra_variables = self.epsilon_extra_variables,
             **kwargs)
         
-        
         # Self-energy calculation (sigma)
         self.sigmatask = SigmaTask(
             dirname = pjoin(self.dirname, '12-sigma'),
@@ -173,7 +162,19 @@ class DFT_GW_HPRO_Flow(Workflow):
 
         self.truncation_flag = kwargs.get('truncation_flag')
         self.sigma_kpts = kwargs.get('sigma_kpts')
-        
+
+        # ==== SIESTA/HPRO ==========
+        self.aobasis_task = AobasisTask(
+             dirname = pjoin(self.dirname, '05-aobasis'),
+             **kwargs)
+        self.add_task(self.aobasis_task)
+
+        self.hpro_task = HPROTask(
+            dirname = pjoin(self.dirname, '16-reconstruction'),
+             **kwargs)
+        self.add_task(self.hpro_task)
+
+
     @property
     def has_kshift(self):
         return any([i!=0 for i in self.kshift])
@@ -219,7 +220,6 @@ class DFT_GW_HPRO_Flow(Workflow):
                 raise Exception("Error, when providing charge_density_fname, data_file_fname is required.")
 
         else:
-
             self.scftask = QeScfTask(
                 dirname = pjoin(self.dirname, '01-density'),
                 ngkpt = self.ngkpt,
@@ -227,12 +227,21 @@ class DFT_GW_HPRO_Flow(Workflow):
                 **kwargs)
 
             self.add_task(self.scftask)
-            
+
+            # Add a scf2bgw task for scf (HPRO)
+            self.scf2bgwtask = Qe2BgwTask(
+                dirname = self.scftask.dirname,
+                ngkpt = self.ngkpt,
+                kshift = self.kshift,
+                rhog_flag = True,
+                **kwargs)
+            self.add_task(self.scf2bgwtask, merge=False)
+                
             kwargs.update(
                 charge_density_fname = self.scftask.charge_density_fname,
                 data_file_fname = self.scftask.data_file_fname,
                 spin_polarization_fname = self.scftask.spin_polarization_fname)
-        
+            
         # Wavefunction tasks for Epsilon
         self.wfntask_ksh = QeBgwFlow(
             dirname = pjoin(self.dirname, '02-wfn'),
@@ -293,15 +302,22 @@ if __name__ == "__main__":
     pass
 
     flow = DFT_GW_HPRO_Flow(
+        mpirun='ibrun',
+        nproc_flag = '-n',
+        nproc=2240,
+        nproc_per_node_flag='',
+        nproc_per_node='',
+        PWFLAGS='-nk 16',
+        PW='pw.x',
         dirname='flow',
         stru_file = './fp-input/mat-2/stru.cif',
-        ecuteps = 30.0,
+        ecuteps = 10.0,
         ibnd_min = 1,
         ibnd_max = 8,
-        ngkpt = [8,8,8],
+        ngkpt = [6,6,6],
         qshift = [.0,.0,.001],
         nbnd = 400,
-        ecutwfc = 200.0,
+        ecutwfc = 60.0,
         prefix = 'SiH',
         pseudo_dir = './from_oncvpsp/',
         pseudos = ['Si.upf','H.upf'],
@@ -309,6 +325,7 @@ if __name__ == "__main__":
         mesh_cutoff_siesta = 320,
         dm_tolerance_siesta = 1e-6, 
         max_scf_iter_siesta = 300,
+        epsilon_extra_lines=['restart','degeneracy_check_override']
     )
 
     flow.write()

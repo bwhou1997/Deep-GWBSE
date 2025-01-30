@@ -3,6 +3,8 @@ import ase.io
 from ase.calculators.siesta import Siesta
 from from_bgwpy.core import MPITask, IOTask
 import os
+from from_bgwpy.QE import QeScfTask, QeWfnTask, Qe2BgwTask
+from from_bgwpy.DFT import WfnBgwFlow
 
 
 class DeepTask(MPITask, IOTask):
@@ -66,8 +68,9 @@ class HPROTask(DeepTask):
         # with self.exec_from_dirname():
         a = './a'
         b = './b'
-        print(a, b)
+        # print(a, b)
         self.update_link(a,b)
+
 
 if __name__ == "__main__":
     aobasistask = AobasisTask(dirname='./aobasis', 
