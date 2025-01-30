@@ -311,12 +311,12 @@ if __name__ == "__main__":
         PW='pw.x',
         dirname='flow',
         stru_file = './fp-input/mat-2/stru.cif',
-        ecuteps = 10.0,
+        ecuteps = 15.0,
         ibnd_min = 1,
         ibnd_max = 8,
-        ngkpt = [6,6,6],
+        ngkpt = [4,4,4],
         qshift = [.0,.0,.001],
-        nbnd = 400,
+        nbnd = 300,
         ecutwfc = 60.0,
         prefix = 'SiH',
         pseudo_dir = './from_oncvpsp/',
@@ -325,7 +325,8 @@ if __name__ == "__main__":
         mesh_cutoff_siesta = 320,
         dm_tolerance_siesta = 1e-6, 
         max_scf_iter_siesta = 300,
-        epsilon_extra_lines=['restart','degeneracy_check_override']
+        epsilon_extra_lines=['restart','degeneracy_check_override'],
+        sigma_extra_lines=['degeneracy_check_override']
     )
 
     flow.write()
