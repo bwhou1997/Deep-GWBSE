@@ -303,7 +303,7 @@ if __name__ == "__main__":
         nbnd = 400,
         ecutwfc = 200.0,
         prefix = 'SiH',
-        pseudo_dir = './pseudo/',
+        pseudo_dir = './from_oncvpsp/',
         pseudos = ['Si.upf','H.upf'],
         basis_set_siesta = 'DZP',
         mesh_cutoff_siesta = 320,

@@ -23,6 +23,8 @@ class EpsilonInput(BasicInputFile):
 
     def __str__(self):
 
+        othersetting = '\nrestart\n'
+
         qpt_block = '\nbegin qpoints\n'
         for q0i in self.q0:
             qpt_block += ' {:11.8f}'.format(q0i)
@@ -34,7 +36,7 @@ class EpsilonInput(BasicInputFile):
             qpt_block += ' 1.0 0\n'
         qpt_block += 'end\n'
 
-        return super(EpsilonInput, self).__str__() + qpt_block
+        return super(EpsilonInput, self).__str__() + othersetting + qpt_block
 
 
 class SigmaInput(BasicInputFile):

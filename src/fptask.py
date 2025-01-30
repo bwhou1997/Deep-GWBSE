@@ -47,6 +47,7 @@ class AobasisTask(DeepTask):
 
     def write(self):
         # print('write siesta:', self.calc.getpath())
+        super(AobasisTask, self).write()
         self.calc.write_input(self.atoms,'density')
     
 
@@ -55,9 +56,18 @@ class HPROTask(DeepTask):
     def __init__(self, dirname, **kwargs):
         super(HPROTask, self).__init__(dirname, **kwargs)
         self.dirnamt = dirname
+        self.link_test()
 
     def write(self):
-        os.mkdir(self.dirname)
+        super(HPROTask, self).write()
+        # os.mkdir(self.dirname)
+    
+    def link_test(self):
+        # with self.exec_from_dirname():
+        a = './a'
+        b = './b'
+        print(a, b)
+        self.update_link(a,b)
 
 if __name__ == "__main__":
     aobasistask = AobasisTask(dirname='./aobasis', 
