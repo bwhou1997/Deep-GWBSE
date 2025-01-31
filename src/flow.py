@@ -10,7 +10,7 @@ from from_bgwpy.QE import QeScfTask, QeBgwFlow, Qe2BgwTask, QeWfnTask
 from ase import Atoms
 import ase.io
 
-from fptask import AobasisTask, HPROTask
+from fptask import AobasisTask, HPROTask, PseudoBandTask
 
 from config import fp_config
 
@@ -90,6 +90,9 @@ class DFT_GW_HPRO_Flow(Workflow):
             Any other lines that should appear in the sigma input file.
         sigma_extra_variables : dict, optional
             Any other variables that should be declared in the sigma input file.
+
+        pseudobands : bool (default is True)
+            do pseudobands
 
         max_scf_iter_siesta : int
             Max SCF Iteration steps            
@@ -251,6 +254,13 @@ class DFT_GW_HPRO_Flow(Workflow):
             rhog_flag = True,
             **kwargs)
 
+        if kwargs.get('pseudobands', True):
+
+            self.pseudoband_k = PseudoBandTask(
+                dirname= pjoin(self.dirname, '02-wfn'),
+                wfn2hdfonly = True,
+                **kwargs)
+
         self.wfntask_qsh = QeBgwFlow(
             dirname = pjoin(self.dirname, '03-wfnq'),
             ngkpt = self.ngkpt,
@@ -259,7 +269,18 @@ class DFT_GW_HPRO_Flow(Workflow):
             nbnd = None,
             **kwargs)
 
-        self.add_tasks([self.wfntask_ksh, self.wfntask_qsh])
+        if kwargs.get('pseudobands', True):
+            self.pseudoband_q = PseudoBandTask(
+                dirname= pjoin(self.dirname, '03-wfnq'),
+                wfnq_dir = pjoin(self.dirname, '03-wfnq'),
+                wfnk_dir = pjoin(self.dirname, '02-wfn'),
+                wfn2hdfonly = False,
+                **kwargs)
+
+        if kwargs.get('pseudobands', True):
+            self.add_tasks([self.wfntask_ksh, self.pseudoband_k, self.wfntask_qsh, self.pseudoband_q])
+        else:
+            self.add_tasks([self.wfntask_ksh, self.wfntask_qsh))
 
         # Unshifted wavefunction tasks for Sigma
         # only if not already computed for Epsilon.
@@ -326,7 +347,8 @@ if __name__ == "__main__":
         dm_tolerance_siesta = 1e-6, 
         max_scf_iter_siesta = 300,
         epsilon_extra_lines=['restart','degeneracy_check_override'],
-        sigma_extra_lines=['degeneracy_check_override']
+        sigma_extra_lines=['degeneracy_check_override'],
+        pseudobands = True,
     )
 
     flow.write()

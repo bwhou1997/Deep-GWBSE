@@ -112,11 +112,10 @@ class QeBgwFlow(WfnBgwFlow):
         self.wfnbgwntask.runscript.fname = 'pw2bgw.run.sh'
 
         # special case: pseudobands for 02-wfn (Bowen Hou 01/30/2025)
-        if kwargs.get('rhog_flag'):
-            mpirun_flag = kwargs.get('mpirun', 'mpirun')
-            nproc_flag = kwargs.get('nproc_flag', ' -n ')
-            self.wfnbgwntask.runscript.append(mpirun_flag+' '+nproc_flag+' 1 '+'wfn2hdf.x BIN wfn.cplx wfn.h5 &> wfn2hdf.out')
-
+        # if kwargs.get('rhog_flag'):
+        #     mpirun_flag = kwargs.get('mpirun', 'mpirun')
+        #     nproc_flag = kwargs.get('nproc_flag', ' -n ')
+        #     self.wfnbgwntask.runscript.append(mpirun_flag+' '+nproc_flag+' 1 '+'wfn2hdf.x BIN wfn.cplx wfn.h5 &> wfn2hdf.out')
         # pseudobands for 02-wfn
 
         self.add_task(self.wfnbgwntask, merge=False)
