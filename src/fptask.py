@@ -91,12 +91,20 @@ class PseudoBandTask(DeepTask):
         # pseudonize
         if not kwargs.get('wfn2hdfonly'):
             cur_pat = self.dirname
-            self.wfnq_fname  = os.path.relpath(kwargs['wfnq_dir'] + '/wfn.h5', cur_pat)
-            self.wfnk_fname  = os.path.relpath(kwargs['wfnk_dir'] + '/wfn.h5', cur_pat)
-            self.wfnq_fname_out  = os.path.relpath(kwargs['wfnq_dir'] + '/wfn_spb.h5', cur_pat)
-            self.wfnk_fname_out  = os.path.relpath(kwargs['wfnk_dir'] + '/wfn_spb.h5', cur_pat)
-            self.runscript.append(mpirun_flag+' '+nproc_flag+' 1 '+f'python pseudobands.py --fname_in {self.wfnk_fname} --fname_in_q {self.wfnq_fname} --fname_out {self.wfnk_fname_out} --fname_out_q {self.wfnq_fname_out} $> pseudo.out')
-            # self.runscript.append(mpirun_flag+' '+nproc_flag+' 1 '+'wfn2hdf.x BIN wfn.cplx wfn.h5 &> wfn2hdf.out')
+            self.wfnq_fname = os.path.relpath(kwargs['wfnq_dir'] + '/wfn.h5', cur_pat)
+            self.wfnk_fname = os.path.relpath(kwargs['wfnk_dir'] + '/wfn.h5', cur_pat)
+
+            self.wfnq_fname_out = os.path.relpath(kwargs['wfnq_dir'] + '/wfn_q.h5', cur_pat)
+            self.wfnk_fname_out = os.path.relpath(kwargs['wfnq_dir'] + '/wfn_k.h5', cur_pat)
+
+            self.wfnq_fname_out_h5 = os.path.relpath(kwargs['wfnq_dir'] + '/wfn.cplx', cur_pat)
+            self.wfnk_fname_out_h5 = os.path.relpath(kwargs['wfnk_dir'] + '/wfn.cplx', cur_pat)
+
+            # TODO: add pseudobands setting; wfnq?
+            self.runscript.append(mpirun_flag+' '+nproc_flag+' 1 '+f'python pseudobands.py --fname_in {self.wfnk_fname} --fname_in_q {self.wfnq_fname} --fname_out {self.wfnk_fname_out} --fname_out_q {self.wfnq_fname_out} --N_P_cond {kwargs.get("N_P_cond", 100)} --N_S_cond {kwargs.get("N_S_cond", 10)} --N_xi_cond {kwargs.get("N_xi_cond", 5)}  &> pseudo.out')
+            # self.runscript.append(mpirun_flag+' '+nproc_flag+' 1 '+f'hdf2wfn.x BIN {self.wfnq_fname_out} {self.wfnq_fname_out_h5} &> wfn2hdf.out') # we don't do anything to wfnq
+            self.runscript.append(mpirun_flag+' '+nproc_flag+' 1 '+f'hdf2wfn.x BIN {self.wfnk_fname_out} {self.wfnk_fname_out_h5} &> wfn2hdf.out')
+
             # self.runscript.append(mpirun_flag+' '+nproc_flag+' 1 '+'python pseudobands.py --fname_in WFN.h5 --fname_in_q WFNq.h5 --fname_out WFN_SPB.h5 --fname_out_q WFN_SPB_q.h5 --N_P_val 10 --N_P_cond 10 --N_S_val 10 --N_S_cond 150 --N_xi_val 2 --N_xi_cond 2')
     
     def write(self,): 

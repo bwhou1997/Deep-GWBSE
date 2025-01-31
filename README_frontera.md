@@ -6,3 +6,5 @@ python packages:
 
 
 - pymatgen
+
+-BGW >= 4.0

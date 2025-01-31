@@ -9,10 +9,11 @@ from from_bgwpy.BGW import EpsilonTask, SigmaTask
 from from_bgwpy.QE import QeScfTask, QeBgwFlow, Qe2BgwTask, QeWfnTask
 from ase import Atoms
 import ase.io
-
+import subprocess
 from fptask import AobasisTask, HPROTask, PseudoBandTask
 
 from config import fp_config
+import re
 
 
 
@@ -123,13 +124,31 @@ class DFT_GW_HPRO_Flow(Workflow):
 
         self.dft_flavor = check_dft_flavor(kwargs.get('dft_flavor', flavors['dft_flavor']))
 
+        # ==== Check Pseudobands ==== #
+        pseudos_z_valence = check_pseudo(pseudo_dir=kwargs['pseudo_dir'], pseudos=kwargs['pseudos'])
+        print(pseudos_z_valence)
+        self.n_z_valence = 0
+        for atom_ele in self.atoms.get_chemical_symbols():
+            pp = '.'.join([atom_ele] + (kwargs['pseudos'][0].split('.'))[1:])
+            if pseudos_z_valence.get(pp, None) != None:
+                self.n_z_valence += pseudos_z_valence[pp]
+            else:
+                print(f'warning: upf is not found for {pp}')
+        if True: # consider SOC in the future
+            self.n_z_valence = int(self.n_z_valence // 2)
+            self.n_z_valence = None if self.n_z_valence == 0 else self.n_z_valence
+
+        # update band_index_min & band_index_max
+        assert self.n_z_valence != None
+        kwargs.update({'ibnd_min': max(1, self.n_z_valence - kwargs.get('nvbnd_sigma',2))})
+        kwargs.update({'ibnd_max': self.n_z_valence + kwargs.get('ncbnd_sigma',2)})
+
         # ==== DFT calculations ==== #
 
         # Quantum Espresso flavor
         assert is_dft_flavor_espresso(self.dft_flavor), "Only Quantum Espresso is supported for DFT calculations."
         fnames = self.make_dft_tasks_espresso(**kwargs)
         kwargs.update(fnames)
-        # TODO: use pseudobands.py
 
         # ==== GW calculations ==== #
 
@@ -160,7 +179,6 @@ class DFT_GW_HPRO_Flow(Workflow):
             **kwargs)
         
         # Add tasks to the workflow
-        # TODO: add Siesta and HPRO tasks
         self.add_tasks([self.epsilontask, self.sigmatask], merge=False)
 
         self.truncation_flag = kwargs.get('truncation_flag')
@@ -266,7 +284,8 @@ class DFT_GW_HPRO_Flow(Workflow):
             ngkpt = self.ngkpt,
             kshift = self.kshift,
             qshift = self.qshift,
-            nbnd = None,
+            # nbnd = None,
+            nbnd = self.n_z_valence + 4,
             **kwargs)
 
         if kwargs.get('pseudobands', True):
@@ -305,6 +324,9 @@ class DFT_GW_HPRO_Flow(Workflow):
                       vxc_dat_fname = self.wfntask_ush.vxc_dat_fname)
 
         return fnames
+    
+    def summary(self, verbose):
+        pass
 
     
     # def make_reconstruction_tasks_hpro(self, **kwargs):
@@ -317,6 +339,22 @@ class DFT_GW_HPRO_Flow(Workflow):
     #          **kwargs)
     #     self.add_task(self.aobasis_task)
     #     return
+
+def check_pseudo(pseudo_dir='./from_oncvpsp/', pseudos=['S.upf','H.upf']):
+    pattern = 'z_valence'
+    pseudos_z_valence = {}
+    for pseudo in pseudos:
+        result = subprocess.run(['grep', pattern, pseudo_dir+pseudo], capture_output=True, text=True)
+        # print(result.stdout)
+        match = re.search(r'[-+]?\d*\.?\d+', result.stdout)
+        if match:
+            number = float(match.group())  # Convert to float if needed
+            # print(pseudo, 'z_valence:', number)
+            pseudos_z_valence.update({pseudo:number})
+        else:
+            print('Warning: pseudo file is not found:', pseudo)
+    # print(pseudos_z_valence)
+    return pseudos_z_valence
 
 
 if __name__ == "__main__":
@@ -333,8 +371,8 @@ if __name__ == "__main__":
         dirname='flow',
         stru_file = './fp-input/mat-2/stru.cif',
         ecuteps = 15.0,
-        ibnd_min = 1,
-        ibnd_max = 8,
+        ncbnd_sigma = 4,
+        nvbnd_sigma = 5, # TODO: band check degeneracy sees not right
         ngkpt = [4,4,4],
         qshift = [.0,.0,.001],
         nbnd = 300,
@@ -346,11 +384,16 @@ if __name__ == "__main__":
         mesh_cutoff_siesta = 320,
         dm_tolerance_siesta = 1e-6, 
         max_scf_iter_siesta = 300,
-        epsilon_extra_lines=['restart','degeneracy_check_override'],
-        sigma_extra_lines=['degeneracy_check_override'],
+        epsilon_extra_lines=['restart','degeneracy_check_override','dont_check_norms'],
+        sigma_extra_lines=['degeneracy_check_override', 'dont_check_norms'],
         pseudobands = True,
+        N_P_cond = 50,
+        N_S_cond = 10,
+        N_xi_cond = 2,
     )
 
     flow.write()
+
+    # check_pseudo()
 
 
