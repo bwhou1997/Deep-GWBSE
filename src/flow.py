@@ -280,7 +280,7 @@ class DFT_GW_HPRO_Flow(Workflow):
         if kwargs.get('pseudobands', True):
             self.add_tasks([self.wfntask_ksh, self.pseudoband_k, self.wfntask_qsh, self.pseudoband_q])
         else:
-            self.add_tasks([self.wfntask_ksh, self.wfntask_qsh))
+            self.add_tasks([self.wfntask_ksh, self.wfntask_qsh])
 
         # Unshifted wavefunction tasks for Sigma
         # only if not already computed for Epsilon.
