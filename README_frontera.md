@@ -1,7 +1,7 @@
 python packages:
 - bgwpy
 - gpaw
-- siesta
+- siesta `conda install -c conda-forge siesta=5.2.1`
 - HPRO
 
 

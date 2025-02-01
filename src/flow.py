@@ -140,8 +140,9 @@ class DFT_GW_HPRO_Flow(Workflow):
 
         # update band_index_min & band_index_max
         assert self.n_z_valence != None
-        kwargs.update({'ibnd_min': max(1, self.n_z_valence - kwargs.get('nvbnd_sigma',2))})
-        kwargs.update({'ibnd_max': self.n_z_valence + kwargs.get('ncbnd_sigma',2)})
+        if kwargs.get('nvbnd_sigma',None):
+            kwargs.update({'ibnd_min': max(1, self.n_z_valence - kwargs.get('nvbnd_sigma',2))})
+            kwargs.update({'ibnd_max': self.n_z_valence + kwargs.get('ncbnd_sigma',2)})
 
         # ==== DFT calculations ==== #
 
