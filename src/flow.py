@@ -362,9 +362,9 @@ if __name__ == "__main__":
     pass
 
     flow = DFT_GW_HPRO_Flow(
-        mpirun='ibrun',
+        mpirun='srun',
         nproc_flag = '-n',
-        nproc=2240,
+        nproc=512,
         nproc_per_node_flag='',
         nproc_per_node='',
         PWFLAGS='-nk 16',

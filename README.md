@@ -17,13 +17,13 @@ This package provides multiple deep learning models for DFT-GW-BSE calculations 
 
 ## Installation
 Pre-requisites First-principles Packages:
-- [Quantum ESPRESSO](https://www.quantum-espresso.org/) version 7+
+- [Quantum ESPRESSO](https://www.quantum-espresso.org/) version 6.8
 - [BerkeleyGW](https://berkeleygw.org/documentation/tutorial/) version 3+
 - [SIESTA](https://docs.siesta-project.org/projects/siesta/en/stable/index.html) version 5+ `conda install -c conda-forge siesta=5.2.1`
 - [Pseudo-dojo](https://www.pseudo-dojo.org/)
 
 Pre-requisites python Packages:
-- pymatgen
+- pymatgen `conda install conda-forge::pymatgen`
 
 Useful python packages:
 - bgwpy
