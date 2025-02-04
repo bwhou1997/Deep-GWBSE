@@ -71,6 +71,8 @@ class HPROTask(DeepTask):
         super(HPROTask, self).__init__(dirname, **kwargs)
         self.dirname = dirname
         # self.link_test()
+        mpirun_flag = kwargs.get('mpirun', 'mpirun')
+        nproc_flag = kwargs.get('nproc_flag', ' -n ')
 
         self.PW2AO_kwargs = {
                 'Warning': "you might modify fptask.py to change path if you change folder name of previous step",
@@ -79,8 +81,10 @@ class HPROTask(DeepTask):
                 'hrdata_interface':'qe-bgw',
                 'vscdir':'../01-density/VSC',
                 'upfdir':f"{os.path.relpath(kwargs['pseudo_dir'], self.dirname)}",
-                'ecutwfn':kwargs.get('ecutwfn_hpro', 30),}
+                'ecutwfn':kwargs.get('ecutwfn_hpro', 30),
+                'outdir':f"{self.dirname}/aohamiltonian"}
         self.runscript.fname = 'hpro.run'
+        self.runscript.append(mpirun_flag+' '+nproc_flag+' 1 '+f"python {kwargs['hpro']} > hpro.out")
 
     def write(self):
         super(HPROTask, self).write()

@@ -368,6 +368,7 @@ if __name__ == "__main__":
         nproc_per_node_flag='',
         nproc_per_node='',
         Siesta = '/work2/08237/bwhou/frontera/software/Anaconda/envs/siesta/bin/siesta',
+        hpro = '/scratch1/08237/bwhou/12-deepGWBSE/Deep-GWBSE/HPRO/src/calc.py',
         PWFLAGS='-nk 16',
         PW='pw.x',
         dirname='flow',
@@ -397,5 +398,4 @@ if __name__ == "__main__":
     flow.write()
 
     # check_pseudo()
-
 
