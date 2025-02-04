@@ -1,0 +1,27 @@
+Summary of prediction error
+Type: mae, unit: meV
+
+----------
+Atomic types: H-H
+Avg: 418.1697
+Max: 418.1697
+Min: 418.1697
+
+----------
+Atomic types: H-C
+Avg: 231.82172
+Max: 473.31516
+Min: 4.2329174e-12
+
+----------
+Atomic types: C-H
+Avg: 243.2919
+Max: 501.7639
+Min: 4.2329174e-12
+
+----------
+Atomic types: C-C
+Avg: 282.2306
+Max: 1895.9355
+Min: 9.473008e-13
+

@@ -1,0 +1,31 @@
+Best model:
+====================
+Epoch #423    | Time: 00d 00h 29m  | LR: 5.00e-03  | Epoch time:   3.76  | Train loss: 1.64e-02  | Val loss: 8.81e-02
+Target 000 has maximum loss 2.02e-01; Target 001 has minimum loss 2.22e-02
+
+------- Detailed losses of each target -------
+Losses are sorted in descending order
+
+======= No.000: Target 000 =======
+Validation loss:            0.202475006878376
+Angular quantum numbers:    (0, 0)
+Target blocks:              {'1 1': [0, 0], '1 6': [0, 0], '6 1': [0, 0], '6 6': [0, 0]}
+Position in H matrix:       {'1 1': [0, 1, 0, 1], '1 6': [0, 1, 0, 1], '6 1': [0, 1, 0, 1], '6 6': [0, 1, 0, 1]}
+
+======= No.001: Target 003 =======
+Validation loss:            0.06559110827305738
+Angular quantum numbers:    (1, 1)
+Target blocks:              {'6 6': [1, 1]}
+Position in H matrix:       {'6 6': [1, 4, 1, 4]}
+
+======= No.002: Target 002 =======
+Validation loss:            0.024150938061731204
+Angular quantum numbers:    (1, 0)
+Target blocks:              {'6 1': [1, 0], '6 6': [1, 0]}
+Position in H matrix:       {'6 1': [1, 4, 0, 1], '6 6': [1, 4, 0, 1]}
+
+======= No.003: Target 001 =======
+Validation loss:            0.02217337648783411
+Angular quantum numbers:    (0, 1)
+Target blocks:              {'1 6': [0, 1], '6 6': [0, 1]}
+Position in H matrix:       {'1 6': [0, 1, 1, 4], '6 6': [0, 1, 1, 4]}

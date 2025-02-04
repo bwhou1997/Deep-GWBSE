@@ -8,9 +8,10 @@ from from_bgwpy.DFT import WfnBgwFlow
 from from_bgwpy.BGW import EpsilonTask
 from from_bgwpy.QE.pseudobands_str import pseudoband_py
 import os
+import json
 
-with open('./from_bgwpy/QE/pseudobands.py','r') as file:
-    pseudoband_py = file.read()
+# with open('./from_bgwpy/QE/pseudobands.py','r') as file:
+#     pseudoband_py = file.read()
 
 class DeepTask(MPITask, IOTask):
     _TAG_JOB_COMPLETED = 'TOTAL'
@@ -40,17 +41,23 @@ class AobasisTask(DeepTask):
         self.symbols = str(self.atoms.symbols)
         self.prefix = self.symbols if 'prefix' not in kwargs else kwargs['prefix']
 
+        mpirun_flag = kwargs.get('mpirun', 'mpirun')
+        siesta_flag = kwargs.get('Siesta','siesta')
+        nproc_flag = kwargs.get('nproc_flag', ' -n ')
+
         self.calc = Siesta(directory=self.dirname,
                            label=self.prefix,
                            xc='PBE',
                            mesh_cutoff = kwargs['mesh_cutoff_siesta'],
                         #    basis_set=kwargs['basis_set_siesta'],
-                           pseudo_path=kwargs['pseudo_dir']+'/pseudo_siesta',
+                           pseudo_path=os.path.relpath(kwargs['pseudo_dir'], self.dirname),
                         #    pseudo_qualifier = 'psf',
                            fdf_arguments={'MaxSCFIterations': kwargs['max_scf_iter_siesta'],
                                           'DM.MixingWeight':kwargs['dm_tolerance_siesta']})
 
         self.atoms.calc = self.calc
+        self.runscript.fname = "aobasis.run"
+        self.runscript.append(mpirun_flag+' '+nproc_flag+' 1 '+f'{siesta_flag} < {self.prefix}.fdf &> siesta.out')
 
     def write(self):
         # print('write siesta:', self.calc.getpath())
@@ -62,20 +69,25 @@ class AobasisTask(DeepTask):
 class HPROTask(DeepTask):
     def __init__(self, dirname, **kwargs):
         super(HPROTask, self).__init__(dirname, **kwargs)
-        self.dirnamt = dirname
-        self.link_test()
+        self.dirname = dirname
+        # self.link_test()
+
+        self.PW2AO_kwargs = {
+                'Warning': "you might modify fptask.py to change path if you change folder name of previous step",
+                'lcao_interface':'siesta',
+                'lcaodata_root':'../05-aobasis',  # This might introduce errors when we change name of 05-aobasis
+                'hrdata_interface':'qe-bgw',
+                'vscdir':'../01-density/VSC',
+                'upfdir':f"{os.path.relpath(kwargs['pseudo_dir'], self.dirname)}",
+                'ecutwfn':kwargs.get('ecutwfn_hpro', 30),}
+        self.runscript.fname = 'hpro.run'
 
     def write(self):
         super(HPROTask, self).write()
-        # os.mkdir(self.dirname)
-    
-    def link_test(self):
-        # with self.exec_from_dirname():
-        a = './a'
-        b = './b'
-        # print(a, b)
-        self.update_link(a,b)
-
+        with open(self.dirname+'/calc.json', 'w') as file:
+            json.dump(self.PW2AO_kwargs, file, indent=4)
+        # with open(self.dirname+'/calc.py', 'w') as file:
+        #     file.write(pseudoband_py)
 
 class PseudoBandTask(DeepTask):
     def __init__(self, dirname, **kwargs):

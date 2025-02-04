@@ -27,7 +27,7 @@ Pre-requisites python Packages:
 
 Useful python packages:
 - bgwpy
-- HPRO
+- HPRO (Note: for testing, expoet it to PYTHONPATH, integrate it later)
 - DeepH-E3
 
 To install Deep-GWBSE, clone the repository and install the required dependencies:

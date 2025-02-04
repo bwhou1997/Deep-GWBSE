@@ -362,11 +362,12 @@ if __name__ == "__main__":
     pass
 
     flow = DFT_GW_HPRO_Flow(
-        mpirun='srun',
+        mpirun='ibrun',
         nproc_flag = '-n',
-        nproc=512,
+        nproc=2240,
         nproc_per_node_flag='',
         nproc_per_node='',
+        Siesta = '/work2/08237/bwhou/frontera/software/Anaconda/envs/siesta/bin/siesta',
         PWFLAGS='-nk 16',
         PW='pw.x',
         dirname='flow',
