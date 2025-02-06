@@ -150,6 +150,13 @@ class DFT_GW_HPRO_Flow(Workflow):
         assert is_dft_flavor_espresso(self.dft_flavor), "Only Quantum Espresso is supported for DFT calculations."
         fnames = self.make_dft_tasks_espresso(**kwargs)
         kwargs.update(fnames)
+        
+        # ==== Aobasis(SIESTA) ==== #
+        self.aobasis_task = AobasisTask(
+             dirname = pjoin(self.dirname, '05-aobasis'),
+             **kwargs)
+        self.add_task(self.aobasis_task)
+
 
         # ==== GW calculations ==== #
 
@@ -186,11 +193,6 @@ class DFT_GW_HPRO_Flow(Workflow):
         self.sigma_kpts = kwargs.get('sigma_kpts')
 
         # ==== SIESTA/HPRO ==========
-        self.aobasis_task = AobasisTask(
-             dirname = pjoin(self.dirname, '05-aobasis'),
-             **kwargs)
-        self.add_task(self.aobasis_task)
-
         self.hpro_task = HPROTask(
             dirname = pjoin(self.dirname, '16-reconstruction'),
              **kwargs)
@@ -302,6 +304,7 @@ class DFT_GW_HPRO_Flow(Workflow):
         else:
             self.add_tasks([self.wfntask_ksh, self.wfntask_qsh])
 
+        # TODO: NNS
         # Unshifted wavefunction tasks for Sigma
         # only if not already computed for Epsilon.
         if self.has_kshift:

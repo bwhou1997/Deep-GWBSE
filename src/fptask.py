@@ -40,6 +40,7 @@ class AobasisTask(DeepTask):
         self.atoms = ase.io.read(kwargs['stru_file'])
         self.symbols = str(self.atoms.symbols)
         self.prefix = self.symbols if 'prefix' not in kwargs else kwargs['prefix']
+        self.atom_symbols = list(set(self.atoms.get_chemical_symbols()))
 
         mpirun_flag = kwargs.get('mpirun', 'mpirun')
         siesta_flag = kwargs.get('Siesta','siesta')
@@ -63,6 +64,22 @@ class AobasisTask(DeepTask):
         # print('write siesta:', self.calc.getpath())
         super(AobasisTask, self).write()
         self.calc.write_input(self.atoms,'density')
+
+
+    # try to relink .ion for hpro
+        original_dir = os.getcwd()  # Save current directory
+        try:
+            os.chdir(self.dirname)  # Change to target directory
+            files = os.listdir()  # List files in the new directory
+
+            for f in files:
+                if ('.psml' in f) or ('.psf' in f):
+                    os.symlink('.'.join(f.split('.')[:2]+['ion']),
+                    '.'.join(f.split('.')[:1]+['ion']))
+
+        finally:
+            os.chdir(original_dir)  # Restore original directory
+
     
 
 
@@ -82,7 +99,7 @@ class HPROTask(DeepTask):
                 'vscdir':'../01-density/VSC',
                 'upfdir':f"{os.path.relpath(kwargs['pseudo_dir'], self.dirname)}",
                 'ecutwfn':kwargs.get('ecutwfn_hpro', 30),
-                'outdir':f"{self.dirname}/aohamiltonian"}
+                'outdir':f"./aohamiltonian"}
         self.runscript.fname = 'hpro.run'
         self.runscript.append(mpirun_flag+' '+nproc_flag+' 1 '+f"python {kwargs['hpro']} > hpro.out")
 
@@ -136,7 +153,7 @@ if __name__ == "__main__":
                               stru_file='./fp-input/mat-1/stru.cif',
                               mesh_cutoff_siesta=300,                      
                               basis_set_siesta='DZP',
-                              pseudo_dir='./scratch1/08237/bwhou/12-deepGWBSE/Deep-GWBSE/src/pseudo',
+                              pseudo_dir='./from_oncvpsp',
                               max_scf_iter_siesta=100,
                               dm_tolerance_siesta=1e-6)
     aobasistask.write()
