@@ -3,12 +3,16 @@ import ase.io
 from ase.calculators.siesta import Siesta
 from from_bgwpy.core import MPITask, IOTask
 import os
-from from_bgwpy.QE import QeScfTask, QeWfnTask, Qe2BgwTask
+from from_bgwpy.QE import QeScfTask, QeWfnTask, Qe2BgwTask, QeBgwFlow
 from from_bgwpy.DFT import WfnBgwFlow
-from from_bgwpy.BGW import EpsilonTask
+from from_bgwpy.BGW import EpsilonTask, SigmaTask
+from from_bgwpy.BGW.bgwtask import BGWTask
 from from_bgwpy.QE.pseudobands_str import pseudoband_py
+from from_bgwpy.BGW.kgrid   import KgridTask, get_kpt_grid
+from from_bgwpy.BGW.inputs  import EpsilonInput
 import os
 import json
+import subprocess
 
 # with open('./from_bgwpy/QE/pseudobands.py','r') as file:
 #     pseudoband_py = file.read()
@@ -17,6 +21,15 @@ class DeepTask(MPITask, IOTask):
     _TAG_JOB_COMPLETED = 'TOTAL'
     pass
 
+def update_link_in_targe_dir(dirname, source, target):
+        original_dir = os.getcwd()  # Save current directory
+        files = set(os.listdir(dirname))
+        try:
+            os.chdir(dirname)  # Change to target directory
+            if target not in files:
+                os.symlink(source, target)
+        finally:
+            os.chdir(original_dir)  # Restore original directory
 
 class AobasisTask(DeepTask):
     """
@@ -65,20 +78,13 @@ class AobasisTask(DeepTask):
         super(AobasisTask, self).write()
         self.calc.write_input(self.atoms,'density')
 
-
-    # try to relink .ion for hpro
-        original_dir = os.getcwd()  # Save current directory
-        try:
-            os.chdir(self.dirname)  # Change to target directory
-            files = os.listdir()  # List files in the new directory
-
-            for f in files:
-                if ('.psml' in f) or ('.psf' in f):
-                    os.symlink('.'.join(f.split('.')[:2]+['ion']),
-                    '.'.join(f.split('.')[:1]+['ion']))
-
-        finally:
-            os.chdir(original_dir)  # Restore original directory
+        # relink .ion files for HPRO
+        files = os.listdir(self.dirname) 
+        # print(files)
+        for f in files:
+            if ('.psml' in f) or ('.psf' in f):
+                update_link_in_targe_dir(self.dirname, '.'.join(f.split('.')[:2]+['ion']),
+                        '.'.join(f.split('.')[:1]+['ion']))
 
 
 class HPROTask(DeepTask):
@@ -92,9 +98,10 @@ class HPROTask(DeepTask):
         self.PW2AO_kwargs = {
                 'Warning': "you might modify fptask.py to change path if you change folder name of previous step",
                 'lcao_interface':'siesta',
-                'lcaodata_root':'../05-aobasis',  # This might introduce errors when we change name of 05-aobasis
+                'lcaodata_root':os.path.relpath(kwargs['aobasis_dirname'], self.dirname), 
                 'hrdata_interface':'qe-bgw',
-                'vscdir':'../01-density/VSC',
+                # 'vscdir':'../01-density/VSC',
+                'vscdir':os.path.relpath(kwargs['VSC_fname'], self.dirname),
                 'upfdir':f"{os.path.relpath(kwargs['pseudo_dir'], self.dirname)}",
                 'ecutwfn':kwargs.get('ecutwfn_hpro', 30),
                 'outdir':f"./aohamiltonian"}
@@ -105,8 +112,8 @@ class HPROTask(DeepTask):
         super(HPROTask, self).write()
         with open(self.dirname+'/calc.json', 'w') as file:
             json.dump(self.PW2AO_kwargs, file, indent=4)
-        # with open(self.dirname+'/calc.py', 'w') as file:
-        #     file.write(pseudoband_py)
+
+        # update_link_in_targe_dir(self.dirname, './a', './b')
 
 class PseudoBandTask(DeepTask):
     def __init__(self, dirname, **kwargs):
@@ -150,10 +157,183 @@ class Parabands(WfnBgwFlow):
     def __init__(self):
         pass
 
-class NNSTask(WfnBgwFlow):
-    def __init__(self):
-        pass
 
+class nns_helper(DeepTask):
+    def __init__(self, dirname, **kwargs):
+        super().__init__(**kwargs)
+        self.dirname = dirname
+
+
+    def write(self):
+        return super().write()
+        # # generate nns_kgrid
+        # original_dir = os.getcwd()  # Save current directory
+        # try:
+        #     os.chdir(self.dirname)  # Change to target directory
+        #     subprocess.run(['setup_subsampling_nns.x','BIN', os.path.relpath(self.wfn_fname_nns_input, self.dirname)])
+        #     subprocess.run(['cat','kpoints_all.dat','>>','wfn.in'])
+        # finally:
+        #     os.chdir(original_dir)  # Restore original directory        
+
+class QeBgwFlow_NNS(WfnBgwFlow):
+    _charge_density_fname = ''
+    _spin_polarization_fname = ''
+    _data_file_fname = ''
+
+    def __init__(self, **kwargs):
+ 
+        super(QeBgwFlow_NNS, self).__init__(**kwargs)
+
+        kwargs.pop('dirname', None)
+
+        self.wfn_fname_nns_input = kwargs['wfn_fname_nns_input']
+        self.charge_density_fname = kwargs['charge_density_fname']
+        self.data_file_fname = kwargs['data_file_fname']
+        self.spin_polarization_fname = kwargs.get('spin_polarization_fname', 'dummy')
+
+
+        # nns_helper
+        self.nns_helper = nns_helper(dirname= self.dirname, **kwargs)
+        self.nns_helper.runscript.fname = 'nns_helper.sh'
+        self.nns_helper.runscript.append(' '.join(['cp','./wfn.head.in','wfn.in']))
+        self.nns_helper.runscript.append(' '.join(['setup_subsampling_nns.x','BIN', os.path.relpath(self.wfn_fname_nns_input, self.dirname)]))
+        self.nns_helper.runscript.append(' '.join(['cat','kpoints_all.dat','>>','wfn.in']))
+        self.add_task(self.nns_helper, merge=False)
+
+        # Wfn task
+        self.wfntask = QeWfnTask(dirname = self.dirname, **kwargs)
+        self.wfntask.runscript.fname = 'wfn.run.sh'
+        self.add_task(self.wfntask, merge=False)
+
+        # Wfn 2 BGW
+        self.wfnbgwntask = Qe2BgwTask(dirname = self.wfntask.dirname, **kwargs)
+        self.wfnbgwntask.runscript.fname = 'pw2bgw.run.sh'
+        self.add_task(self.wfnbgwntask, merge=False)
+
+
+    def write(self):
+        super().write()
+
+        # rewrite NNS wfn.in
+        file_path = self.dirname+"/wfn.in"
+        headfile_path = self.dirname+"/wfn.head.in"
+        with open(file_path, "r") as file:
+            lines = file.readlines()
+        K_Points_index = lines.index("K_POINTS crystal\n")
+        lines = lines[:K_Points_index] + lines[K_Points_index+int(lines[K_Points_index+1])+2:]
+        with open(file_path, "w") as file:
+            file.writelines(lines)        
+        with open(headfile_path, "w") as file:
+            file.writelines(lines)      
+
+
+    @property
+    def charge_density_fname(self):
+        """The charge density file used by QE."""
+        return self._charge_density_fname
+
+    @charge_density_fname.setter
+    def charge_density_fname(self, value):
+        self._charge_density_fname = value
+
+    @property
+    def spin_polarization_fname(self):
+        """The spin polarization file used by QE."""
+        return self._spin_polarization_fname
+
+    @spin_polarization_fname.setter
+    def spin_polarization_fname(self, value):
+        self._spin_polarization_fname = value
+
+    @property
+    def data_file_fname(self):
+        """The XML data file used by QE."""
+        return self._data_file_fname
+
+    @data_file_fname.setter
+    def data_file_fname(self, value):
+        self._data_file_fname = value
+
+
+    @property
+    def rho_fname(self):
+        """The charge density file name for BerkeleyGW."""
+        return self.wfnbgwntask.rho_fname
+
+    @property
+    def wfn_fname(self):
+        """The wavefunctions file name for BerkeleyGW."""
+        return self.wfnbgwntask.wfn_fname
+
+    @property
+    def vxc_fname(self):
+        raise NotImplementedError(
+            'Please use vxc_dat_fname instead of vxc_fname.')
+
+    @property
+    def vxc_dat_fname(self):
+        """The xc potential file name for BerkeleyGW."""
+        return self.wfnbgwntask.vxc_dat_fname
+
+
+class SigmaTask_NNS(SigmaTask):
+    def __init__(self, dirname, **kwargs):
+        super().__init__(dirname, **kwargs)
+        self.kwargs = kwargs
+        self.eps0mat_fname = kwargs['eps0_nns_dir']+'/eps0mat.h5'
+
+    def write(self):
+        super().write()
+        subprocess.run(['cp',self.kwargs['wfn_nns_dir']+'/subweights.dat',self.dirname])
+
+    @property
+    def eps0mat_fname(self):
+        return self._eps0mat_fname
+
+    @eps0mat_fname.setter
+    def eps0mat_fname(self, value):
+        self._eps0mat_fname = value
+        dest = 'eps0mat.h5' if self._use_hdf5 else 'eps0mat'
+        self.update_link(value, dest)
+
+class EpsilonTask_NNS(EpsilonTask):
+    """Inverse dielectric function calculation."""
+    _TASK_NAME = 'Epsilon'
+    _input_fname  = 'epsilon.inp'
+    _output_fname = 'epsilon.out'
+    def __init__(self, dirname, **kwargs):
+        self.kwargs = kwargs
+        super(EpsilonTask_NNS, self).__init__(dirname, **kwargs)
+        self.wfnq_fname = kwargs['wfn_nns_fname']
+
+    def write(self):
+        super().write()
+
+        subprocess.run(['cp',self.kwargs['wfn_nns_dir']+'/epsilon_q0s.inp',self.dirname])
+
+        # rewrite NNS epsilon
+        file_path = self.dirname+f"/{EpsilonTask._input_fname}"
+        headfile_path = self.dirname+"/epsilon.head.in"
+        epsilon_q0s_inp = self.dirname+f'/epsilon_q0s.inp'
+        with open(file_path, "r") as file:
+            lines = file.readlines()
+        begin_index, end_index = lines.index("begin qpoints\n"), lines.index("end\n")
+        lines = lines[:begin_index] + lines[end_index+1:]
+        with open(epsilon_q0s_inp, "r") as file:
+            lines_eqp0_inp = file.readlines()
+
+        with open(file_path, "w") as file:
+            file.writelines(lines+lines_eqp0_inp)        
+        with open(headfile_path, "w") as file:
+            file.writelines(lines)
+    @property
+    def wfnq_fname(self):
+        return self._wfnq_fname
+
+    @wfnq_fname.setter
+    def wfnq_fname(self, value):
+        self._wfnq_fname = value
+        self.update_link(value, 'WFNq')
 
 
 if __name__ == "__main__":

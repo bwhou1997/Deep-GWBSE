@@ -7,10 +7,11 @@ from from_bgwpy.external import Structure
 from from_bgwpy.core import Workflow
 from from_bgwpy.BGW import EpsilonTask, SigmaTask
 from from_bgwpy.QE import QeScfTask, QeBgwFlow, Qe2BgwTask, QeWfnTask
+from from_bgwpy.DFT import WfnBgwFlow
 from ase import Atoms
 import ase.io
 import subprocess
-from fptask import AobasisTask, HPROTask, PseudoBandTask
+from fptask import AobasisTask, HPROTask, PseudoBandTask, QeBgwFlow_NNS, EpsilonTask_NNS, SigmaTask_NNS
 
 from config import fp_config
 import re
@@ -153,10 +154,10 @@ class DFT_GW_HPRO_Flow(Workflow):
         
         # ==== Aobasis(SIESTA) ==== #
         self.aobasis_task = AobasisTask(
-             dirname = pjoin(self.dirname, '05-aobasis'),
+             dirname = pjoin(self.dirname, '07-aobasis'),
              **kwargs)
         self.add_task(self.aobasis_task)
-
+        kwargs.update(dict(aobasis_dirname=self.aobasis_task.dirname))
 
         # ==== GW calculations ==== #
 
@@ -175,10 +176,19 @@ class DFT_GW_HPRO_Flow(Workflow):
             extra_lines = self.epsilon_extra_lines,
             extra_variables = self.epsilon_extra_variables,
             **kwargs)
-        
+
+        self.epsilontask_nns = EpsilonTask_NNS(
+            dirname = pjoin(self.dirname, '12-epsilon-nns'),
+            ngkpt = self.ngkpt,
+            qshift = self.qshift,
+            extra_lines = self.epsilon_extra_lines,
+            extra_variables = self.epsilon_extra_variables,
+            **kwargs)
+        kwargs.update(dict(eps0_nns_dir=pjoin(self.dirname, '12-epsilon-nns')))
+
         # Self-energy calculation (sigma)
-        self.sigmatask = SigmaTask(
-            dirname = pjoin(self.dirname, '12-sigma'),
+        self.sigmatask = SigmaTask_NNS(
+            dirname = pjoin(self.dirname, '13-sigma'),
             ngkpt = self.ngkpt,
             extra_lines = self.sigma_extra_lines,
             extra_variables = self.sigma_extra_variables,
@@ -187,7 +197,7 @@ class DFT_GW_HPRO_Flow(Workflow):
             **kwargs)
         
         # Add tasks to the workflow
-        self.add_tasks([self.epsilontask, self.sigmatask], merge=False)
+        self.add_tasks([self.epsilontask, self.epsilontask_nns ,self.sigmatask], merge=False)
 
         self.truncation_flag = kwargs.get('truncation_flag')
         self.sigma_kpts = kwargs.get('sigma_kpts')
@@ -305,6 +315,18 @@ class DFT_GW_HPRO_Flow(Workflow):
             self.add_tasks([self.wfntask_ksh, self.wfntask_qsh])
 
         # TODO: NNS
+
+        self.wfntask_q_nns = QeBgwFlow_NNS(
+            dirname = pjoin(self.dirname, '06-wfnq-nns'),
+            ngkpt = self.ngkpt,
+            kshift = self.kshift,
+            # qshift = self.qshift,
+            # nbnd = None,
+            nbnd = self.n_z_valence + 4,
+            wfn_fname_nns_input = self.wfntask_ksh.wfn_fname,
+            **kwargs)
+        self.add_task(self.wfntask_q_nns)
+
         # Unshifted wavefunction tasks for Sigma
         # only if not already computed for Epsilon.
         if self.has_kshift:
@@ -321,28 +343,20 @@ class DFT_GW_HPRO_Flow(Workflow):
         else:
             self.wfntask_ush = self.wfntask_ksh
 
-        fnames = dict(wfn_fname = self.wfntask_ksh.wfn_fname,
+        fnames = dict(VSC_fname = self.scftask.dirname+'/VSC',
+                      wfn_fname = self.wfntask_ksh.wfn_fname,
                       wfnq_fname = self.wfntask_qsh.wfn_fname,
                       wfn_co_fname = self.wfntask_ush.wfn_fname,
                       rho_fname = self.wfntask_ush.rho_fname,
-                      vxc_dat_fname = self.wfntask_ush.vxc_dat_fname)
+                      vxc_dat_fname = self.wfntask_ush.vxc_dat_fname,
+                      wfn_nns_dir=self.wfntask_q_nns.dirname,
+                      wfn_nns_fname=self.wfntask_q_nns.wfn_fname)
 
         return fnames
     
     def summary(self, verbose):
         pass
 
-    
-    # def make_reconstruction_tasks_hpro(self, **kwargs):
-    #     pass
-
-    
-    # def make_aobasis_tasks_siesta(self, **kwargs):
-    #     self.aobasis_task = AobasisTask(
-    #          dirname = pjoin(self.dirname, '05-aobasis'),
-    #          **kwargs)
-    #     self.add_task(self.aobasis_task)
-    #     return
 
 def check_pseudo(pseudo_dir='./from_oncvpsp/', pseudos=['S.upf','H.upf']):
     pattern = 'z_valence'
