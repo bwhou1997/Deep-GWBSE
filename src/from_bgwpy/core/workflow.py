@@ -86,7 +86,9 @@ class Workflow(Task):
 
                 #self.runscript.append('if [ -d {} ]'.format(task.dirname))
                 #self.runscript.append('then')
+                self.runscript.append('  ')
                 self.runscript.append('cd {}'.format(os.path.relpath(task.dirname, self.dirname)))
+                self.runscript.append(f'echo "{os.path.relpath(task.dirname, self.dirname)}"')
                 self.runscript.append('bash {}'.format(task.runscript.fname))
                 self.runscript.append('cd {}'.format(os.path.relpath(self.dirname, task.dirname, )))
                 #self.runscript.append('else')

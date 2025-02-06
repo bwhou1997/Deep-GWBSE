@@ -162,19 +162,9 @@ class nns_helper(DeepTask):
     def __init__(self, dirname, **kwargs):
         super().__init__(**kwargs)
         self.dirname = dirname
-
-
     def write(self):
         return super().write()
-        # # generate nns_kgrid
-        # original_dir = os.getcwd()  # Save current directory
-        # try:
-        #     os.chdir(self.dirname)  # Change to target directory
-        #     subprocess.run(['setup_subsampling_nns.x','BIN', os.path.relpath(self.wfn_fname_nns_input, self.dirname)])
-        #     subprocess.run(['cat','kpoints_all.dat','>>','wfn.in'])
-        # finally:
-        #     os.chdir(original_dir)  # Restore original directory        
-
+    
 class QeBgwFlow_NNS(WfnBgwFlow):
     _charge_density_fname = ''
     _spin_polarization_fname = ''
@@ -196,7 +186,7 @@ class QeBgwFlow_NNS(WfnBgwFlow):
         self.nns_helper = nns_helper(dirname= self.dirname, **kwargs)
         self.nns_helper.runscript.fname = 'nns_helper.sh'
         self.nns_helper.runscript.append(' '.join(['cp','./wfn.head.in','wfn.in']))
-        self.nns_helper.runscript.append(' '.join(['setup_subsampling_nns.x','BIN', os.path.relpath(self.wfn_fname_nns_input, self.dirname)]))
+        self.nns_helper.runscript.append(' '.join(['setup_subsampling_nns.x','BIN', os.path.relpath(self.wfn_fname_nns_input, self.dirname),'&> nns_kpt.out']))
         self.nns_helper.runscript.append(' '.join(['cat','kpoints_all.dat','>>','wfn.in']))
         self.add_task(self.nns_helper, merge=False)
 
@@ -278,13 +268,15 @@ class QeBgwFlow_NNS(WfnBgwFlow):
 
 class SigmaTask_NNS(SigmaTask):
     def __init__(self, dirname, **kwargs):
+        kwargs['extra_lines'].append('subsample')
         super().__init__(dirname, **kwargs)
         self.kwargs = kwargs
         self.eps0mat_fname = kwargs['eps0_nns_dir']+'/eps0mat.h5'
+        self.subweight_fname = kwargs['wfn_nns_dir']+'/subweights.dat'
 
     def write(self):
         super().write()
-        subprocess.run(['cp',self.kwargs['wfn_nns_dir']+'/subweights.dat',self.dirname])
+        # subprocess.run(['cp',self.kwargs['wfn_nns_dir']+'/subweights.dat',self.dirname])
 
     @property
     def eps0mat_fname(self):
@@ -295,6 +287,20 @@ class SigmaTask_NNS(SigmaTask):
         self._eps0mat_fname = value
         dest = 'eps0mat.h5' if self._use_hdf5 else 'eps0mat'
         self.update_link(value, dest)
+
+class nns_helper_epsilon(DeepTask):
+    def __init__(self, dirname, **kwargs):
+        super().__init__(**kwargs)
+        self.dirname = dirname
+        self.runscript.fname = 'nns_helper.sh'
+        self.runscript.append(' '.join(['cp','epsilon.head.in','epsilon.inp']))
+        # self.runscript.append(' '.join(['setup_subsampling_nns.x','BIN', os.path.relpath(self.wfn_fname_nns_input, self.dirname)]))
+        self.runscript.append(' '.join(['cat',os.path.relpath(kwargs['wfn_nns_dir']+'/epsilon_q0s.inp', self.dirname),'>>','epsilon.inp']))
+
+    def write(self):
+        return super().write()
+
+
 
 class EpsilonTask_NNS(EpsilonTask):
     """Inverse dielectric function calculation."""
@@ -309,7 +315,7 @@ class EpsilonTask_NNS(EpsilonTask):
     def write(self):
         super().write()
 
-        subprocess.run(['cp',self.kwargs['wfn_nns_dir']+'/epsilon_q0s.inp',self.dirname])
+        # subprocess.run(['cp',self.kwargs['wfn_nns_dir']+'/epsilon_q0s.inp',self.dirname])
 
         # rewrite NNS epsilon
         file_path = self.dirname+f"/{EpsilonTask._input_fname}"
@@ -319,11 +325,11 @@ class EpsilonTask_NNS(EpsilonTask):
             lines = file.readlines()
         begin_index, end_index = lines.index("begin qpoints\n"), lines.index("end\n")
         lines = lines[:begin_index] + lines[end_index+1:]
-        with open(epsilon_q0s_inp, "r") as file:
-            lines_eqp0_inp = file.readlines()
+        # with open(epsilon_q0s_inp, "r") as file:
+        #     lines_eqp0_inp = file.readlines()
 
         with open(file_path, "w") as file:
-            file.writelines(lines+lines_eqp0_inp)        
+            file.writelines(lines)        
         with open(headfile_path, "w") as file:
             file.writelines(lines)
     @property

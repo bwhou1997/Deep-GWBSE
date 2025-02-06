@@ -220,6 +220,15 @@ class SigmaTask(BGWTask):
         dest = 'epsmat.h5' if self._use_hdf5 else 'epsmat'
         self.update_link(value, dest)
 
+    @property
+    def subweight_fname(self):
+        return self._subweight_fname
+
+    @subweight_fname.setter
+    def subweight_fname(self, value):
+        self._subweight_fname = value
+        self.update_link(value, 'subweights.dat')
+
     def write(self):
         super(SigmaTask, self).write()
         with self.exec_from_dirname():

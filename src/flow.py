@@ -11,7 +11,7 @@ from from_bgwpy.DFT import WfnBgwFlow
 from ase import Atoms
 import ase.io
 import subprocess
-from fptask import AobasisTask, HPROTask, PseudoBandTask, QeBgwFlow_NNS, EpsilonTask_NNS, SigmaTask_NNS
+from fptask import AobasisTask, HPROTask, PseudoBandTask, QeBgwFlow_NNS, EpsilonTask_NNS, SigmaTask_NNS, nns_helper_epsilon
 
 from config import fp_config
 import re
@@ -177,6 +177,9 @@ class DFT_GW_HPRO_Flow(Workflow):
             extra_variables = self.epsilon_extra_variables,
             **kwargs)
 
+        self.nns_helper_epsilon_task = nns_helper_epsilon(dirname=pjoin(self.dirname, '12-epsilon-nns'), **kwargs)
+
+
         self.epsilontask_nns = EpsilonTask_NNS(
             dirname = pjoin(self.dirname, '12-epsilon-nns'),
             ngkpt = self.ngkpt,
@@ -197,7 +200,10 @@ class DFT_GW_HPRO_Flow(Workflow):
             **kwargs)
         
         # Add tasks to the workflow
-        self.add_tasks([self.epsilontask, self.epsilontask_nns ,self.sigmatask], merge=False)
+        self.add_tasks([self.epsilontask, 
+                        self.nns_helper_epsilon_task,
+                        self.epsilontask_nns ,
+                        self.sigmatask], merge=False)
 
         self.truncation_flag = kwargs.get('truncation_flag')
         self.sigma_kpts = kwargs.get('sigma_kpts')
