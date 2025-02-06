@@ -5,7 +5,7 @@ Deep-GWBSE is a deep learning model designed for DFT-GW-BSE calculations.
 Author: Bowen Hou (bowen.hou@yale.edu)
 
 ## TODO List:
-- NNS+parabands
+- NNS(done) + parabands
 - eqp.dat -> HPRO
 - Train on different atom
 - Equi-transformer
