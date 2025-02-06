@@ -80,8 +80,6 @@ class AobasisTask(DeepTask):
         finally:
             os.chdir(original_dir)  # Restore original directory
 
-    
-
 
 class HPROTask(DeepTask):
     def __init__(self, dirname, **kwargs):
@@ -147,6 +145,16 @@ class PseudoBandTask(DeepTask):
             with open(self.dirname+'/pseudobands.py', 'w') as file:
                 file.write(pseudoband_py)
         pass
+
+class Parabands(WfnBgwFlow):
+    def __init__(self):
+        pass
+
+class NNSTask(WfnBgwFlow):
+    def __init__(self):
+        pass
+
+
 
 if __name__ == "__main__":
     aobasistask = AobasisTask(dirname='./aobasis', 

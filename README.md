@@ -4,6 +4,12 @@ Deep-GWBSE is a deep learning model designed for DFT-GW-BSE calculations.
 
 Author: Bowen Hou (bowen.hou@yale.edu)
 
+## TODO List:
+- NNS+parabands
+- eqp.dat -> HPRO
+- Train on different atom
+- Equi-transformer
+
 ## Table of Contents
 - [Introduction](#introduction)
 - [Installation](#installation)
@@ -27,7 +33,7 @@ Pre-requisites python Packages:
 
 Useful python packages:
 - bgwpy
-- HPRO (Note: for testing, expoet it to PYTHONPATH, integrate it later)
+- HPRO (Note: for testing, export it to PYTHONPATH, integrate it later)
 - DeepH-E3
 
 To install Deep-GWBSE, clone the repository and install the required dependencies:
