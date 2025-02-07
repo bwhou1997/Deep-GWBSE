@@ -289,6 +289,7 @@ class DFT_GW_HPRO_Flow(Workflow):
             kshift = self.kshift,
             nbnd = self.nbnd,
             rhog_flag = True,
+            paraband_nproc = True,
             **kwargs)
 
         if kwargs.get('paraband'):
@@ -407,7 +408,7 @@ if __name__ == "__main__":
         ecuteps = 15.0,
         ncbnd_sigma = 4,
         nvbnd_sigma = 5, # TODO: band check degeneracy sees not right
-        ngkpt = [12, 12, 1],
+        ngkpt = [12,12, 1],
         qshift = [.001,.0,.0],
         nbnd = 100,
         ecutwfc = 75,
@@ -423,10 +424,10 @@ if __name__ == "__main__":
         sigma_extra_lines=['degeneracy_check_override', 'dont_check_norms'],
         pseudobands = True, # assert ture if parabands is ture
         N_P_cond = 50,
-        N_S_cond = 10,
-        N_xi_cond = 2,
+        N_S_cond = 30,
+        N_xi_cond = 10,
         paraband = True,
-        nparaband = 1000,
+        nparaband = 3000,
     )
 
     flow.write()

@@ -91,9 +91,10 @@ class QeBgwFlow(WfnBgwFlow):
         vxc_dat_fname : str
             Path to the vxc.dat file used by BerkeleyGW.
         """
-        if kwargs.get('paraband'):
+        if kwargs.get('paraband_nproc'):
             kwargs.update(dict(PWFLAGS=' ',
-                               nproc=min(kwargs['ngkpt'][0]*kwargs['ngkpt'][1]*kwargs['ngkpt'][2], kwargs["nproc"])))
+                            #    nproc=min(kwargs['ngkpt'][0]*kwargs['ngkpt'][1]*kwargs['ngkpt'][2], kwargs["nproc"])))
+                            nproc=min(144, kwargs["nproc"])))
 
         super(QeBgwFlow, self).__init__(**kwargs)
 
