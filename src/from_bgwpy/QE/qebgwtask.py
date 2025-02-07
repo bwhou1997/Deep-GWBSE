@@ -48,6 +48,8 @@ class Qe2BgwInput(Namelist):
             'vxc_diag_nmin',
             'vxc_diag_nmax',
             'wfng_kgrid',
+            'vkbg_flag',
+            'vkbg_file',            
             ]
         for key in prefered_order:
             value = self.pop(key, None)
@@ -193,6 +195,8 @@ class Qe2BgwTask(QeTask):
             vxc_diag_nmax = kwargs.get('nbnd', 4),
             vxc_offdiag_nmin = 0,
             vxc_offdiag_nmax = 0,
+            vkbg_flag = True,
+            vkbg_file = 'VKB',
             )
 
         if kwargs.get('rho_fname') or kwargs.get('rhog_flag'):

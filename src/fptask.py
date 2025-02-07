@@ -86,7 +86,6 @@ class AobasisTask(DeepTask):
                 update_link_in_targe_dir(self.dirname, '.'.join(f.split('.')[:2]+['ion']),
                         '.'.join(f.split('.')[:1]+['ion']))
 
-
 class HPROTask(DeepTask):
     def __init__(self, dirname, **kwargs):
         super(HPROTask, self).__init__(dirname, **kwargs)
@@ -153,10 +152,25 @@ class PseudoBandTask(DeepTask):
                 file.write(pseudoband_py)
         pass
 
-class Parabands(WfnBgwFlow):
-    def __init__(self):
-        pass
+class ParaBandTask(DeepTask):
+    def __init__(self, dirname, **kwargs):
+        super(ParaBandTask, self).__init__(dirname, **kwargs)
 
+        self.input_file = ['input_wfn_file wfn.cplx\n',
+                           'output_wfn_file wfn.h5\n',
+                           'vsc_file VSC\n',
+                           'vkb_file VKB\n',
+                           f'number_bands {kwargs.get("nparaband", 1000)}\n']
+        mpirun_flag = kwargs.get('mpirun', 'mpirun')
+        nproc_flag = kwargs.get('nproc_flag', ' -n ')
+        nproc = kwargs.get('nproc')
+        self.runscript.fname = 'para.sh'
+        self.runscript.append(mpirun_flag+' '+nproc_flag+' '+str(nproc)+' '+'parabands.cplx.x &> parabands.out')
+
+    def write(self):
+        super().write()
+        with open(self.dirname+'/parabands.inp','w') as file:
+            file.writelines(self.input_file)
 
 class nns_helper(DeepTask):
     def __init__(self, dirname, **kwargs):
@@ -265,7 +279,6 @@ class QeBgwFlow_NNS(WfnBgwFlow):
         """The xc potential file name for BerkeleyGW."""
         return self.wfnbgwntask.vxc_dat_fname
 
-
 class SigmaTask_NNS(SigmaTask):
     def __init__(self, dirname, **kwargs):
         kwargs['extra_lines'].append('subsample')
@@ -299,8 +312,6 @@ class nns_helper_epsilon(DeepTask):
 
     def write(self):
         return super().write()
-
-
 
 class EpsilonTask_NNS(EpsilonTask):
     """Inverse dielectric function calculation."""
@@ -340,7 +351,6 @@ class EpsilonTask_NNS(EpsilonTask):
     def wfnq_fname(self, value):
         self._wfnq_fname = value
         self.update_link(value, 'WFNq')
-
 
 if __name__ == "__main__":
     aobasistask = AobasisTask(dirname='./aobasis', 

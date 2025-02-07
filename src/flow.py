@@ -11,7 +11,7 @@ from from_bgwpy.DFT import WfnBgwFlow
 from ase import Atoms
 import ase.io
 import subprocess
-from fptask import AobasisTask, HPROTask, PseudoBandTask, QeBgwFlow_NNS, EpsilonTask_NNS, SigmaTask_NNS, nns_helper_epsilon
+from fptask import AobasisTask, HPROTask, PseudoBandTask, QeBgwFlow_NNS, EpsilonTask_NNS, SigmaTask_NNS, nns_helper_epsilon, ParaBandTask
 
 from config import fp_config
 import re
@@ -291,12 +291,20 @@ class DFT_GW_HPRO_Flow(Workflow):
             rhog_flag = True,
             **kwargs)
 
-        if kwargs.get('pseudobands', True):
+        if kwargs.get('paraband'):
+            assert kwargs.get('pseudobands') # pseudobands are required when parabands is used
 
-            self.pseudoband_k = PseudoBandTask(
+        if kwargs.get('paraband'):
+            self.paraband_task = ParaBandTask(
                 dirname= pjoin(self.dirname, '02-wfn'),
-                wfn2hdfonly = True,
                 **kwargs)
+
+        else:
+            if kwargs.get('pseudobands', True):
+                self.paraband_task = PseudoBandTask(
+                    dirname= pjoin(self.dirname, '02-wfn'),
+                    wfn2hdfonly = True,
+                    **kwargs)
 
         self.wfntask_qsh = QeBgwFlow(
             dirname = pjoin(self.dirname, '03-wfnq'),
@@ -316,7 +324,7 @@ class DFT_GW_HPRO_Flow(Workflow):
                 **kwargs)
 
         if kwargs.get('pseudobands', True):
-            self.add_tasks([self.wfntask_ksh, self.pseudoband_k, self.wfntask_qsh, self.pseudoband_q])
+            self.add_tasks([self.wfntask_ksh, self.paraband_task, self.wfntask_qsh, self.pseudoband_q])
         else:
             self.add_tasks([self.wfntask_ksh, self.wfntask_qsh])
 
@@ -395,27 +403,30 @@ if __name__ == "__main__":
         PWFLAGS='-nk 16',
         PW='pw.x',
         dirname='flow',
-        stru_file = './fp-input/mat-2/stru.cif',
+        stru_file = './fp-input/mat-3/stru.cif',
         ecuteps = 15.0,
         ncbnd_sigma = 4,
         nvbnd_sigma = 5, # TODO: band check degeneracy sees not right
-        ngkpt = [4,4,4],
-        qshift = [.0,.0,.001],
-        nbnd = 300,
-        ecutwfc = 60.0,
-        prefix = 'SiH',
+        ngkpt = [12, 12, 1],
+        qshift = [.001,.0,.0],
+        nbnd = 100,
+        ecutwfc = 75,
+        prefix = 'MoS2',
         pseudo_dir = './from_oncvpsp/',
-        pseudos = ['Si.upf','H.upf'],
+        # pseudos = ['Si.upf','H.upf'],
+        pseudos = ['Mo.upf','S.upf'],
         basis_set_siesta = 'DZP',
         mesh_cutoff_siesta = 320,
         dm_tolerance_siesta = 1e-6, 
         max_scf_iter_siesta = 300,
         epsilon_extra_lines=['restart','degeneracy_check_override','dont_check_norms'],
         sigma_extra_lines=['degeneracy_check_override', 'dont_check_norms'],
-        pseudobands = True,
+        pseudobands = True, # assert ture if parabands is ture
         N_P_cond = 50,
         N_S_cond = 10,
         N_xi_cond = 2,
+        paraband = True,
+        nparaband = 1000,
     )
 
     flow.write()
