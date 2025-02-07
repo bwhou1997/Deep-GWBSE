@@ -189,7 +189,8 @@ class SigmaTask(BGWTask):
     @vxc_dat_fname.setter
     def vxc_dat_fname(self, value):
         self._vxc_dat_fname = value
-        self.update_link(value, 'vxc.dat')
+        # self.update_link(value, 'vxc.dat')
+        self.update_link(value, 'VXC')
 
     @property
     def vxc_fname(self):

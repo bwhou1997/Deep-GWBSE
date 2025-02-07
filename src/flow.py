@@ -359,11 +359,12 @@ class DFT_GW_HPRO_Flow(Workflow):
             self.wfntask_ush = self.wfntask_ksh
 
         fnames = dict(VSC_fname = self.scftask.dirname+'/VSC',
+                      vxc_fname = self.wfntask_ksh.dirname+'/VXC',
                       wfn_fname = self.wfntask_ksh.wfn_fname,
                       wfnq_fname = self.wfntask_qsh.wfn_fname,
                       wfn_co_fname = self.wfntask_ush.wfn_fname,
                       rho_fname = self.wfntask_ush.rho_fname,
-                      vxc_dat_fname = self.wfntask_ush.vxc_dat_fname,
+                    #   vxc_dat_fname = self.wfntask_ush.vxc_dat_fname,
                       wfn_nns_dir=self.wfntask_q_nns.dirname,
                       wfn_nns_fname=self.wfntask_q_nns.wfn_fname)
 
@@ -394,13 +395,13 @@ if __name__ == "__main__":
     pass
 
     flow = DFT_GW_HPRO_Flow(
-        mpirun='ibrun',
+        mpirun='srun',
         nproc_flag = '-n',
-        nproc=2240,
+        nproc=512,
         nproc_per_node_flag='',
         nproc_per_node='',
-        Siesta = '/work2/08237/bwhou/frontera/software/Anaconda/envs/siesta/bin/siesta',
-        hpro = '/scratch1/08237/bwhou/12-deepGWBSE/Deep-GWBSE/HPRO/src/calc.py',
+        Siesta = '/global/homes/b/bwhou/anaconda3/envs/siesta/bin/siesta',
+        hpro = '/pscratch/sd/b/bwhou/12-deepGWBSE/Deep-GWBSE/HPRO/src/calc.py',
         PWFLAGS='-nk 16',
         PW='pw.x',
         dirname='flow',
