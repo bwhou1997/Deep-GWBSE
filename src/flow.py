@@ -14,6 +14,7 @@ import subprocess
 from fptask import AobasisTask, HPROTask, PseudoBandTask, QeBgwFlow_NNS, EpsilonTask_NNS, SigmaTask_NNS, nns_helper_epsilon, ParaBandTask, QeBgwFlow_band
 from config import fp_config
 import re
+import json
 
 
 
@@ -223,6 +224,7 @@ class DFT_GW_HPRO_Flow(Workflow):
              **kwargs)
         self.add_task(self.hpro_task)
 
+        self.config = kwargs.copy()
 
     @property
     def has_kshift(self):
@@ -263,6 +265,11 @@ class DFT_GW_HPRO_Flow(Workflow):
         Initialize all DFT tasks using Quantum Espresso.
         Return a dictionary of file names.
         """
+        if kwargs.get('SOC', False):
+            kwargs['variables'] = kwargs.get('variables', {})
+            kwargs['variables']['system'] = kwargs['variables'].get('system', {})
+            kwargs['variables']['system'].update({'lspinorb': True, 'noncolin':True})
+
 
         if 'charge_density_fname' in kwargs:
             if 'data_file_fname' not in kwargs:
@@ -395,6 +402,17 @@ class DFT_GW_HPRO_Flow(Workflow):
     def summary(self, verbose):
         pass
 
+    def write(self):
+        """
+        add config.json to directory
+        """
+        super().write()
+        self.config.pop('structure')
+        # print(self.config)
+
+        with open(pjoin(self.dirname, 'config.json'), 'w') as f:
+            json.dump(self.config, f, indent=4)
+
 
 def check_pseudo(pseudo_dir='./from_oncvpsp/', pseudos=['S.upf','H.upf']):
     pattern = 'z_valence'
@@ -426,8 +444,8 @@ if __name__ == "__main__":
         hpro = '/pscratch/sd/b/bwhou/12-deepGWBSE/Deep-GWBSE/HPRO/src/calc.py',
         PWFLAGS='-nk 16',
         PW='pw.x',
-        dirname='flow-MoSe2',
-        stru_file = './fp-input/mat-6/stru.cif',
+        dirname='flow-hBN-test',
+        stru_file = './fp-input/mat-5/stru.cif',
         ecuteps = 25.0,
         ncbnd_sigma = 4,
         nvbnd_sigma = 5, # TODO: band check degeneracy sees not right
@@ -435,10 +453,10 @@ if __name__ == "__main__":
         qshift = [.001,.0,.0],
         nbnd = 30,
         ecutwfc = 75,
-        prefix = 'MoSe2',
+        prefix = 'hBN',
         pseudo_dir = './from_oncvpsp/',
         # pseudos = ['Si.upf','H.upf'],
-        pseudos = ['Mo.upf','Se.upf'],
+        pseudos = ['B.upf','N.upf'],
         basis_set_siesta = 'DZP',
         mesh_cutoff_siesta = 320,
         dm_tolerance_siesta = 1e-6, 
@@ -448,11 +466,12 @@ if __name__ == "__main__":
         use_NNS = True,
         pseudobands = True, # assert ture if parabands is ture
         N_P_cond = 10,
-        N_S_cond = 300,
+        N_S_cond = 40,
         N_xi_cond = 5,
         paraband = True,
-        nparaband = 20000,
-        kpath_band = ['0 0 0 20','0.33333 0.33333 0 20', '0.5 0 0 20', '0 0 0 20'],
+        nparaband = 10000,
+        kpath_band = ['0 0 0 20','0.5 0 0 20','0.33333 0.33333 0 20', '0 0 0 20', '-0.333333 -0.33333 20'],
+        SOC = False,
     )
 
     flow.write()
