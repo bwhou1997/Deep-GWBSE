@@ -447,7 +447,7 @@ def check_pseudo(pseudo_dir_src='./from_oncvpsp/', pseudos=['S.upf','H.upf']):
 
 
 if __name__ == "__main__":
-    read_from_existing = True
+    read_from_existing = False
     # config_path = "./flow-MoSe2/config1.json"
     config_path = "./flow-hBN/config1.json"
     if read_from_existing: # allow to read config from existing file
