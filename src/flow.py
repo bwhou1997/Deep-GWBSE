@@ -131,6 +131,7 @@ class DFT_GW_HPRO_Flow(Workflow):
         self.dft_flavor = check_dft_flavor(kwargs.get('dft_flavor', flavors['dft_flavor']))
 
         # ==== Check PseudoPotential ==== #
+        kwargs['pseudos'] = [str(atom_ele)+'.upf' for atom_ele in self.structure.elements]
         pseudos_z_valence = check_pseudo(pseudo_dir=kwargs['pseudo_dir'], pseudos=kwargs['pseudos'])
         print(pseudos_z_valence)
         self.n_z_valence = 0
@@ -415,6 +416,8 @@ class DFT_GW_HPRO_Flow(Workflow):
         super().write()
         with open(pjoin(self.dirname, 'config.json'), 'w') as f:
             json.dump(self.config_input, f, indent=4)
+        # write cif to directory
+        self.structure.to(filename=pjoin(self.dirname, 'stru.cif'), fmt='cif')
 
 
 def check_pseudo(pseudo_dir='./from_oncvpsp/', pseudos=['S.upf','H.upf']):
@@ -457,19 +460,19 @@ if __name__ == "__main__":
             hpro = '/pscratch/sd/b/bwhou/12-deepGWBSE/Deep-GWBSE/HPRO/src/calc.py',
             PWFLAGS='-nk 16',
             PW='pw.x',
-            dirname='flow-hBN-18181', ###
-            stru_file = './fp-input/mat-5/stru.cif', ###
+            dirname='flow-MoS2', ###
+            stru_file = './fp-input/mat-4/stru.cif', ###
             ecuteps = 25.0,
             ncbnd_sigma = 4,
             nvbnd_sigma = 5, 
-            ngkpt = [18, 18, 1],
+            ngkpt = [12, 12, 1],
             qshift = [.001,.0,.0],
             nbnd = 30,
             ecutwfc = 75,
-            prefix = 'hBN', ###
+            prefix = 'MoS2', ###
             pseudo_dir = './from_oncvpsp/',
             # pseudos = ['Si.upf','H.upf'],
-            pseudos = ['B.upf','N.upf'], ###
+            # pseudos = ['B.upf','N.upf'],
             basis_set_siesta = 'DZP',
             mesh_cutoff_siesta = 320,
             dm_tolerance_siesta = 1e-6, 

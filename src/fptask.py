@@ -481,7 +481,6 @@ class IneqpTask_plot(IneqpTask):
         with open(self.dirname+'/plot.py','w') as f:
             f.write(f'''
 import numpy as np
-import matplotlib.pyplot as plt
 data = np.loadtxt('bandstructure.dat')
 bands = data[:,1]
 kpts = data[:,2:5]
@@ -503,7 +502,7 @@ for ib in bands_uniq:
     xmin, xmax = min(xmin, x[0]), max(xmax, x[-1])
     for i_n in range(len(x)):
         f.write("%.9f %.9f %.9f \\n" % (x[i_n], emf[cond][i_n], eqp[cond][i_n]))
-        f.write("\\n")
+    f.write("\\n")
 f.close()
     ''')
 
