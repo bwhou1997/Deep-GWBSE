@@ -131,8 +131,11 @@ class DFT_GW_HPRO_Flow(Workflow):
         self.dft_flavor = check_dft_flavor(kwargs.get('dft_flavor', flavors['dft_flavor']))
 
         # ==== Check PseudoPotential ==== #
+        # make a psuedo dir in dirname
+        self.pp_dirname = pjoin(self.dirname, 'pp')
+        kwargs['pseudo_dir'] = self.pp_dirname
         kwargs['pseudos'] = [str(atom_ele)+'.upf' for atom_ele in self.structure.elements]
-        pseudos_z_valence = check_pseudo(pseudo_dir=kwargs['pseudo_dir'], pseudos=kwargs['pseudos'])
+        pseudos_z_valence = check_pseudo(pseudo_dir_src=kwargs['pseudo_dir_source'], pseudos=kwargs['pseudos'])
         print(pseudos_z_valence)
         self.n_z_valence = 0
         for atom_ele in self.atoms.get_chemical_symbols():
@@ -416,15 +419,21 @@ class DFT_GW_HPRO_Flow(Workflow):
         super().write()
         with open(pjoin(self.dirname, 'config.json'), 'w') as f:
             json.dump(self.config_input, f, indent=4)
+
         # write cif to directory
         self.structure.to(filename=pjoin(self.dirname, 'stru.cif'), fmt='cif')
 
+        # copy pseudopotential files from source to pp
+        subprocess.run(['mkdir',self.pp_dirname], capture_output=True, text=True)
+        for atom_ele in self.structure.elements:
+            subprocess.run(['cp', self.config_input['pseudo_dir_source']+ '/' + str(atom_ele)+'.upf', self.pp_dirname])
+            subprocess.run(['cp', self.config_input['pseudo_dir_source']+ '/' + str(atom_ele)+'.psml', self.pp_dirname])
 
-def check_pseudo(pseudo_dir='./from_oncvpsp/', pseudos=['S.upf','H.upf']):
+def check_pseudo(pseudo_dir_src='./from_oncvpsp/', pseudos=['S.upf','H.upf']):
     pattern = 'z_valence'
     pseudos_z_valence = {}
     for pseudo in pseudos:
-        result = subprocess.run(['grep', pattern, pseudo_dir+pseudo], capture_output=True, text=True)
+        result = subprocess.run(['grep', pattern, pseudo_dir_src+pseudo], capture_output=True, text=True)
         # print(result.stdout)
         match = re.search(r'[-+]?\d*\.?\d+', result.stdout)
         if match:
@@ -438,9 +447,9 @@ def check_pseudo(pseudo_dir='./from_oncvpsp/', pseudos=['S.upf','H.upf']):
 
 
 if __name__ == "__main__":
-    read_from_existing = False
+    read_from_existing = True
     # config_path = "./flow-MoSe2/config1.json"
-    config_path = "./flow-hBN-18181/config1.json"
+    config_path = "./flow-hBN/config1.json"
     if read_from_existing: # allow to read config from existing file
         assert config_path
         print('read from existing config file:', config_path)
@@ -460,8 +469,8 @@ if __name__ == "__main__":
             hpro = '/pscratch/sd/b/bwhou/12-deepGWBSE/Deep-GWBSE/HPRO/src/calc.py',
             PWFLAGS='-nk 16',
             PW='pw.x',
-            dirname='flow-MoS2', ###
-            stru_file = './fp-input/mat-4/stru.cif', ###
+            dirname='flow-hBN', ###
+            stru_file = './fp-input/mat-5/stru.cif', ###
             ecuteps = 25.0,
             ncbnd_sigma = 4,
             nvbnd_sigma = 5, 
@@ -469,10 +478,8 @@ if __name__ == "__main__":
             qshift = [.001,.0,.0],
             nbnd = 30,
             ecutwfc = 75,
-            prefix = 'MoS2', ###
-            pseudo_dir = './from_oncvpsp/',
-            # pseudos = ['Si.upf','H.upf'],
-            # pseudos = ['B.upf','N.upf'],
+            prefix = 'hBN', ###
+            pseudo_dir_source = './from_oncvpsp/',
             basis_set_siesta = 'DZP',
             mesh_cutoff_siesta = 320,
             dm_tolerance_siesta = 1e-6, 
