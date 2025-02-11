@@ -11,10 +11,11 @@ from from_bgwpy.DFT import WfnBgwFlow
 from ase import Atoms
 import ase.io
 import subprocess
-from fptask import AobasisTask, HPROTask, PseudoBandTask, QeBgwFlow_NNS, EpsilonTask_NNS, SigmaTask_NNS, nns_helper_epsilon, ParaBandTask, QeBgwFlow_band
+from fptask import AobasisTask, HPROTask, PseudoBandTask, QeBgwFlow_NNS, EpsilonTask_NNS, SigmaTask_NNS, nns_helper_epsilon, ParaBandTask, QeBgwFlow_band, IneqpTask_plot
 from config import fp_config
 import re
 import json
+import copy
 
 
 
@@ -99,6 +100,10 @@ class DFT_GW_HPRO_Flow(Workflow):
         max_scf_iter_siesta : int
             Max SCF Iteration steps            
         """
+
+        # write all input to a config.json file
+        self.config_input = copy.deepcopy(kwargs)
+
         # add "structure" to kwargs (historic reason)
         kwargs.update({'structure':Structure.from_file(kwargs['stru_file'])})
 
@@ -125,7 +130,7 @@ class DFT_GW_HPRO_Flow(Workflow):
 
         self.dft_flavor = check_dft_flavor(kwargs.get('dft_flavor', flavors['dft_flavor']))
 
-        # ==== Check Pseudobands ==== #
+        # ==== Check PseudoPotential ==== #
         pseudos_z_valence = check_pseudo(pseudo_dir=kwargs['pseudo_dir'], pseudos=kwargs['pseudos'])
         print(pseudos_z_valence)
         self.n_z_valence = 0
@@ -198,10 +203,11 @@ class DFT_GW_HPRO_Flow(Workflow):
             epsmat_fname = self.epsilontask.epsmat_fname,
             **kwargs)
 
-        self.inteqp_task = IneqpTask(
+        self.inteqp_task = IneqpTask_plot(
             dirname = pjoin(self.dirname, '14-inteqp'),
             eqp_co_fname = self.sigmatask.dirname+'/eqp1.dat',
             wfn_fi_fname = self.wfnband_task.wfn_fname,
+            nbnd = self.n_z_valence,
             **kwargs
         )
 
@@ -224,7 +230,7 @@ class DFT_GW_HPRO_Flow(Workflow):
              **kwargs)
         self.add_task(self.hpro_task)
 
-        self.config = kwargs.copy()
+
 
     @property
     def has_kshift(self):
@@ -407,11 +413,8 @@ class DFT_GW_HPRO_Flow(Workflow):
         add config.json to directory
         """
         super().write()
-        self.config.pop('structure')
-        # print(self.config)
-
         with open(pjoin(self.dirname, 'config.json'), 'w') as f:
-            json.dump(self.config, f, indent=4)
+            json.dump(self.config_input, f, indent=4)
 
 
 def check_pseudo(pseudo_dir='./from_oncvpsp/', pseudos=['S.upf','H.upf']):
@@ -432,47 +435,57 @@ def check_pseudo(pseudo_dir='./from_oncvpsp/', pseudos=['S.upf','H.upf']):
 
 
 if __name__ == "__main__":
-    pass
+    read_from_existing = False
+    # config_path = "./flow-MoSe2/config1.json"
+    config_path = "./flow-hBN-18181/config1.json"
+    if read_from_existing: # allow to read config from existing file
+        assert config_path
+        print('read from existing config file:', config_path)
+        with open(config_path, 'r') as f:
+            config = json.load(f)
+        flow = DFT_GW_HPRO_Flow(**config)
 
-    flow = DFT_GW_HPRO_Flow(
-        mpirun='srun',
-        nproc_flag = '-n',
-        nproc=512,
-        nproc_per_node_flag='',
-        nproc_per_node='',
-        Siesta = '/global/homes/b/bwhou/anaconda3/envs/siesta/bin/siesta',
-        hpro = '/pscratch/sd/b/bwhou/12-deepGWBSE/Deep-GWBSE/HPRO/src/calc.py',
-        PWFLAGS='-nk 16',
-        PW='pw.x',
-        dirname='flow-hBN-test',
-        stru_file = './fp-input/mat-5/stru.cif',
-        ecuteps = 25.0,
-        ncbnd_sigma = 4,
-        nvbnd_sigma = 5, # TODO: band check degeneracy sees not right
-        ngkpt = [12, 12, 1],
-        qshift = [.001,.0,.0],
-        nbnd = 30,
-        ecutwfc = 75,
-        prefix = 'hBN',
-        pseudo_dir = './from_oncvpsp/',
-        # pseudos = ['Si.upf','H.upf'],
-        pseudos = ['B.upf','N.upf'],
-        basis_set_siesta = 'DZP',
-        mesh_cutoff_siesta = 320,
-        dm_tolerance_siesta = 1e-6, 
-        max_scf_iter_siesta = 300,
-        epsilon_extra_lines=['restart','degeneracy_check_override','dont_check_norms','cell_slab_truncation'],
-        sigma_extra_lines=['degeneracy_check_override', 'dont_check_norms','frequency_dependence 1','screening_semiconductor','cell_slab_truncation'],
-        use_NNS = True,
-        pseudobands = True, # assert ture if parabands is ture
-        N_P_cond = 10,
-        N_S_cond = 40,
-        N_xi_cond = 5,
-        paraband = True,
-        nparaband = 10000,
-        kpath_band = ['0 0 0 20','0.5 0 0 20','0.33333 0.33333 0 20', '0 0 0 20', '-0.333333 -0.33333 20'],
-        SOC = False,
-    )
+    else:
+        print('create a new config file')
+        flow = DFT_GW_HPRO_Flow(
+            mpirun='srun',
+            nproc_flag = '-n',
+            nproc=512,
+            nproc_per_node_flag='',
+            nproc_per_node='',
+            Siesta = '/global/homes/b/bwhou/anaconda3/envs/siesta/bin/siesta',
+            hpro = '/pscratch/sd/b/bwhou/12-deepGWBSE/Deep-GWBSE/HPRO/src/calc.py',
+            PWFLAGS='-nk 16',
+            PW='pw.x',
+            dirname='flow-hBN-18181', ###
+            stru_file = './fp-input/mat-5/stru.cif', ###
+            ecuteps = 25.0,
+            ncbnd_sigma = 4,
+            nvbnd_sigma = 5, 
+            ngkpt = [18, 18, 1],
+            qshift = [.001,.0,.0],
+            nbnd = 30,
+            ecutwfc = 75,
+            prefix = 'hBN', ###
+            pseudo_dir = './from_oncvpsp/',
+            # pseudos = ['Si.upf','H.upf'],
+            pseudos = ['B.upf','N.upf'], ###
+            basis_set_siesta = 'DZP',
+            mesh_cutoff_siesta = 320,
+            dm_tolerance_siesta = 1e-6, 
+            max_scf_iter_siesta = 300,
+            epsilon_extra_lines=['restart','degeneracy_check_override','dont_check_norms','cell_slab_truncation'],
+            sigma_extra_lines=['degeneracy_check_override', 'dont_check_norms','frequency_dependence 1','screening_semiconductor','cell_slab_truncation'],
+            use_NNS = True,
+            pseudobands = True, # assert ture if parabands is ture
+            N_P_cond = 10,
+            N_S_cond = 40,
+            N_xi_cond = 5,
+            paraband = True,
+            nparaband = 10000,
+            kpath_band = ['0 0 0 20','0.5 0 0 20','0.33333 0.33333 0 20', '0 0 0 20', '-0.333333 -0.33333 0 20'],
+            SOC = False,
+        )
 
     flow.write()
 

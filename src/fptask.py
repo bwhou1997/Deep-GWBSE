@@ -5,7 +5,7 @@ from from_bgwpy.core import MPITask, IOTask
 import os
 from from_bgwpy.QE import QeScfTask, QeWfnTask, Qe2BgwTask, QeBgwFlow
 from from_bgwpy.DFT import WfnBgwFlow
-from from_bgwpy.BGW import EpsilonTask, SigmaTask
+from from_bgwpy.BGW import EpsilonTask, SigmaTask, IneqpTask
 from from_bgwpy.BGW.bgwtask import BGWTask
 from from_bgwpy.QE.pseudobands_str import pseudoband_py
 from from_bgwpy.BGW.kgrid   import KgridTask, get_kpt_grid
@@ -13,6 +13,7 @@ from from_bgwpy.BGW.inputs  import EpsilonInput
 import os
 import json
 import subprocess
+# import matplotlib as mpl
 
 # with open('./from_bgwpy/QE/pseudobands.py','r') as file:
 #     pseudoband_py = file.read()
@@ -282,6 +283,7 @@ class QeBgwFlow_NNS(WfnBgwFlow):
 class SigmaTask_NNS(SigmaTask):
     def __init__(self, dirname, **kwargs):
         if kwargs.get('use_NNS', True):
+            # if 'extra_lines' not in kwargs:
             kwargs['extra_lines'].append('subsample')
             
         super().__init__(dirname, **kwargs)
@@ -376,6 +378,8 @@ class QeBgwFlow_band(WfnBgwFlow):
         self.data_file_fname = kwargs['data_file_fname']
         self.spin_polarization_fname = kwargs.get('spin_polarization_fname', 'dummy')
         assert kwargs['kpath_band'] # ["kx ky kz nk", ...]
+        for kpt in kwargs['kpath_band']:
+            assert len(kpt.split()) == 4
         self.kpath_band = ['K_POINTS crystal_b'] + [str(len(kwargs['kpath_band']))] + kwargs['kpath_band']
 
         # band_helper
@@ -465,6 +469,43 @@ class QeBgwFlow_band(WfnBgwFlow):
         return self.wfnbgwntask.vxc_dat_fname
 
 
+
+class IneqpTask_plot(IneqpTask):
+    def __init__(self, dirname, **kwargs):
+        self.dirname = dirname
+        self.kwargs = kwargs
+        super().__init__(dirname, **kwargs)
+        self.runscript.append('python plot.py')
+    def write(self):
+        super().write()
+        with open(self.dirname+'/plot.py','w') as f:
+            f.write(f'''
+import numpy as np
+import matplotlib.pyplot as plt
+data = np.loadtxt('bandstructure.dat')
+bands = data[:,1]
+kpts = data[:,2:5]
+emf = data[:,5]
+eqp = data[:,6]
+emf -= np.amax(emf[bands=={self.kwargs['nbnd']}])
+eqp -= np.amax(eqp[bands=={self.kwargs['nbnd']}])
+def get_x(ks):
+    global dk_len
+    dk_vec = np.diff(ks, axis=0)
+    dk_len = np.linalg.norm(dk_vec, axis=1)
+    return np.insert(np.cumsum(dk_len), 0, 0.)
+xmin, xmax = np.inf, -np.inf
+bands_uniq = np.unique(bands).astype(int)
+f = open("band.dat","w")
+for ib in bands_uniq:
+    cond = bands==ib
+    x = get_x(kpts[cond])
+    xmin, xmax = min(xmin, x[0]), max(xmax, x[-1])
+    for i_n in range(len(x)):
+        f.write("%.9f %.9f %.9f \\n" % (x[i_n], emf[cond][i_n], eqp[cond][i_n]))
+        f.write("\\n")
+f.close()
+    ''')
 
 
 
