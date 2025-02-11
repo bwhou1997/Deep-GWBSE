@@ -443,8 +443,8 @@ if __name__ == "__main__":
         mesh_cutoff_siesta = 320,
         dm_tolerance_siesta = 1e-6, 
         max_scf_iter_siesta = 300,
-        epsilon_extra_lines=['restart','degeneracy_check_override','dont_check_norms'],
-        sigma_extra_lines=['degeneracy_check_override', 'dont_check_norms','frequency_dependence 1','screening_semiconductor'],
+        epsilon_extra_lines=['restart','degeneracy_check_override','dont_check_norms','cell_slab_truncation'],
+        sigma_extra_lines=['degeneracy_check_override', 'dont_check_norms','frequency_dependence 1','screening_semiconductor','cell_slab_truncation'],
         use_NNS = True,
         pseudobands = True, # assert ture if parabands is ture
         N_P_cond = 10,
