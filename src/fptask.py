@@ -281,11 +281,15 @@ class QeBgwFlow_NNS(WfnBgwFlow):
 
 class SigmaTask_NNS(SigmaTask):
     def __init__(self, dirname, **kwargs):
-        kwargs['extra_lines'].append('subsample')
+        if kwargs.get('use_NNS', True):
+            kwargs['extra_lines'].append('subsample')
+            
         super().__init__(dirname, **kwargs)
-        self.kwargs = kwargs
-        self.eps0mat_fname = kwargs['eps0_nns_dir']+'/eps0mat.h5'
-        self.subweight_fname = kwargs['wfn_nns_dir']+'/subweights.dat'
+
+        if kwargs.get('use_NNS', True):
+            self.kwargs = kwargs
+            self.eps0mat_fname = kwargs['eps0_nns_dir']+'/eps0mat.h5'
+            self.subweight_fname = kwargs['wfn_nns_dir']+'/subweights.dat'
 
     def write(self):
         super().write()
@@ -304,11 +308,12 @@ class SigmaTask_NNS(SigmaTask):
 class nns_helper_epsilon(DeepTask):
     def __init__(self, dirname, **kwargs):
         super().__init__(**kwargs)
-        self.dirname = dirname
-        self.runscript.fname = 'nns_helper.sh'
-        self.runscript.append(' '.join(['cp','epsilon.head.in','epsilon.inp']))
-        # self.runscript.append(' '.join(['setup_subsampling_nns.x','BIN', os.path.relpath(self.wfn_fname_nns_input, self.dirname)]))
-        self.runscript.append(' '.join(['cat',os.path.relpath(kwargs['wfn_nns_dir']+'/epsilon_q0s.inp', self.dirname),'>>','epsilon.inp']))
+        if kwargs.get('use_NNS', True):
+            self.dirname = dirname
+            self.runscript.fname = 'nns_helper.sh'
+            self.runscript.append(' '.join(['cp','epsilon.head.in','epsilon.inp']))
+            # self.runscript.append(' '.join(['setup_subsampling_nns.x','BIN', os.path.relpath(self.wfn_fname_nns_input, self.dirname)]))
+            self.runscript.append(' '.join(['cat',os.path.relpath(kwargs['wfn_nns_dir']+'/epsilon_q0s.inp', self.dirname),'>>','epsilon.inp']))
 
     def write(self):
         return super().write()
@@ -321,28 +326,29 @@ class EpsilonTask_NNS(EpsilonTask):
     def __init__(self, dirname, **kwargs):
         self.kwargs = kwargs
         super(EpsilonTask_NNS, self).__init__(dirname, **kwargs)
-        self.wfnq_fname = kwargs['wfn_nns_fname']
+
+        if kwargs.get('use_NNS', True):        
+            self.wfnq_fname = kwargs['wfn_nns_fname']
 
     def write(self):
         super().write()
 
         # subprocess.run(['cp',self.kwargs['wfn_nns_dir']+'/epsilon_q0s.inp',self.dirname])
+        if self.kwargs.get('use_NNS', True):
+            # rewrite NNS epsilon
+            file_path = self.dirname+f"/{EpsilonTask._input_fname}"
+            headfile_path = self.dirname+"/epsilon.head.in"
+            epsilon_q0s_inp = self.dirname+f'/epsilon_q0s.inp'
+            with open(file_path, "r") as file:
+                lines = file.readlines()
+            begin_index, end_index = lines.index("begin qpoints\n"), lines.index("end\n")
+            lines = lines[:begin_index] + lines[end_index+1:]
 
-        # rewrite NNS epsilon
-        file_path = self.dirname+f"/{EpsilonTask._input_fname}"
-        headfile_path = self.dirname+"/epsilon.head.in"
-        epsilon_q0s_inp = self.dirname+f'/epsilon_q0s.inp'
-        with open(file_path, "r") as file:
-            lines = file.readlines()
-        begin_index, end_index = lines.index("begin qpoints\n"), lines.index("end\n")
-        lines = lines[:begin_index] + lines[end_index+1:]
-        # with open(epsilon_q0s_inp, "r") as file:
-        #     lines_eqp0_inp = file.readlines()
+            with open(file_path, "w") as file:
+                file.writelines(lines)        
+            with open(headfile_path, "w") as file:
+                file.writelines(lines)
 
-        with open(file_path, "w") as file:
-            file.writelines(lines)        
-        with open(headfile_path, "w") as file:
-            file.writelines(lines)
     @property
     def wfnq_fname(self):
         return self._wfnq_fname
@@ -351,6 +357,116 @@ class EpsilonTask_NNS(EpsilonTask):
     def wfnq_fname(self, value):
         self._wfnq_fname = value
         self.update_link(value, 'WFNq')
+
+
+
+
+class QeBgwFlow_band(WfnBgwFlow):
+    _charge_density_fname = ''
+    _spin_polarization_fname = ''
+    _data_file_fname = ''
+
+    def __init__(self, **kwargs):
+ 
+        super(QeBgwFlow_band, self).__init__(**kwargs)
+
+        kwargs.pop('dirname', None)
+
+        self.charge_density_fname = kwargs['charge_density_fname']
+        self.data_file_fname = kwargs['data_file_fname']
+        self.spin_polarization_fname = kwargs.get('spin_polarization_fname', 'dummy')
+        assert kwargs['kpath_band'] # ["kx ky kz nk", ...]
+        self.kpath_band = ['K_POINTS crystal_b'] + [str(len(kwargs['kpath_band']))] + kwargs['kpath_band']
+
+        # band_helper
+        self.nns_helper = nns_helper(dirname= self.dirname, **kwargs)
+        self.nns_helper.runscript.fname = 'band_helper.sh'
+        self.nns_helper.runscript.append(' '.join(['cp','./wfn.head.in','wfn.in']))
+        self.nns_helper.runscript.append(' '.join(['cat','kpath.txt','>>','wfn.in']))
+        self.add_task(self.nns_helper, merge=False)
+
+        # Wfn task
+        self.wfntask = QeWfnTask(dirname = self.dirname, **kwargs)
+        self.wfntask.runscript.fname = 'wfn.run.sh'
+        self.add_task(self.wfntask, merge=False)
+
+        # Wfn 2 BGW
+        self.wfnbgwntask = Qe2BgwTask(dirname = self.wfntask.dirname, **kwargs)
+        self.wfnbgwntask.runscript.fname = 'pw2bgw.run.sh'
+        self.add_task(self.wfnbgwntask, merge=False)
+
+
+    def write(self):
+        super().write()
+
+        # rewrite NNS wfn.in
+        file_path = self.dirname+"/wfn.in"
+        headfile_path = self.dirname+"/wfn.head.in"
+        with open(file_path, "r") as file:
+            lines = file.readlines()
+        K_Points_index = lines.index("K_POINTS crystal\n")
+        lines = lines[:K_Points_index] + lines[K_Points_index+int(lines[K_Points_index+1])+2:]
+        with open(file_path, "w") as file:
+            file.writelines(lines)        
+        with open(headfile_path, "w") as file:
+            file.writelines(lines)      
+        
+        with open(self.dirname+"/kpath.txt",'w') as file:
+            file.writelines([line + '\n' for line in self.kpath_band])
+
+
+
+    @property
+    def charge_density_fname(self):
+        """The charge density file used by QE."""
+        return self._charge_density_fname
+
+    @charge_density_fname.setter
+    def charge_density_fname(self, value):
+        self._charge_density_fname = value
+
+    @property
+    def spin_polarization_fname(self):
+        """The spin polarization file used by QE."""
+        return self._spin_polarization_fname
+
+    @spin_polarization_fname.setter
+    def spin_polarization_fname(self, value):
+        self._spin_polarization_fname = value
+
+    @property
+    def data_file_fname(self):
+        """The XML data file used by QE."""
+        return self._data_file_fname
+
+    @data_file_fname.setter
+    def data_file_fname(self, value):
+        self._data_file_fname = value
+
+
+    @property
+    def rho_fname(self):
+        """The charge density file name for BerkeleyGW."""
+        return self.wfnbgwntask.rho_fname
+
+    @property
+    def wfn_fname(self):
+        """The wavefunctions file name for BerkeleyGW."""
+        return self.wfnbgwntask.wfn_fname
+
+    @property
+    def vxc_fname(self):
+        raise NotImplementedError(
+            'Please use vxc_dat_fname instead of vxc_fname.')
+
+    @property
+    def vxc_dat_fname(self):
+        """The xc potential file name for BerkeleyGW."""
+        return self.wfnbgwntask.vxc_dat_fname
+
+
+
+
 
 if __name__ == "__main__":
     aobasistask = AobasisTask(dirname='./aobasis', 

@@ -5,14 +5,13 @@ from from_bgwpy.config import flavors
 from from_bgwpy.config import is_dft_flavor_espresso, check_dft_flavor
 from from_bgwpy.external import Structure
 from from_bgwpy.core import Workflow
-from from_bgwpy.BGW import EpsilonTask, SigmaTask
+from from_bgwpy.BGW import EpsilonTask, SigmaTask, IneqpTask
 from from_bgwpy.QE import QeScfTask, QeBgwFlow, Qe2BgwTask, QeWfnTask
 from from_bgwpy.DFT import WfnBgwFlow
 from ase import Atoms
 import ase.io
 import subprocess
-from fptask import AobasisTask, HPROTask, PseudoBandTask, QeBgwFlow_NNS, EpsilonTask_NNS, SigmaTask_NNS, nns_helper_epsilon, ParaBandTask
-
+from fptask import AobasisTask, HPROTask, PseudoBandTask, QeBgwFlow_NNS, EpsilonTask_NNS, SigmaTask_NNS, nns_helper_epsilon, ParaBandTask, QeBgwFlow_band
 from config import fp_config
 import re
 
@@ -177,17 +176,16 @@ class DFT_GW_HPRO_Flow(Workflow):
             extra_variables = self.epsilon_extra_variables,
             **kwargs)
 
-        self.nns_helper_epsilon_task = nns_helper_epsilon(dirname=pjoin(self.dirname, '12-epsilon-nns'), **kwargs)
-
-
-        self.epsilontask_nns = EpsilonTask_NNS(
-            dirname = pjoin(self.dirname, '12-epsilon-nns'),
-            ngkpt = self.ngkpt,
-            qshift = self.qshift,
-            extra_lines = self.epsilon_extra_lines,
-            extra_variables = self.epsilon_extra_variables,
-            **kwargs)
-        kwargs.update(dict(eps0_nns_dir=pjoin(self.dirname, '12-epsilon-nns')))
+        if kwargs.get('use_NNS', True):
+            self.nns_helper_epsilon_task = nns_helper_epsilon(dirname=pjoin(self.dirname, '12-epsilon-nns'), **kwargs)
+            self.epsilontask_nns = EpsilonTask_NNS(
+                dirname = pjoin(self.dirname, '12-epsilon-nns'),
+                ngkpt = self.ngkpt,
+                qshift = self.qshift,
+                extra_lines = self.epsilon_extra_lines,
+                extra_variables = self.epsilon_extra_variables,
+                **kwargs)
+            kwargs.update(dict(eps0_nns_dir=pjoin(self.dirname, '12-epsilon-nns')))
 
         # Self-energy calculation (sigma)
         self.sigmatask = SigmaTask_NNS(
@@ -198,12 +196,23 @@ class DFT_GW_HPRO_Flow(Workflow):
             eps0mat_fname = self.epsilontask.eps0mat_fname,
             epsmat_fname = self.epsilontask.epsmat_fname,
             **kwargs)
-        
+
+        self.inteqp_task = IneqpTask(
+            dirname = pjoin(self.dirname, '14-inteqp'),
+            eqp_co_fname = self.sigmatask.dirname+'/eqp1.dat',
+            wfn_fi_fname = self.wfnband_task.wfn_fname,
+            **kwargs
+        )
+
         # Add tasks to the workflow
-        self.add_tasks([self.epsilontask, 
-                        self.nns_helper_epsilon_task,
-                        self.epsilontask_nns ,
-                        self.sigmatask], merge=False)
+        if kwargs.get('use_NNS', True):
+            self.add_tasks([self.epsilontask, 
+                            self.nns_helper_epsilon_task,
+                            self.epsilontask_nns ,
+                            self.sigmatask,
+                            self.inteqp_task], merge=False)
+        else:
+            self.add_tasks([self.epsilontask, self.sigmatask, self.inteqp_task], merge=False)
 
         self.truncation_flag = kwargs.get('truncation_flag')
         self.sigma_kpts = kwargs.get('sigma_kpts')
@@ -329,18 +338,27 @@ class DFT_GW_HPRO_Flow(Workflow):
         else:
             self.add_tasks([self.wfntask_ksh, self.wfntask_qsh])
 
-        # TODO: NNS
+        if kwargs.get('use_NNS', True):
+            self.wfntask_q_nns = QeBgwFlow_NNS(
+                dirname = pjoin(self.dirname, '06-wfnq-nns'),
+                ngkpt = self.ngkpt,
+                kshift = self.kshift,
+                # qshift = self.qshift,
+                # nbnd = None,
+                nbnd = self.n_z_valence + 4,
+                wfn_fname_nns_input = self.wfntask_ksh.wfn_fname,
+                **kwargs)
+            self.add_task(self.wfntask_q_nns)
 
-        self.wfntask_q_nns = QeBgwFlow_NNS(
-            dirname = pjoin(self.dirname, '06-wfnq-nns'),
-            ngkpt = self.ngkpt,
-            kshift = self.kshift,
-            # qshift = self.qshift,
-            # nbnd = None,
-            nbnd = self.n_z_valence + 4,
-            wfn_fname_nns_input = self.wfntask_ksh.wfn_fname,
-            **kwargs)
-        self.add_task(self.wfntask_q_nns)
+
+        self.wfnband_task = QeBgwFlow_band(
+                dirname = pjoin(self.dirname, '05-band'),
+                ngkpt = self.ngkpt,
+                kshift = self.kshift,
+                nbnd = self.n_z_valence + 12,
+                **kwargs
+        )
+        self.add_task(self.wfnband_task)
 
         # Unshifted wavefunction tasks for Sigma
         # only if not already computed for Epsilon.
@@ -364,9 +382,13 @@ class DFT_GW_HPRO_Flow(Workflow):
                       wfnq_fname = self.wfntask_qsh.wfn_fname,
                       wfn_co_fname = self.wfntask_ush.wfn_fname,
                       rho_fname = self.wfntask_ush.rho_fname,
-                    #   vxc_dat_fname = self.wfntask_ush.vxc_dat_fname,
-                      wfn_nns_dir=self.wfntask_q_nns.dirname,
-                      wfn_nns_fname=self.wfntask_q_nns.wfn_fname)
+                    # vxc_dat_fname = self.wfntask_ush.vxc_dat_fname,
+                      wfn_band_fname = self.wfnband_task.wfn_fname,
+                    )
+        
+        if kwargs.get('use_NNS', True):
+            fnames.update(dict(wfn_nns_dir=self.wfntask_q_nns.dirname,
+                      wfn_nns_fname=self.wfntask_q_nns.wfn_fname))
 
         return fnames
     
@@ -404,34 +426,35 @@ if __name__ == "__main__":
         hpro = '/pscratch/sd/b/bwhou/12-deepGWBSE/Deep-GWBSE/HPRO/src/calc.py',
         PWFLAGS='-nk 16',
         PW='pw.x',
-        dirname='flow',
-        stru_file = './fp-input/mat-3/stru.cif',
-        ecuteps = 15.0,
+        dirname='flow-hBN-test',
+        stru_file = './fp-input/mat-5/stru.cif',
+        ecuteps = 30.0,
         ncbnd_sigma = 4,
         nvbnd_sigma = 5, # TODO: band check degeneracy sees not right
-        ngkpt = [12,12, 1],
+        ngkpt = [12, 12, 1],
         qshift = [.001,.0,.0],
-        nbnd = 100,
-        ecutwfc = 75,
-        prefix = 'MoS2',
+        nbnd = 16,
+        ecutwfc = 70,
+        prefix = 'hBN',
         pseudo_dir = './from_oncvpsp/',
         # pseudos = ['Si.upf','H.upf'],
-        pseudos = ['Mo.upf','S.upf'],
+        pseudos = ['B.upf','N.upf'],
         basis_set_siesta = 'DZP',
         mesh_cutoff_siesta = 320,
         dm_tolerance_siesta = 1e-6, 
         max_scf_iter_siesta = 300,
         epsilon_extra_lines=['restart','degeneracy_check_override','dont_check_norms'],
-        sigma_extra_lines=['degeneracy_check_override', 'dont_check_norms'],
+        sigma_extra_lines=['degeneracy_check_override', 'dont_check_norms','frequency_dependence 1','screening_semiconductor'],
+        use_NNS = True,
         pseudobands = True, # assert ture if parabands is ture
         N_P_cond = 50,
         N_S_cond = 30,
         N_xi_cond = 10,
         paraband = True,
-        nparaband = 3000,
+        nparaband = 2000,
+        kpath_band = ['0 0 0 20','0.33333 0.33333 0 20', '0.5 0 0 20', '0 0 0 20'],
     )
 
     flow.write()
 
-    # check_pseudo()
 
