@@ -86,6 +86,10 @@ class EpsilonTask(BGWTask):
         extra_lines = kwargs.get('extra_lines',[])
         extra_variables = kwargs.get('extra_variables',{})
 
+        # Bowen Hou 2025/02/12
+        if 'degeneracy_check_override' not in extra_lines:
+            extra_lines.append("degeneracy_check_override")
+
         # Input file
         self.input = EpsilonInput(
             kwargs['ecuteps'],

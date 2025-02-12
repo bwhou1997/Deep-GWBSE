@@ -433,7 +433,7 @@ def check_pseudo(pseudo_dir_src='./from_oncvpsp/', pseudos=['S.upf','H.upf']):
     pattern = 'z_valence'
     pseudos_z_valence = {}
     for pseudo in pseudos:
-        result = subprocess.run(['grep', pattern, pseudo_dir_src+pseudo], capture_output=True, text=True)
+        result = subprocess.run(['grep', pattern, pseudo_dir_src+'/'+pseudo], capture_output=True, text=True)
         # print(result.stdout)
         match = re.search(r'[-+]?\d*\.?\d+', result.stdout)
         if match:
@@ -449,7 +449,8 @@ def check_pseudo(pseudo_dir_src='./from_oncvpsp/', pseudos=['S.upf','H.upf']):
 if __name__ == "__main__":
     read_from_existing = False
     # config_path = "./flow-MoSe2/config1.json"
-    config_path = "./flow-hBN/config1.json"
+    # config_path = "./flow-hBN/config1.json"
+    config_path = './config/single_mat_config.json'
     if read_from_existing: # allow to read config from existing file
         assert config_path
         print('read from existing config file:', config_path)
@@ -484,8 +485,8 @@ if __name__ == "__main__":
             mesh_cutoff_siesta = 320,
             dm_tolerance_siesta = 1e-6, 
             max_scf_iter_siesta = 300,
-            epsilon_extra_lines=['restart','degeneracy_check_override','dont_check_norms','cell_slab_truncation'],
-            sigma_extra_lines=['degeneracy_check_override', 'dont_check_norms','frequency_dependence 1','screening_semiconductor','cell_slab_truncation'],
+            epsilon_extra_lines=['restart','dont_check_norms','cell_slab_truncation'],
+            sigma_extra_lines=['dont_check_norms','frequency_dependence 1','screening_semiconductor','cell_slab_truncation'],
             use_NNS = True,
             pseudobands = True, # assert ture if parabands is ture
             N_P_cond = 10,
