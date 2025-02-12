@@ -12,13 +12,14 @@ Author: Bowen Hou (bowen.hou@yale.edu)
 - Equi-transformer
 
 ## Table of Contents
-- [Introduction](#introduction)
+- [Features](#features)
 - [Installation](#installation)
 - [Usage](#usage)
 - [License](#license)
 
-## Introduction
+## Features
 This package provides multiple deep learning models for DFT-GW-BSE calculations from crystal structures, including the following:
+- fully-automatic BGW workflow ([high-throughput workflow](./src/note.md))
 - equivariant graph neural networks
 - equivariant attention networks
 
