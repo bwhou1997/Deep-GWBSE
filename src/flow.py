@@ -100,7 +100,7 @@ class DFT_GW_HPRO_Flow(Workflow):
         max_scf_iter_siesta : int
             Max SCF Iteration steps            
         """
-
+        #========================================Preparation========================================#
         # write all input to a config.json file
         self.config_input = copy.deepcopy(kwargs)
 
@@ -110,14 +110,11 @@ class DFT_GW_HPRO_Flow(Workflow):
         super(DFT_GW_HPRO_Flow, self).__init__(**kwargs)
 
         kwargs.pop('dirname', None)
-
         self.structure = kwargs['structure']
         self.atoms = ase.io.read(kwargs['stru_file'])
-
         self.ngkpt = kwargs.pop('ngkpt')
         self.kshift = kwargs.pop('kshift', [.0,.0,.0])
         self.qshift = kwargs.pop('qshift', [.0,.0,.0])
-
         nband_aliases = ('nbnd', 'nband')
         for key in nband_aliases:
             if key in kwargs:
@@ -154,6 +151,7 @@ class DFT_GW_HPRO_Flow(Workflow):
             kwargs.update({'ibnd_min': max(1, self.n_z_valence - kwargs.get('nvbnd_sigma',2))})
             kwargs.update({'ibnd_max': self.n_z_valence + kwargs.get('ncbnd_sigma',2)})
 
+        #========================================FLOW========================================#
         # ==== DFT calculations ==== #
 
         # Quantum Espresso flavor
@@ -169,106 +167,14 @@ class DFT_GW_HPRO_Flow(Workflow):
         kwargs.update(dict(aobasis_dirname=self.aobasis_task.dirname))
 
         # ==== GW calculations ==== #
-
-        # Set some common variables for Epsilon and Sigma
-        self.epsilon_extra_lines = kwargs.pop('epsilon_extra_lines', [])
-        self.epsilon_extra_variables = kwargs.pop('epsilon_extra_variables',{})
-        
-        self.sigma_extra_lines = kwargs.pop('sigma_extra_lines', [])
-        self.sigma_extra_variables = kwargs.pop('sigma_extra_variables', {})
-        
-        # Dielectric matrix computation and inversion (epsilon)
-        self.epsilontask = EpsilonTask(
-            dirname = pjoin(self.dirname, '11-epsilon'),
-            ngkpt = self.ngkpt,
-            qshift = self.qshift,
-            extra_lines = self.epsilon_extra_lines,
-            extra_variables = self.epsilon_extra_variables,
-            **kwargs)
-
-        if kwargs.get('use_NNS', True):
-            self.nns_helper_epsilon_task = nns_helper_epsilon(dirname=pjoin(self.dirname, '12-epsilon-nns'), **kwargs)
-            self.epsilontask_nns = EpsilonTask_NNS(
-                dirname = pjoin(self.dirname, '12-epsilon-nns'),
-                ngkpt = self.ngkpt,
-                qshift = self.qshift,
-                extra_lines = self.epsilon_extra_lines,
-                extra_variables = self.epsilon_extra_variables,
-                **kwargs)
-            kwargs.update(dict(eps0_nns_dir=pjoin(self.dirname, '12-epsilon-nns')))
-
-        # Self-energy calculation (sigma)
-        self.sigmatask = SigmaTask_NNS(
-            dirname = pjoin(self.dirname, '13-sigma'),
-            ngkpt = self.ngkpt,
-            extra_lines = self.sigma_extra_lines,
-            extra_variables = self.sigma_extra_variables,
-            eps0mat_fname = self.epsilontask.eps0mat_fname,
-            epsmat_fname = self.epsilontask.epsmat_fname,
-            **kwargs)
-
-        self.inteqp_task = IneqpTask_plot(
-            dirname = pjoin(self.dirname, '14-inteqp'),
-            eqp_co_fname = self.sigmatask.dirname+'/eqp1.dat',
-            wfn_fi_fname = self.wfnband_task.wfn_fname,
-            nbnd = self.n_z_valence,
-            **kwargs
-        )
-
-        # Add tasks to the workflow
-        if kwargs.get('use_NNS', True):
-            self.add_tasks([self.epsilontask, 
-                            self.nns_helper_epsilon_task,
-                            self.epsilontask_nns ,
-                            self.sigmatask,
-                            self.inteqp_task], merge=False)
-        else:
-            self.add_tasks([self.epsilontask, self.sigmatask, self.inteqp_task], merge=False)
-
-        self.truncation_flag = kwargs.get('truncation_flag')
-        self.sigma_kpts = kwargs.get('sigma_kpts')
-
+        self.make_gw_tasks_bgw(**kwargs)
+ 
         # ==== SIESTA/HPRO ==========
         self.hpro_task = HPROTask(
             dirname = pjoin(self.dirname, '16-reconstruction'),
              **kwargs)
         self.add_task(self.hpro_task)
 
-
-
-    @property
-    def has_kshift(self):
-        return any([i!=0 for i in self.kshift])
-
-    @property
-    def sigma_kpts(self):
-        return self.sigmatask.input.kpts
-
-    @sigma_kpts.setter
-    def sigma_kpts(self, value):
-        if value:
-            self.sigmatask.input.kpts = value
-
-    _truncation_flag = ''
-    @property
-    def truncation_flag(self):
-        return self._truncation_flag
-
-    @truncation_flag.setter
-    def truncation_flag(self, value):
-
-        for task in (self.epsilontask, self.sigmatask):
-
-            # Remove old value
-            if self._truncation_flag in task.input.keywords:
-                i = task.input.keywords.index(self._truncation_flag)
-                del task.input.keywords[i]
-
-            # Add new value
-            if value:
-                task.input.keywords.append(value)
-
-        self._truncation_flag = value
 
     def make_dft_tasks_espresso(self, **kwargs):
         """
@@ -377,21 +283,7 @@ class DFT_GW_HPRO_Flow(Workflow):
         )
         self.add_task(self.wfnband_task)
 
-        # Unshifted wavefunction tasks for Sigma
-        # only if not already computed for Epsilon.
-        if self.has_kshift:
-
-            self.wfntask_ush = QeBgwFlow(
-                dirname = pjoin(self.dirname, '04-wfn_co'),
-                ngkpt = self.ngkpt,
-                nbnd = self.nbnd,
-                rhog_flag = True,
-                **kwargs)
-
-            self.add_task(self.wfntask_ush)
-
-        else:
-            self.wfntask_ush = self.wfntask_ksh
+        self.wfntask_ush = self.wfntask_ksh
 
         fnames = dict(VSC_fname = self.scftask.dirname+'/VSC',
                       vxc_fname = self.wfntask_ksh.dirname+'/VXC',
@@ -409,6 +301,65 @@ class DFT_GW_HPRO_Flow(Workflow):
 
         return fnames
     
+    def make_gw_tasks_bgw(self, **kwargs):
+        # Set some common variables for Epsilon and Sigma
+        self.epsilon_extra_lines = kwargs.pop('epsilon_extra_lines', [])
+        self.epsilon_extra_variables = kwargs.pop('epsilon_extra_variables',{})
+        
+        self.sigma_extra_lines = kwargs.pop('sigma_extra_lines', [])
+        self.sigma_extra_variables = kwargs.pop('sigma_extra_variables', {})
+        
+        # Dielectric matrix computation and inversion (epsilon)
+        self.epsilontask = EpsilonTask(
+            dirname = pjoin(self.dirname, '11-epsilon'),
+            ngkpt = self.ngkpt,
+            qshift = self.qshift,
+            extra_lines = self.epsilon_extra_lines,
+            extra_variables = self.epsilon_extra_variables,
+            **kwargs)
+
+        if kwargs.get('use_NNS', True):
+            self.nns_helper_epsilon_task = nns_helper_epsilon(dirname=pjoin(self.dirname, '12-epsilon-nns'), **kwargs)
+            self.epsilontask_nns = EpsilonTask_NNS(
+                dirname = pjoin(self.dirname, '12-epsilon-nns'),
+                ngkpt = self.ngkpt,
+                qshift = self.qshift,
+                extra_lines = self.epsilon_extra_lines,
+                extra_variables = self.epsilon_extra_variables,
+                **kwargs)
+            kwargs.update(dict(eps0_nns_dir=pjoin(self.dirname, '12-epsilon-nns')))
+
+        # Self-energy calculation (sigma)
+        self.sigmatask = SigmaTask_NNS(
+            dirname = pjoin(self.dirname, '13-sigma'),
+            ngkpt = self.ngkpt,
+            extra_lines = self.sigma_extra_lines,
+            extra_variables = self.sigma_extra_variables,
+            eps0mat_fname = self.epsilontask.eps0mat_fname,
+            epsmat_fname = self.epsilontask.epsmat_fname,
+            **kwargs)
+
+        self.inteqp_task = IneqpTask_plot(
+            dirname = pjoin(self.dirname, '14-inteqp'),
+            eqp_co_fname = self.sigmatask.dirname+'/eqp1.dat',
+            wfn_fi_fname = self.wfnband_task.wfn_fname,
+            nbnd = self.n_z_valence,
+            **kwargs
+        )
+
+        # Add tasks to the workflow
+        if kwargs.get('use_NNS', True):
+            self.add_tasks([self.epsilontask, 
+                            self.nns_helper_epsilon_task,
+                            self.epsilontask_nns ,
+                            self.sigmatask,
+                            self.inteqp_task], merge=False)
+        else:
+            self.add_tasks([self.epsilontask, self.sigmatask, self.inteqp_task], merge=False)
+
+        self.truncation_flag = kwargs.get('truncation_flag')
+        self.sigma_kpts = kwargs.get('sigma_kpts')
+
     def summary(self, verbose):
         pass
 

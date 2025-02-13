@@ -7,6 +7,7 @@ Author: Bowen Hou (bowen.hou@yale.edu)
 ## TODO List:
 - NNS + parabands (2025/02/06 done) + inteqp (2025/02/11 done)
 - eqp.dat -> HPRO
+- BSE
 - multiple materials + cleaning program
 - Train on different atom
 - Equi-transformer
@@ -20,6 +21,7 @@ Author: Bowen Hou (bowen.hou@yale.edu)
 ## Features
 This package provides multiple deep learning models for DFT-GW-BSE calculations from crystal structures, including the following:
 - fully-automatic BGW workflow ([high-throughput workflow](./src/note.md))
+- fully-automatic BSE workflow
 - equivariant graph neural networks
 - equivariant attention networks
 
