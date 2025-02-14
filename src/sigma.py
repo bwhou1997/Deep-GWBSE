@@ -1,10 +1,11 @@
 import numpy as np
 import numpy as np
 import h5py as h5
-
+import os
+import matplotlib.pyplot as plt
 from scipy.io import FortranFile
-
-
+from utils import H5ls, time_watch
+from tqdm import tqdm
 class eqp_file():
     """
     These object decompose eqp.dat into data_DFT, data_GW, klist and spin_list
@@ -74,10 +75,10 @@ class eqp_file():
         f.close()
 
 
-class v_file:
+class vloc:
     """
     modified from /HPRO/bgwio.py
-    v: VXC, VSC files
+    vscfile: VXC, VSC files
     """
     def __init__(self, vscfile):
         self.fname = vscfile
@@ -85,7 +86,7 @@ class v_file:
         self._read = False
         self._set_vcsg = False
         self.read_v()
-        self.file.close()
+
 
     def read_v(self):        
         assert not self._read
@@ -151,10 +152,14 @@ class v_file:
         self._vscg = self.file.read_record('c16').reshape(self.nsf, self.ng_g) * 0.5 # Ry->Ha
 
         self._read = True
-    
-    def write_v(self):
-        outfile = self.fname + '.new'
+        self.file.close()
+        
+    def write_v(self, outfile=None):
         assert self._read
+        print('Writing VXC/VSC')
+        self.check_reset()
+        if outfile is None:
+            outfile = self.fname + '.new'
         with FortranFile(outfile, 'w') as f:
             # Write header information
             rec = (self.stitle.ljust(32) + self.sdate.ljust(32) + self.stime.ljust(32)).encode()
@@ -186,8 +191,49 @@ class v_file:
             
             f.write_record(np.array([1], dtype='i4'))  # Another dummy value
             f.write_record(np.array([self.ng_g], dtype='i4'))
-            print(self.vscg)
-            f.write_record((self.vscg*2).astype('c16'))
+            # print(self.vscg)
+            f.write_record((self._vscg*2).astype('c16'))
+
+    def get_vlocr(self, plotXY=False):
+        assert self._read
+        self.check_reset()
+        FFTgrid = np.array([self.nr1, self.nr2, self.nr3])
+        vlocg_full = np.zeros(FFTgrid, dtype='c16')
+        _, g_g_full = np.divmod(self.g_g, FFTgrid)
+        vlocg_full[g_g_full[:, 0], g_g_full[:, 1], g_g_full[:, 2]] = self.vscg
+        vlocr = np.fft.ifftn(vlocg_full, s=FFTgrid, norm='forward')
+        assert np.max(np.abs(vlocr.imag)) < 1e-6
+        vlocr = vlocr.real
+        if plotXY:
+            plt.figure()
+            plt.imshow(vlocr.sum(axis=2))
+            plt.colorbar()
+            plt.xlabel('x')
+            plt.ylabel('y')
+            plt.title(f'Vlocr Reset: {self._set_vcsg}')
+            plt.show()
+        # print('vlocr shape:', vlocr.shape)
+        return vlocr
+
+    def check_reset(self):
+        if self._set_vcsg:
+            if np.allclose(self.old_vcsg, self._vscg):
+                print('vscg is reset: vscg is the same')
+            else:
+                print('vscg is reset: vscg is different')
+        else:
+            print('vscg is not reset')
+
+    def IO_test(self):
+        assert self._read
+        self.write_v('./VXC.test')
+        v_test = vloc('./VXC.test')
+        for attr in dir(v_test):
+            if not attr.startswith('_'):
+                if type(getattr(self, attr)) == np.ndarray:
+                    assert np.allclose(getattr(self, attr), getattr(v_test, attr))
+        os.remove('./VXC.test')
+        print('IO test VXC/VSC: pass')
 
     @property
     def vscg(self):
@@ -196,44 +242,129 @@ class v_file:
     @vscg.setter
     def vscg(self, value):
         assert self._read # Only allow setting if the file has been read
+        assert value.shape == self._vscg.shape 
         self.old_vcsg = self._vscg
-        print('reset vscg')
         self._vscg = value
         if np.allclose(self.old_vcsg, self._vscg):
-            print('vscg is the same')
+            print('resetting: vscg is the same')
         else:
-            print('vscg is different')
+            print('resetting: vscg is different')
         self._set_vcsg = True
 
 
-class wfn_file:
+class wfn:
     def __init__(self, wfn_file_h5):
-        pass
+        # Open the file
+        self.wfn_file_h5 = wfn_file_h5
+        self.wfn_file = h5.File(wfn_file_h5, 'r')
+
+        # Get the names of the datasets
+        h5ls = H5ls()
+        self.wfn_file.visititems(h5ls)   
+        self.names = h5ls.names
+
+        # Get the header information
+        self._read_header = False
+        self.crystal = {}
+        self.gspace = {}
+        self.kpoints = {}
+        self.symmetry = {}
+        self.wfns = {}
+        self.read_header()
+
+        # Close the file
+        self.wfn_file.close()
+
+    def read_header(self):
+        for name in self.names:
+            if 'crystal' in name.split('/'):
+                self.crystal[name.split('/')[-1]] = self.wfn_file[name][()]
+            elif 'gspace' in name.split('/'):
+                self.gspace[name.split('/')[-1]] = self.wfn_file[name][()]
+            elif 'kpoints' in name.split('/'):
+                self.kpoints[name.split('/')[-1]] = self.wfn_file[name][()]
+            elif 'symmetry' in name.split('/'):
+                self.symmetry[name.split('/')[-1]] = self.wfn_file[name][()]
+            elif 'wfns/gvecs' == name:
+                self.wfns[name.split('/')[-1]] = self.wfn_file[name][()]
+            else:
+                pass
+        cum_sum = np.cumsum(np.concatenate((np.array([0]),self.kpoints['ngk'])))
+        self.nkg_slice = [[cum_sum[i], cum_sum[i+1]] for i in range(self.kpoints['nrk'])]
+        self._read_header = True
+
+        self.nk = self.kpoints['occ'].shape[1]
+        self.nb = self.kpoints['occ'].shape[2]
+        self.g_g = self.wfns['gvecs']
+    
+    # def get_wfn_k(self, ik):
+    #     assert self._read_header
+    #     wfn_file = h5.File(self.wfn_file_h5, 'r')
+
+    #     # wfn_k = 
+
+    #     wfn_file.close()
+    
+    # def get_wfn_g(self, ):
+    #     assert self._read_header
+    #     wfn_file = h5.File(self.wfn_file_h5, 'r')
+    #     wfn_g = wfn_file['wfns/coeffs'] # (nband, nspin, nk*nkg, cplx=2)
+    #     wfn_file.close()
+
+    #     return wfn_g, self.nkg_slice
+
+    @time_watch
+    def get_wfn_g_in_grid(self):
+
+        assert self._read_header
+        # Be careful with the shape of the wavefunction coefficients, 
+        f = h5.File(self.wfn_file_h5, 'r')
+        self.wfns['coeffs'] = f['wfns/coeffs'][()]
+        f.close()
+
+        FFTgrid = self.gspace['FFTgrid']
+        self.wfn_nk_ggrid = np.zeros((self.nb, self.nk, FFTgrid[0], FFTgrid[1], FFTgrid[2]), dtype='c16')
+        _, g_g_full = np.divmod(self.g_g, FFTgrid)
+
+        print('Raw Wavefunction:', self.wfns['coeffs'].nbytes/1024/1024, 'MB')
+        for ib in tqdm(range(self.nb), desc='Building Wavefunction in Full G-grid'):
+            wfn_b = self.wfns['coeffs'][ib,0,:,0] + self.wfns['coeffs'][ib,0,:,1]*1j
+            for ik in range(self.nk):
+                gx = g_g_full[self.nkg_slice[ik][0]:self.nkg_slice[ik][1], 0]
+                gy = g_g_full[self.nkg_slice[ik][0]:self.nkg_slice[ik][1], 1]
+                gz = g_g_full[self.nkg_slice[ik][0]:self.nkg_slice[ik][1], 2]
+                self.wfn_nk_ggrid[ib,ik,gx,gy,gz] = wfn_b[self.nkg_slice[ik][0]:self.nkg_slice[ik][1]]
+        # print size of the wavefunction in term of MB
+        print('Full G-grid wavefunction:', self.wfn_nk_ggrid.nbytes/1024/1024, 'MB')
+
+        # vlocg_full[g_g_full[:, 0], g_g_full[:, 1], g_g_full[:, 2]] = self.vscg
+        # vlocr = np.fft.ifftn(vlocg_full, s=FFTgrid, norm='forward')
+        # assert np.max(np.abs(vlocr.imag)) < 1e-6
+        # vlocr = vlocr.real
 
 
-# class eqp(eqp_file):
-#     def __init__(self, eqp_file):
-#         super().__init__(eqp_file)
+def eqp2vxc(eqp_dat, vxc_file):
+    eqp = eqp_file(eqp_dat)
+    vxc = vloc(vxc_file)
 
-#     def eqp2vxc(self,):
-#         pass
+    # TODO:
+    vxc.vscg = ...
+
+    vxc.write_v()
+
+    return 
+
 
 
 if __name__ == '__main__':
-    eqp_dat = './test/eqp.dat'
-    eqp = eqp_file(eqp_dat)
+    eqp = eqp_file('./test_data/eqp.dat')
 
-    # wfn = wfn_file('./test/wfn.h5')
+    vxc = vloc('./test_data/VXC')
 
-    vxc = v_file('./test/VXC')
-    vxc.vscg = vxc.vscg + 10
-    vxc.write_v()
+    wf = wfn('./test_data/wfn_k.h5')
+    wf.get_wfn_g_in_grid()
 
-    vxc_new = v_file('./test/VXC.new')
 
-    print('\n')
-    for attr in dir(vxc_new):
-        if not attr.startswith('_'):
-            print(attr, getattr(vxc, attr))
-            print(attr, getattr(vxc_new, attr))
-            print('\n')
+
+            # we have no return so that the visit function is recursive
+
