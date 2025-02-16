@@ -4,7 +4,7 @@ import h5py as h5
 import os
 import matplotlib.pyplot as plt
 from scipy.io import FortranFile
-from utils import H5ls, time_watch
+from utils import H5ls, time_watch, memory_watch, eV2Ry
 from tqdm import tqdm
 class eqp_file():
     """
@@ -90,7 +90,9 @@ class vloc:
 
     def read_v(self):        
         assert not self._read
-        rec = self.file.read_record('S1').tobytes().decode()
+        rec = self.file.read_record('S1')
+        self.stitle_sdate_stime = rec.copy()
+        rec = rec.tobytes().decode()
         self.stitle = rec[0:32].rstrip(' ')
         self.sdate = rec[32:64].rstrip(' ')
         self.stime = rec[64:96].rstrip(' ')
@@ -146,13 +148,17 @@ class vloc:
         self.ng_g = self.file.read_record('i4').item() # number of charge_density g-vecs
         self.g_g = self.file.read_record('i4').reshape(self.ng_g, 3)
         # print(nrecord, ng_g)
-        
+
         nrecord = self.file.read_record('i4').item()
         self.ng_g = self.file.read_record('i4').item() # number of charge_density g-vecs
         self._vscg = self.file.read_record('c16').reshape(self.nsf, self.ng_g) * 0.5 # Ry->Ha
 
         self._read = True
+        FFTgrid = np.array([self.nr1, self.nr2, self.nr3])
+        _, self.g_g_full = np.divmod(self.g_g, FFTgrid)
+        self.FFTgrid = FFTgrid
         self.file.close()
+
         
     def write_v(self, outfile=None):
         assert self._read
@@ -162,12 +168,14 @@ class vloc:
             outfile = self.fname + '.new'
         with FortranFile(outfile, 'w') as f:
             # Write header information
-            rec = (self.stitle.ljust(32) + self.sdate.ljust(32) + self.stime.ljust(32)).encode()
-            f.write_record(np.array(list(rec), dtype='S1'))
+            # rec = (self.stitle.ljust(32) + self.sdate.ljust(32) + self.stime.ljust(32)).encode()
+            # rec = (self.stitle.ljust(32)+ self.sdate.ljust(32) + self.stime.ljust(32)).encode()
+            # f.write_record(np.array(list(rec), dtype='S1'))
+            f.write_record(self.stitle_sdate_stime)
             
             # Write integer and float metadata
             f.write_record(np.array([self.nsf, self.ng_g, self.ntran, self.cell_symmetry, self.nat], dtype='i4'),
-                           np.array([self.ecutrho], dtype='f8'))
+                        np.array([self.ecutrho], dtype='f8'))
             f.write_record(np.array([self.nr1, self.nr2, self.nr3], dtype='i4'))
             
             # Write lattice and atomic data
@@ -191,17 +199,15 @@ class vloc:
             
             f.write_record(np.array([1], dtype='i4'))  # Another dummy value
             f.write_record(np.array([self.ng_g], dtype='i4'))
-            # print(self.vscg)
-            f.write_record((self._vscg*2).astype('c16'))
+            # print(self.vscg) 
+            f.write_record((self._vscg*2).astype('c16')) # Ha->Ry
 
     def get_vlocr(self, plotXY=False):
         assert self._read
         self.check_reset()
-        FFTgrid = np.array([self.nr1, self.nr2, self.nr3])
-        vlocg_full = np.zeros(FFTgrid, dtype='c16')
-        _, g_g_full = np.divmod(self.g_g, FFTgrid)
-        vlocg_full[g_g_full[:, 0], g_g_full[:, 1], g_g_full[:, 2]] = self.vscg
-        vlocr = np.fft.ifftn(vlocg_full, s=FFTgrid, norm='forward')
+        vlocg_full = np.zeros(self.FFTgrid, dtype='c16')
+        vlocg_full[self.g_g_full[:, 0], self.g_g_full[:, 1], self.g_g_full[:, 2]] = self.vscg
+        vlocr = np.fft.ifftn(vlocg_full, s=self.FFTgrid, norm='forward')
         assert np.max(np.abs(vlocr.imag)) < 1e-6
         vlocr = vlocr.real
         if plotXY:
@@ -213,6 +219,8 @@ class vloc:
             plt.title(f'Vlocr Reset: {self._set_vcsg}')
             plt.show()
         # print('vlocr shape:', vlocr.shape)
+        self.vlocg_full = vlocg_full
+        self.vlocr = vlocr
         return vlocr
 
     def check_reset(self):
@@ -229,9 +237,14 @@ class vloc:
         self.write_v('./VXC.test')
         v_test = vloc('./VXC.test')
         for attr in dir(v_test):
+            # print(attr, getattr(self, attr), getattr(v_test, attr))
             if not attr.startswith('_'):
                 if type(getattr(self, attr)) == np.ndarray:
-                    assert np.allclose(getattr(self, attr), getattr(v_test, attr))
+                    # dtype != s1
+                    if getattr(self, attr).dtype != 'S1':
+                        assert np.allclose(getattr(self, attr), getattr(v_test, attr))
+                    # assert np.allclose(getattr(self, attr), getattr(v_test, attr))
+                    pass
         os.remove('./VXC.test')
         print('IO test VXC/VSC: pass')
 
@@ -296,27 +309,15 @@ class wfn:
         self.nk = self.kpoints['occ'].shape[1]
         self.nb = self.kpoints['occ'].shape[2]
         self.g_g = self.wfns['gvecs']
+        self.el = self.kpoints['el'][0]
+        self.k_weights = self.kpoints['w']
+        self.FFTgrid = self.gspace['FFTgrid']
     
-    # def get_wfn_k(self, ik):
-    #     assert self._read_header
-    #     wfn_file = h5.File(self.wfn_file_h5, 'r')
-
-    #     # wfn_k = 
-
-    #     wfn_file.close()
-    
-    # def get_wfn_g(self, ):
-    #     assert self._read_header
-    #     wfn_file = h5.File(self.wfn_file_h5, 'r')
-    #     wfn_g = wfn_file['wfns/coeffs'] # (nband, nspin, nk*nkg, cplx=2)
-    #     wfn_file.close()
-
-    #     return wfn_g, self.nkg_slice
-
     @time_watch
+    @memory_watch()
     def get_wfn_g_in_grid(self):
-
         assert self._read_header
+        print('Loading wfn.h5...')
         # Be careful with the shape of the wavefunction coefficients, 
         f = h5.File(self.wfn_file_h5, 'r')
         self.wfns['coeffs'] = f['wfns/coeffs'][()]
@@ -326,7 +327,7 @@ class wfn:
         self.wfn_nk_ggrid = np.zeros((self.nb, self.nk, FFTgrid[0], FFTgrid[1], FFTgrid[2]), dtype='c16')
         _, g_g_full = np.divmod(self.g_g, FFTgrid)
 
-        print('Raw Wavefunction:', self.wfns['coeffs'].nbytes/1024/1024, 'MB')
+        # print('Raw Wavefunction:', self.wfns['coeffs'].nbytes/1024/1024, 'MB')
         for ib in tqdm(range(self.nb), desc='Building Wavefunction in Full G-grid'):
             wfn_b = self.wfns['coeffs'][ib,0,:,0] + self.wfns['coeffs'][ib,0,:,1]*1j
             for ik in range(self.nk):
@@ -334,37 +335,37 @@ class wfn:
                 gy = g_g_full[self.nkg_slice[ik][0]:self.nkg_slice[ik][1], 1]
                 gz = g_g_full[self.nkg_slice[ik][0]:self.nkg_slice[ik][1], 2]
                 self.wfn_nk_ggrid[ib,ik,gx,gy,gz] = wfn_b[self.nkg_slice[ik][0]:self.nkg_slice[ik][1]]
-        # print size of the wavefunction in term of MB
-        print('Full G-grid wavefunction:', self.wfn_nk_ggrid.nbytes/1024/1024, 'MB')
+        # print('Full G-grid wavefunction:', self.wfn_nk_ggrid.nbytes/1024/1024, 'MB')
+        # Norm Check
 
-        # vlocg_full[g_g_full[:, 0], g_g_full[:, 1], g_g_full[:, 2]] = self.vscg
-        # vlocr = np.fft.ifftn(vlocg_full, s=FFTgrid, norm='forward')
-        # assert np.max(np.abs(vlocr.imag)) < 1e-6
-        # vlocr = vlocr.real
+def eqp2vsc_hat(eqp_dat='./test_data/eqp_full.dat', vsc_file='./test_data/VSC', wfn_file='./test_data/wfn_full.h5'): 
+    nqp = 8 # number of quasiparticle energies considered
 
-
-def eqp2vxc(eqp_dat, vxc_file):
     eqp = eqp_file(eqp_dat)
-    vxc = vloc(vxc_file)
+    vsc = vloc(vsc_file)
+    wf = wfn(wfn_file)
+    wf.get_wfn_g_in_grid()
 
-    # TODO:
-    vxc.vscg = ...
+    # corr_nk = np.zeros((wf.nb, wf.nk))
+    vxc_corr_full_r = np.zeros((wf.FFTgrid))
+    for ik in tqdm(range(wf.nk), desc='Building Sigma-Vxc in real space'):
+        # eqp.band_index start with 1
+        qp_index = eqp.band_index[ik,:nqp]-1
+        qp = eqp.data_GW[ik,:nqp] - eqp.data_DFT[ik,:nqp] # Sigma -Vxc
+        # corr_nk[qp_index, ik] = eqp.data_GW[ik] - eqp.data_DFT[ik] # Sigma -Vxc
+        wf_qp_g = wf.wfn_nk_ggrid[qp_index, ik] # (nb, ng)
+        wf_qp_r = np.fft.ifftn(wf_qp_g, s=wf.FFTgrid, norm='forward', axes=(1,2,3)) / np.sqrt(np.prod(wf.FFTgrid))
+        vxc_corr_full_r += np.einsum('b, bxyz->xyz', qp, abs(wf_qp_r)**2) * wf.k_weights[ik] * eV2Ry  # eV -> Ry
 
-    vxc.write_v()
-
-    return 
-
+    # vxc.get_vlocr(plotXY=True)
+    vxc_corr_full_g = np.fft.fftn(vxc_corr_full_r, s=wf.FFTgrid, norm='backward') / np.sqrt(np.prod(wf.FFTgrid))
+    vxc_corr_g = vxc_corr_full_g[vsc.g_g_full[:, 0], vsc.g_g_full[:, 1], vsc.g_g_full[:, 2]]
+    vsc.vscg = vxc_corr_g + vsc.vscg
+    vsc.write_v()
+    # print('vlocr shape:', vlocr.shape)
 
 
 if __name__ == '__main__':
-    eqp = eqp_file('./test_data/eqp.dat')
-
-    vxc = vloc('./test_data/VXC')
-
-    wf = wfn('./test_data/wfn_k.h5')
-    wf.get_wfn_g_in_grid()
-
-
-
-            # we have no return so that the visit function is recursive
-
+    eqp2vsc_hat(vsc_file='./test_data/VXC')
+    # vxc = vloc('./test_data/VXC')
+    # vxc.IO_test()

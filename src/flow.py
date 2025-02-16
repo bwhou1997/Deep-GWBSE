@@ -286,18 +286,18 @@ class DFT_GW_HPRO_Flow(Workflow):
         self.wfntask_ush = self.wfntask_ksh
 
         fnames = dict(VSC_fname = self.scftask.dirname+'/VSC',
-                      vxc_fname = self.wfntask_ksh.dirname+'/VXC',
-                      wfn_fname = self.wfntask_ksh.wfn_fname,
-                      wfnq_fname = self.wfntask_qsh.wfn_fname,
-                      wfn_co_fname = self.wfntask_ush.wfn_fname,
-                      rho_fname = self.wfntask_ush.rho_fname,
+                    vxc_fname = self.wfntask_ksh.dirname+'/VXC',
+                    wfn_fname = self.wfntask_ksh.wfn_fname,
+                    wfnq_fname = self.wfntask_qsh.wfn_fname,
+                    wfn_co_fname = self.wfntask_ush.wfn_fname,
+                    rho_fname = self.wfntask_ush.rho_fname,
                     # vxc_dat_fname = self.wfntask_ush.vxc_dat_fname,
-                      wfn_band_fname = self.wfnband_task.wfn_fname,
+                    wfn_band_fname = self.wfnband_task.wfn_fname,
                     )
         
         if kwargs.get('use_NNS', True):
             fnames.update(dict(wfn_nns_dir=self.wfntask_q_nns.dirname,
-                      wfn_nns_fname=self.wfntask_q_nns.wfn_fname))
+                    wfn_nns_fname=self.wfntask_q_nns.wfn_fname))
 
         return fnames
     
