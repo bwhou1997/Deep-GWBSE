@@ -17,15 +17,22 @@ import re
 import json
 import copy
 
+"""
+This file only defines workflow for single material:
+Input: only one .cif structure file
+Output:
+"""
 
-
-"""This file is modified from BGWpy"""
 class DFT_GW_HPRO_Flow(Workflow):
     """
-    A one-shot GW workflow made of the following tasks:
-        - DFT charge density, wavefunctions and eigenvalues
-        - Dielectric Matrix (Epsilon and Epsilon^-1)
-        - Self-energy (Sigma)
+    This class is modified from BGWpy
+    Features:
+    - DFT calculations using Quantum Espresso
+    - GW calculations using BerkeleyGW (optional)
+    - Aobasis calculations using SIESTA
+    - HPRO calculations using HPRO
+    Input: see ./config/single_mat_config.json
+    Output: workflow directory
     """
 
     def __init__(self, **kwargs):
@@ -146,36 +153,88 @@ class DFT_GW_HPRO_Flow(Workflow):
             self.n_z_valence = None if self.n_z_valence == 0 else self.n_z_valence
 
         # update band_index_min & band_index_max
-        assert self.n_z_valence != None
+        assert self.n_z_valence != None, "n_z_valence is not found"
         if kwargs.get('nvbnd_sigma',None):
             kwargs.update({'ibnd_min': max(1, self.n_z_valence - kwargs.get('nvbnd_sigma',2))})
             kwargs.update({'ibnd_max': self.n_z_valence + kwargs.get('ncbnd_sigma',2)})
 
+        assert is_dft_flavor_espresso(self.dft_flavor), "Only Quantum Espresso is supported for DFT calculations."
         #========================================FLOW========================================#
         # ==== DFT calculations ==== #
 
         # Quantum Espresso flavor
-        assert is_dft_flavor_espresso(self.dft_flavor), "Only Quantum Espresso is supported for DFT calculations."
-        fnames = self.make_dft_tasks_espresso(**kwargs)
-        kwargs.update(fnames)
+        if kwargs.get('GW', False):
+            fnames = self.make_dft_tasks_espresso(**kwargs)
+            kwargs.update(fnames)
+        else:
+            fnames = self.make_dft_tasks_espresso_DFTonly(**kwargs)
+            kwargs.update(fnames)
         
         # ==== Aobasis(SIESTA) ==== #
-        self.aobasis_task = AobasisTask(
-             dirname = pjoin(self.dirname, '07-aobasis'),
-             **kwargs)
-        self.add_task(self.aobasis_task)
-        kwargs.update(dict(aobasis_dirname=self.aobasis_task.dirname))
+        aobasis_dirname = self.make_ao_basis(**kwargs)
+        kwargs.update(aobasis_dirname)
 
         # ==== GW calculations ==== #
-        self.make_gw_tasks_bgw(**kwargs)
+        if kwargs.get('GW', False):
+            self.make_gw_tasks_bgw(**kwargs)
  
         # ==== SIESTA/HPRO ==========
-        self.hpro_task = HPROTask(
-            dirname = pjoin(self.dirname, '16-reconstruction'),
-             **kwargs)
-        self.add_task(self.hpro_task)
+        self.make_hpro_task(**kwargs)
+
+    def make_dft_tasks_espresso_DFTonly(self, **kwargs):
+        """
+        Initialize all DFT tasks using Quantum Espresso.
+        Return a dictionary of file names.
+        """
+        if kwargs.get('SOC', False):
+            kwargs['variables'] = kwargs.get('variables', {})
+            kwargs['variables']['system'] = kwargs['variables'].get('system', {})
+            kwargs['variables']['system'].update({'lspinorb': True, 'noncolin':True})
 
 
+        if 'charge_density_fname' in kwargs:
+            if 'data_file_fname' not in kwargs:
+                raise Exception("Error, when providing charge_density_fname, data_file_fname is required.")
+
+        else:
+            self.scftask = QeScfTask(
+                dirname = pjoin(self.dirname, '01-density'),
+                ngkpt = self.ngkpt,
+                kshift = self.kshift,
+                **kwargs)
+
+            self.add_task(self.scftask)
+
+            # Add a scf2bgw task for scf (HPRO)
+            self.scf2bgwtask = Qe2BgwTask(
+                dirname = self.scftask.dirname,
+                ngkpt = self.ngkpt,
+                kshift = self.kshift,
+                rhog_flag = True,
+                **kwargs)
+            self.add_task(self.scf2bgwtask, merge=False)
+                
+            kwargs.update(
+                charge_density_fname = self.scftask.charge_density_fname,
+                data_file_fname = self.scftask.data_file_fname,
+                spin_polarization_fname = self.scftask.spin_polarization_fname)
+            
+        self.wfnband_task = QeBgwFlow_band(
+                dirname = pjoin(self.dirname, '05-band'),
+                ngkpt = self.ngkpt,
+                kshift = self.kshift,
+                nbnd = self.n_z_valence + 12,
+                **kwargs
+        )
+        self.add_task(self.wfnband_task)
+
+
+        fnames = dict(VSC_fname = self.scftask.dirname+'/VSC',
+                    wfn_band_fname = self.wfnband_task.wfn_fname,
+                    )
+
+        return fnames
+    
     def make_dft_tasks_espresso(self, **kwargs):
         """
         Initialize all DFT tasks using Quantum Espresso.
@@ -360,6 +419,20 @@ class DFT_GW_HPRO_Flow(Workflow):
         self.truncation_flag = kwargs.get('truncation_flag')
         self.sigma_kpts = kwargs.get('sigma_kpts')
 
+    def make_ao_basis(self, **kwargs):
+        self.aobasis_task = AobasisTask(
+             dirname = pjoin(self.dirname, '07-aobasis'),
+             **kwargs)
+        self.add_task(self.aobasis_task)
+        # kwargs.update(dict(aobasis_dirname=self.aobasis_task.dirname))
+        return dict(aobasis_dirname=self.aobasis_task.dirname)
+
+    def make_hpro_task(self, **kwargs):
+        self.hpro_task = HPROTask(
+            dirname = pjoin(self.dirname, '16-reconstruction'),
+             **kwargs)
+        self.add_task(self.hpro_task)
+
     def summary(self, verbose):
         pass
 
@@ -396,11 +469,8 @@ def check_pseudo(pseudo_dir_src='./from_oncvpsp/', pseudos=['S.upf','H.upf']):
     # print(pseudos_z_valence)
     return pseudos_z_valence
 
-
 if __name__ == "__main__":
     read_from_existing = False
-    # config_path = "./flow-MoSe2/config1.json"
-    # config_path = "./flow-hBN/config1.json"
     config_path = './config/single_mat_config.json'
     if read_from_existing: # allow to read config from existing file
         assert config_path
@@ -421,23 +491,23 @@ if __name__ == "__main__":
             hpro = '/pscratch/sd/b/bwhou/12-deepGWBSE/Deep-GWBSE/HPRO/src/calc.py',
             PWFLAGS='-nk 16',
             PW='pw.x',
-            dirname='flow-Ca', ###
-            stru_file = './fp-input/mat-8/stru.cif', ###
+            prefix = 'hBN', ###
+            dirname='flow-2', ###
+            stru_file = './fp-input/mat-3/stru.cif', ###
             ecuteps = 20.0,
             ncbnd_sigma = 4,
             nvbnd_sigma = 5, 
-            ngkpt = [12,12, 1],
+            ngkpt = [12, 12, 1],
             qshift = [.001,.0,.0],
             nbnd = 100,
             ecutwfc = 75,
-            prefix = 'C', ###
             pseudo_dir_source = './from_oncvpsp/',
             basis_set_siesta = 'DZP',
             mesh_cutoff_siesta = 320,
             dm_tolerance_siesta = 1e-6, 
             max_scf_iter_siesta = 300,
             epsilon_extra_lines=['restart','dont_check_norms','cell_slab_truncation'],
-            sigma_extra_lines=['dont_check_norms','frequency_dependence 1','screening_semiconductor','cell_slab_truncation'],
+            sigma_extra_lines=['dont_check_norms','frequency_dependence 1','screening_semiconductor','cell_slab_truncation','dont_use_vxcdat'],
             use_NNS = True,
             pseudobands = True, # assert ture if parabands is ture
             N_P_cond = 10,
@@ -447,6 +517,7 @@ if __name__ == "__main__":
             nparaband = 10000,
             kpath_band = ['0 0 0 20','0.5 0 0 20','0.33333 0.33333 0 20', '0 0 0 20', '-0.333333 -0.33333 0 20'],
             SOC = False,
+            GW = True,
         )
 
     flow.write()

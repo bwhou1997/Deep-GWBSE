@@ -21,6 +21,7 @@
         "ecutwfc": 75,
         "SOC": false,
     "3_BGW_SETTING": "BGW settings",
+        "GW": false, 
         "use_NNS": true,
         "pseudobands": true,
         "N_P_cond": 10,
@@ -40,7 +41,8 @@
             "dont_check_norms",
             "frequency_dependence 1",
             "screening_semiconductor",
-            "cell_slab_truncation"
+            "cell_slab_truncation",
+            "dont_use_vxcdat"
         ],
     "4_SIESTA": "SIESTA settings",
         "basis_set_siesta": "DZP",
