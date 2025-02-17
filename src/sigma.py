@@ -364,8 +364,35 @@ def eqp2vsc_hat(eqp_dat='./test_data/eqp_full.dat', vsc_file='./test_data/VSC', 
     vsc.write_v()
     # print('vlocr shape:', vlocr.shape)
 
-
+from sklearn.linear_model import Ridge
+ridge = Ridge(alpha=0.01, solver='lsqr')
 if __name__ == '__main__':
-    eqp2vsc_hat(vsc_file='./test_data/VXC')
-    # vxc = vloc('./test_data/VXC')
-    # vxc.IO_test()
+    # eqp2vsc_hat(vsc_file='./test_data/VXC')
+    nqp = 8
+    eqp = eqp_file('./test_data/eqp_full.dat')
+    vsc = vloc('./test_data/VSC')
+    wf = wfn('./test_data/wfn_full.h5')
+    wf.get_wfn_g_in_grid()
+
+    vxc_corr_full_r = np.zeros(np.prod(wf.FFTgrid))
+    for ik in tqdm(range(wf.nk), desc='Building Sigma-Vxc in real space'):
+        # eqp.band_index start with 1
+        qp_index = eqp.band_index[ik,:nqp]-1
+        qp = eqp.data_GW[ik,:nqp] - eqp.data_DFT[ik,:nqp] # Sigma -Vxc
+        # corr_nk[qp_index, ik] = eqp.data_GW[ik] - eqp.data_DFT[ik] # Sigma -Vxc
+        wf_qp_g = wf.wfn_nk_ggrid[qp_index, ik] # (nb, ng)
+        wf_qp_nr = np.fft.ifftn(wf_qp_g, s=wf.FFTgrid, norm='forward', axes=(1,2,3)) / np.sqrt(np.prod(wf.FFTgrid))
+
+        # <r|Sigma'|r> = wf_qp_rn * <n|Sigma|n>, where Sigma' is an approximation of Sigma
+        wf_qp_nr_ = ((abs(wf_qp_nr)**2).reshape(nqp,-1))
+        # wf_qp_rn_pinv = np.linalg.pinv(wf_qp_nr_)
+        # vxc_corr_full_r += np.einsum('rn, n->r',  wf_qp_rn_pinv, qp) * wf.k_weights[ik] * eV2Ry 
+        ridge.fit(wf_qp_nr_, qp)
+        vxc_corr_full_r += ridge.coef_ * wf.k_weights[ik] * eV2Ry
+
+
+    # vxc_corr_full_r = vxc_corr_full_r.reshape(wf.FFTgrid) # eV -> Ry
+    # vxc_corr_full_g = np.fft.fftn(vxc_corr_full_r, s=wf.FFTgrid, norm='backward') / np.sqrt(np.prod(wf.FFTgrid))
+    # vxc_corr_g = vxc_corr_full_g[vsc.g_g_full[:, 0], vsc.g_g_full[:, 1], vsc.g_g_full[:, 2]]
+    # vsc.vscg = vxc_corr_g + vsc.vscg
+    # vsc.write_v()
