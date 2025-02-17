@@ -3,7 +3,7 @@ from from_bgwpy.core import Workflow
 import os
 import json
 from tqdm import tqdm
-
+import copy
 #"dirname": "./flow-hBN",
 #"stru_file": "./fp-input/mat-5/stru.cif",
 #"prefix": "hBN",
@@ -17,33 +17,37 @@ class Mat_Flows(Workflow):
             |--- mat-2/stru.cif
             |--- ...
     """
-    def __init__(self, flow ,**kwargs): # todo: add a workflow here
+    def __init__(self, flow=DFT_GW_HPRO_Flow, **kwargs): # todo: add a workflow here
+
+        # Get config
+        input_dir_config = self.parse_config(**kwargs)
+        kwargs=input_dir_config
         super().__init__(**kwargs)
+
+        # Set up the workflow
         self.dirname = kwargs.pop('dirname', None)
         self.flow = flow
 
-        # Get config for each material
-        input_dir_config = self.parse_input_dir(**kwargs)
-        kwargs.update(input_dir_config)
 
         # speicfy "dirname", "stru_file", "prefix" for each material
         # add task 
         for mat_stru_dir in self.mat_stru_dir:
             print(f"Adding flow for {mat_stru_dir}")
             self.add_task(self.flow(dirname=os.path.join(self.dirname, mat_stru_dir),
-                                           stru_file=os.path.join(kwargs['input_dir'], mat_stru_dir, 'stru.cif'),
+                                           stru_file=os.path.join(kwargs['stru_dir'], mat_stru_dir, 'stru.cif'),
                                            prefix=mat_stru_dir,
                                            **kwargs))
 
-    def parse_input_dir(self, **kwargs):
+    def parse_config(self, **kwargs):
         """
         Parse the input directory
         """
-        assert 'input_dir' in kwargs, "input_dir is required"
-        input_dir = kwargs['input_dir']
-        config_file = os.path.join(input_dir, 'fpconfig.json')
-        config = json.load(open(config_file, 'r'))
-        self.mat_stru_dir = [d for d in os.listdir(input_dir) if os.path.isdir(os.path.join(input_dir, d))]
+        assert 'configfname' in kwargs, "input_dir is required"
+        config = json.load(open(kwargs['configfname'], 'r'))
+        assert 'stru_dir' in config, "input_dir is required"
+        stru_dir = config['stru_dir']
+        self.config_input = copy.deepcopy(config)
+        self.mat_stru_dir = [d for d in os.listdir(stru_dir) if os.path.isdir(os.path.join(stru_dir, d))]
         assert len(self.mat_stru_dir) > 0, "No structure found"
         print(f"{len(self.mat_stru_dir)} structures found")
         self._input_parsed = True
@@ -56,11 +60,10 @@ class Mat_Flows(Workflow):
         Write the workflow
         """
         super().write()
-
+        with open(os.path.join(self.dirname, 'fpconfig.json'), 'w') as f:
+            json.dump(self.config_input, f, indent=4)
 
 if __name__ == "__main__":
     # Run the workflow
-    flows = Mat_Flows(dirname='flows',
-                      input_dir='fp-input',
-                      flow=DFT_GW_HPRO_Flow)
+    flows = Mat_Flows(configfname='./flows/fpconfig.json')
     flows.write()

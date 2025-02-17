@@ -470,7 +470,7 @@ def check_pseudo(pseudo_dir_src='./from_oncvpsp/', pseudos=['S.upf','H.upf']):
     return pseudos_z_valence
 
 if __name__ == "__main__":
-    read_from_existing = False
+    read_from_existing = True
     config_path = './config/single_mat_config.json'
     if read_from_existing: # allow to read config from existing file
         assert config_path
