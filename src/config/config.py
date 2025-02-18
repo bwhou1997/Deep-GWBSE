@@ -4,6 +4,7 @@ import ase.io
 from ase import Atoms
 import tqdm
 
+DeprecationWarning("This file is deprecated and should be removed")
 class single_mat:
     """
     information of each material directory

@@ -65,5 +65,5 @@ class Mat_Flows(Workflow):
 
 if __name__ == "__main__":
     # Run the workflow
-    flows = Mat_Flows(configfname='./flows/fpconfig.json')
+    flows = Mat_Flows(configfname='./config/fpconfig.json')
     flows.write()

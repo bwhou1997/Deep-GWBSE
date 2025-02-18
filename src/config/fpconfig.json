@@ -3,7 +3,7 @@
         "Siesta": "/global/homes/b/bwhou/anaconda3/envs/siesta/bin/siesta",
         "hpro": "/pscratch/sd/b/bwhou/12-deepGWBSE/Deep-GWBSE/HPRO/src/calc.py",
         "pseudo_dir_source": "/pscratch/sd/b/bwhou/12-deepGWBSE/Deep-GWBSE/src/from_oncvpsp",
-        "stru_dir": "./fp-input/",
+        "stru_dir": "../examples/fp-input/",
         "dirname": "./flows",
     "1_MPI_SETTINGS": "MPI settings",
         "mpirun": "srun",

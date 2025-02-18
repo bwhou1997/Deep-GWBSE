@@ -12,7 +12,7 @@ from ase import Atoms
 import ase.io
 import subprocess
 from fptask import AobasisTask, HPROTask, PseudoBandTask, QeBgwFlow_NNS, EpsilonTask_NNS, SigmaTask_NNS, nns_helper_epsilon, ParaBandTask, QeBgwFlow_band, IneqpTask_plot
-from config import fp_config
+# from config import fp_config
 import re
 import json
 import copy
@@ -471,9 +471,9 @@ def check_pseudo(pseudo_dir_src='./from_oncvpsp/', pseudos=['S.upf','H.upf']):
 
 if __name__ == "__main__":
     read_from_existing = True
-    config_path = './config/single_mat_config.json'
+
     if read_from_existing: # allow to read config from existing file
-        assert config_path
+        config_path = './config/single_mat_config.json'
         print('read from existing config file:', config_path)
         with open(config_path, 'r') as f:
             config = json.load(f)
