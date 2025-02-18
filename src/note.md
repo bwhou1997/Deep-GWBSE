@@ -1,10 +1,23 @@
 ## Folder Structure
-Here is the basic workflow
+Here is the general workflow
 ```
-external src──(collect)─>fp-input ──(QE/SIESTA/GW + HPRO)─>─┌── ml-train-set──(ML)─> model
-                                                            └── ml-test-set
+
+Molecule Dynamncse─┐
+      external src───(Collect)─>fp-input ──(QE/SIESTA/GW + HPRO)─>─┌── ml-train-set──(ML)─> model
+               ...─┘                                               └── ml-test-set
 ```
-                                              
+Tweisted-angle study of hBN
+```
+--Path 1--:
+1. Train:
+supercell.cif─(flow.py)─> MD─(md.py)─>fp-input─(flows.py)─> ml_dataset ──(deephe3-xx.py)─> model
+
+2. Use:
+twist.cif───(deephe3-xx.py, diag_plot.py)─> band.png 
+    model─┘
+```
+
+                                           
 ### 1. **fp-input** folder
 The fp-input folder serves as the starting point for the workflow. It contains the configuration, crystal structures, and pseudopotential files necessary for first-principles calculations. The structure is organized as follows:
 ```bash
