@@ -1,3 +1,5 @@
+#!/usr/bin/env python
+
 from __future__ import print_function
 
 from os.path import join as pjoin
@@ -477,16 +479,26 @@ def check_pseudo(pseudo_dir_src='./from_oncvpsp/', pseudos=['S.upf','H.upf']):
     return pseudos_z_valence
 
 if __name__ == "__main__":
-    read_from_existing = True
 
+    import argparse
+    parser = argparse.ArgumentParser(description='Create a workflow for a single material.')
+    parser.add_help = True
+    parser.add_argument('-c', '--config', type=str, default='./config/single_mat_config.json', help='input config file')
+    args = parser.parse_args()
+    print(args.config)
+
+    assert os.path.exists(args.config), "config file not found"
+
+    read_from_existing = True
     if read_from_existing: # allow to read config from existing file
-        config_path = './config/single_mat_config.json'
+        # config_path = './config/single_mat_config.json'
+        config_path = args.config
         print('read from existing config file:', config_path)
         with open(config_path, 'r') as f:
             config = json.load(f)
         flow = DFT_GW_HPRO_Flow(**config)
 
-    else:
+    else: # used for debugging
         print('create a new config file')
         flow = DFT_GW_HPRO_Flow(
             mpirun='srun',

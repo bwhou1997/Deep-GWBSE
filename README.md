@@ -6,6 +6,7 @@ Author: Bowen Hou (bowen.hou@yale.edu)
 
 ## TODO List:
 - NNS + parabands (2025/02/06 done) + inteqp (2025/02/11 done)
+- Checkpoint systems 
 - eqp.dat -> HPRO (working)
   - initial workflow is built
   - debug $\hat{V}_{vsc}$ and $\hat{V}_{vxc}$ (take it back to $\Sigma$, also see self-consistent $\Sigma$)

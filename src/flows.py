@@ -1,3 +1,5 @@
+#!/usr/bin/env python
+
 from flow import DFT_GW_HPRO_Flow
 from from_bgwpy.core import Workflow
 import os
@@ -65,5 +67,15 @@ class Mat_Flows(Workflow):
 
 if __name__ == "__main__":
     # Run the workflow
-    flows = Mat_Flows(configfname='./config/fpconfig.json')
+
+    import argparse
+    parser = argparse.ArgumentParser(description='Create a workflow for a single material.')
+    parser.add_help = True
+    parser.add_argument('-c', '--config', type=str, default='./config/fpconfig.json', help='input config file')
+    args = parser.parse_args()
+    print(args.config)
+
+    assert os.path.exists(args.config), "config file not found"
+
+    flows = Mat_Flows(configfname=args.config)
     flows.write()
