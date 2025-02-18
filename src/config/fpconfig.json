@@ -2,6 +2,8 @@
     "0_PATH": "PATH settings",
         "Siesta": "/global/homes/b/bwhou/anaconda3/envs/siesta/bin/siesta",
         "hpro": "/pscratch/sd/b/bwhou/12-deepGWBSE/Deep-GWBSE/HPRO/src/calc.py",
+        "QE_path":"/pscratch/sd/b/bwhou/software/qe/q-e-qe-6.8/bin",
+        "BGW_path":"/global/homes/b/bwhou/software/BerkeleyGW-master/bin",
         "pseudo_dir_source": "/pscratch/sd/b/bwhou/12-deepGWBSE/Deep-GWBSE/src/from_oncvpsp",
         "stru_dir": "../examples/fp-input/",
         "dirname": "./flows",
@@ -13,14 +15,14 @@
         "nproc_per_node": "",
     "2_QE_SETTING": "DFT (QE) settings",
         "PWFLAGS": "-nk 16",
-        "PW": "pw.x",
+        "DFT_band": true,
         "ngkpt": [12,12,1],
         "qshift": [0.001,0.0,0.0],
         "nbnd": 30,
         "ecutwfc": 75,
         "SOC": false,
     "3_BGW_SETTING": "BGW settings",
-        "GW": false, 
+        "GW": true, 
         "use_NNS": true,
         "pseudobands": true,
         "N_P_cond": 10,
@@ -57,4 +59,3 @@
         ],
     "5_HPRO": "HPRO settings"
     }
-    

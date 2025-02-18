@@ -378,6 +378,7 @@ class QeBgwFlow_band(WfnBgwFlow):
         self.data_file_fname = kwargs['data_file_fname']
         self.spin_polarization_fname = kwargs.get('spin_polarization_fname', 'dummy')
         assert kwargs['kpath_band'] # ["kx ky kz nk", ...]
+        self.prefix = kwargs['prefix']
         for kpt in kwargs['kpath_band']:
             assert len(kpt.split()) == 4
         self.kpath_band = ['K_POINTS crystal_b'] + [str(len(kwargs['kpath_band']))] + kwargs['kpath_band']
@@ -397,6 +398,8 @@ class QeBgwFlow_band(WfnBgwFlow):
         # Wfn 2 BGW
         self.wfnbgwntask = Qe2BgwTask(dirname = self.wfntask.dirname, **kwargs)
         self.wfnbgwntask.runscript.fname = 'pw2bgw.run.sh'
+        self.wfnbgwntask.runscript.append(f"\nBANDS='{kwargs['BANDS']}'")
+        self.wfnbgwntask.runscript.append(' '.join(['$MPIRUN','$BANDS','$PWFLAGS','-in','bands.in','&>','bands.out']))
         self.add_task(self.wfnbgwntask, merge=False)
 
 
@@ -417,6 +420,10 @@ class QeBgwFlow_band(WfnBgwFlow):
         
         with open(self.dirname+"/kpath.txt",'w') as file:
             file.writelines([line + '\n' for line in self.kpath_band])
+        
+        bands_in_file = ['&bands\n',f'  prefix = "{self.prefix}",\n', '  outdir = "./",\n' ,'  filband = "bands.dat",\n','  lsym = .false.,\n','/\n']
+        with open(self.dirname+"/bands.in",'w') as file:
+            file.writelines([line  for line in bands_in_file])
 
 
 

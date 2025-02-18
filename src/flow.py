@@ -16,6 +16,7 @@ from fptask import AobasisTask, HPROTask, PseudoBandTask, QeBgwFlow_NNS, Epsilon
 import re
 import json
 import copy
+import os
 
 """
 This file only defines workflow for single material:
@@ -110,6 +111,13 @@ class DFT_GW_HPRO_Flow(Workflow):
         #========================================Preparation========================================#
         # write all input to a config.json file
         self.config_input = copy.deepcopy(kwargs)
+
+        # Setup QE paths
+        kwargs.update({"PW":pjoin(kwargs.get('QE_path',''),'pw.x')})
+        kwargs.update({"PW2BGW":pjoin(kwargs.get('QE_path',''),'pw2bgw.x')})
+        kwargs.update({"BANDS":pjoin(kwargs.get('QE_path',''),'bands.x')})
+
+        # Setup BGW paths
 
         # add "structure" to kwargs (historic reason)
         kwargs.update({'structure':Structure.from_file(kwargs['stru_file'])})
@@ -219,19 +227,18 @@ class DFT_GW_HPRO_Flow(Workflow):
                 data_file_fname = self.scftask.data_file_fname,
                 spin_polarization_fname = self.scftask.spin_polarization_fname)
             
-        self.wfnband_task = QeBgwFlow_band(
-                dirname = pjoin(self.dirname, '05-band'),
-                ngkpt = self.ngkpt,
-                kshift = self.kshift,
-                nbnd = self.n_z_valence + 12,
-                **kwargs
-        )
-        self.add_task(self.wfnband_task)
+        if kwargs.get('DFT_band', True):
+            self.wfnband_task = QeBgwFlow_band(
+                    dirname = pjoin(self.dirname, '05-band'),
+                    ngkpt = self.ngkpt,
+                    kshift = self.kshift,
+                    nbnd = self.n_z_valence + 12,
+                    **kwargs
+            )
+            self.add_task(self.wfnband_task)
 
 
-        fnames = dict(VSC_fname = self.scftask.dirname+'/VSC',
-                    wfn_band_fname = self.wfnband_task.wfn_fname,
-                    )
+        fnames = dict(VSC_fname = self.scftask.dirname+'/VSC')
 
         return fnames
     
@@ -518,6 +525,7 @@ if __name__ == "__main__":
             kpath_band = ['0 0 0 20','0.5 0 0 20','0.33333 0.33333 0 20', '0 0 0 20', '-0.333333 -0.33333 0 20'],
             SOC = False,
             GW = True,
+            DFT_band = True, # ignore this if GW is True
         )
 
     flow.write()

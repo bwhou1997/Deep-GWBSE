@@ -2,10 +2,12 @@
     "0_PATH": "PATH settings",
         "Siesta": "/global/homes/b/bwhou/anaconda3/envs/siesta/bin/siesta",
         "hpro": "/pscratch/sd/b/bwhou/12-deepGWBSE/Deep-GWBSE/HPRO/src/calc.py",
+        "QE_path":"/pscratch/sd/b/bwhou/software/qe/q-e-qe-6.8/bin",
+        "BGW_path":"/global/homes/b/bwhou/software/BerkeleyGW-master/bin",
         "pseudo_dir_source": "/pscratch/sd/b/bwhou/12-deepGWBSE/Deep-GWBSE/src/from_oncvpsp",
-        "dirname": "./flow-hBN-AAp",
-        "stru_file": "../examples/fp-input/mat-2-hBN-661-AAp/stru.cif",
-        "prefix": "hBN_AAp",
+        "dirname": "./flow-hBN",
+        "stru_file": "../examples/fp-input/mat-5/stru.cif",
+        "prefix": "hBN",
     "1_MPI_SETTINGS": "MPI settings",
         "mpirun": "srun",
         "nproc_flag": "-n",
@@ -14,8 +16,8 @@
         "nproc_per_node": "",
     "2_QE_SETTING": "DFT (QE) settings",
         "PWFLAGS": "-nk 16",
-        "PW": "pw.x",
-        "ngkpt": [6,6,1],
+        "DFT_band": true,
+        "ngkpt": [12,12,1],
         "qshift": [0.001,0.0,0.0],
         "nbnd": 30,
         "ecutwfc": 75,
@@ -58,4 +60,3 @@
         ],
     "5_HPRO": "HPRO settings"
     }
-    

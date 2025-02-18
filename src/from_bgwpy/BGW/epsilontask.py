@@ -105,7 +105,7 @@ class EpsilonTask(BGWTask):
         self.wfnq_fname = kwargs['wfnq_fname']
 
         ex = 'epsilon.cplx.x' if self._flavor_complex else 'epsilon.real.x'
-        self.runscript['EPSILON'] = ex
+        self.runscript['EPSILON'] = os.path.join(kwargs.get("BGW_path",''),ex)
         self.runscript.append('$MPIRUN $EPSILON &> {}'.format(self._output_fname))
 
     @property
