@@ -80,10 +80,10 @@ class Structure:
     def from_bgw(cls, filepath):
         filetype = bgw_filetype(filepath).split('-')[0]
         # filetype = filetype.upper()
-        if filetype not in ['VSC']:
-            raise NotImplementedError(f'Interface to {filetype} not implemented')
-        elif filetype == 'VSC':
-            obj = bgw_vsc(filepath)
+        # if filetype not in ['VSC']:
+        #     raise NotImplementedError(f'Interface to {filetype} not implemented')
+        # elif filetype == 'VSC':
+        obj = bgw_vsc(filepath)
         obj.read_header()
         rprim = obj.alat * obj.at
         atomic_numbers = obj.atomic_number

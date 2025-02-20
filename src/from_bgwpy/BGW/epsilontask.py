@@ -86,6 +86,10 @@ class EpsilonTask(BGWTask):
         extra_lines = kwargs.get('extra_lines',[])
         extra_variables = kwargs.get('extra_variables',{})
 
+        # Bowen Hou 2025/02/12
+        if 'degeneracy_check_override' not in extra_lines:
+            extra_lines.append("degeneracy_check_override")
+
         # Input file
         self.input = EpsilonInput(
             kwargs['ecuteps'],
@@ -101,7 +105,7 @@ class EpsilonTask(BGWTask):
         self.wfnq_fname = kwargs['wfnq_fname']
 
         ex = 'epsilon.cplx.x' if self._flavor_complex else 'epsilon.real.x'
-        self.runscript['EPSILON'] = ex
+        self.runscript['EPSILON'] = os.path.join(kwargs.get("BGW_path",''),ex)
         self.runscript.append('$MPIRUN $EPSILON &> {}'.format(self._output_fname))
 
     @property

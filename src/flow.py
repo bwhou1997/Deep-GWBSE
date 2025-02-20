@@ -1,3 +1,5 @@
+#!/usr/bin/env python
+
 from __future__ import print_function
 
 from os.path import join as pjoin
@@ -5,26 +7,35 @@ from from_bgwpy.config import flavors
 from from_bgwpy.config import is_dft_flavor_espresso, check_dft_flavor
 from from_bgwpy.external import Structure
 from from_bgwpy.core import Workflow
-from from_bgwpy.BGW import EpsilonTask, SigmaTask
+from from_bgwpy.BGW import EpsilonTask, SigmaTask, IneqpTask
 from from_bgwpy.QE import QeScfTask, QeBgwFlow, Qe2BgwTask, QeWfnTask
 from from_bgwpy.DFT import WfnBgwFlow
 from ase import Atoms
 import ase.io
 import subprocess
-from fptask import AobasisTask, HPROTask, PseudoBandTask, QeBgwFlow_NNS, EpsilonTask_NNS, SigmaTask_NNS, nns_helper_epsilon, ParaBandTask
-
-from config import fp_config
+from fptask import AobasisTask, HPROTask, PseudoBandTask, QeBgwFlow_NNS, EpsilonTask_NNS, SigmaTask_NNS, nns_helper_epsilon, ParaBandTask, QeBgwFlow_band, IneqpTask_plot
+# from config import fp_config
 import re
+import json
+import copy
+import os
 
+"""
+This file only defines workflow for single material:
+Input: only one .cif structure file
+Output:
+"""
 
-
-"""This file is modified from BGWpy"""
 class DFT_GW_HPRO_Flow(Workflow):
     """
-    A one-shot GW workflow made of the following tasks:
-        - DFT charge density, wavefunctions and eigenvalues
-        - Dielectric Matrix (Epsilon and Epsilon^-1)
-        - Self-energy (Sigma)
+    This class is modified from BGWpy
+    Features:
+    - DFT calculations using Quantum Espresso
+    - GW calculations using BerkeleyGW (optional)
+    - Aobasis calculations using SIESTA
+    - HPRO calculations using HPRO
+    Input: see ./config/single_mat_config.json
+    Output: workflow directory
     """
 
     def __init__(self, **kwargs):
@@ -99,20 +110,28 @@ class DFT_GW_HPRO_Flow(Workflow):
         max_scf_iter_siesta : int
             Max SCF Iteration steps            
         """
+        #========================================Preparation========================================#
+        # write all input to a config.json file
+        self.config_input = copy.deepcopy(kwargs)
+
+        # Setup QE paths
+        kwargs.update({"PW":pjoin(kwargs.get('QE_path',''),'pw.x')})
+        kwargs.update({"PW2BGW":pjoin(kwargs.get('QE_path',''),'pw2bgw.x')})
+        kwargs.update({"BANDS":pjoin(kwargs.get('QE_path',''),'bands.x')})
+
+        # Setup BGW paths
+
         # add "structure" to kwargs (historic reason)
         kwargs.update({'structure':Structure.from_file(kwargs['stru_file'])})
 
         super(DFT_GW_HPRO_Flow, self).__init__(**kwargs)
 
         kwargs.pop('dirname', None)
-
         self.structure = kwargs['structure']
         self.atoms = ase.io.read(kwargs['stru_file'])
-
         self.ngkpt = kwargs.pop('ngkpt')
         self.kshift = kwargs.pop('kshift', [.0,.0,.0])
         self.qshift = kwargs.pop('qshift', [.0,.0,.0])
-
         nband_aliases = ('nbnd', 'nband')
         for key in nband_aliases:
             if key in kwargs:
@@ -125,8 +144,12 @@ class DFT_GW_HPRO_Flow(Workflow):
 
         self.dft_flavor = check_dft_flavor(kwargs.get('dft_flavor', flavors['dft_flavor']))
 
-        # ==== Check Pseudobands ==== #
-        pseudos_z_valence = check_pseudo(pseudo_dir=kwargs['pseudo_dir'], pseudos=kwargs['pseudos'])
+        # ==== Check PseudoPotential ==== #
+        # make a psuedo dir in dirname
+        self.pp_dirname = pjoin(self.dirname, 'pp')
+        kwargs['pseudo_dir'] = self.pp_dirname
+        kwargs['pseudos'] = [str(atom_ele)+'.upf' for atom_ele in self.structure.elements]
+        pseudos_z_valence = check_pseudo(pseudo_dir_src=kwargs['pseudo_dir_source'], pseudos=kwargs['pseudos'])
         print(pseudos_z_valence)
         self.n_z_valence = 0
         for atom_ele in self.atoms.get_chemical_symbols():
@@ -140,120 +163,97 @@ class DFT_GW_HPRO_Flow(Workflow):
             self.n_z_valence = None if self.n_z_valence == 0 else self.n_z_valence
 
         # update band_index_min & band_index_max
-        assert self.n_z_valence != None
+        assert self.n_z_valence != None, "n_z_valence is not found"
         if kwargs.get('nvbnd_sigma',None):
             kwargs.update({'ibnd_min': max(1, self.n_z_valence - kwargs.get('nvbnd_sigma',2))})
             kwargs.update({'ibnd_max': self.n_z_valence + kwargs.get('ncbnd_sigma',2)})
 
+        assert is_dft_flavor_espresso(self.dft_flavor), "Only Quantum Espresso is supported for DFT calculations."
+        #========================================FLOW========================================#
         # ==== DFT calculations ==== #
 
         # Quantum Espresso flavor
-        assert is_dft_flavor_espresso(self.dft_flavor), "Only Quantum Espresso is supported for DFT calculations."
-        fnames = self.make_dft_tasks_espresso(**kwargs)
-        kwargs.update(fnames)
+        if kwargs.get('GW', False):
+            fnames = self.make_dft_tasks_espresso(**kwargs)
+            kwargs.update(fnames)
+        else:
+            fnames = self.make_dft_tasks_espresso_DFTonly(**kwargs)
+            kwargs.update(fnames)
         
         # ==== Aobasis(SIESTA) ==== #
-        self.aobasis_task = AobasisTask(
-             dirname = pjoin(self.dirname, '07-aobasis'),
-             **kwargs)
-        self.add_task(self.aobasis_task)
-        kwargs.update(dict(aobasis_dirname=self.aobasis_task.dirname))
+        aobasis_dirname = self.make_ao_basis(**kwargs)
+        kwargs.update(aobasis_dirname)
 
         # ==== GW calculations ==== #
-
-        # Set some common variables for Epsilon and Sigma
-        self.epsilon_extra_lines = kwargs.pop('epsilon_extra_lines', [])
-        self.epsilon_extra_variables = kwargs.pop('epsilon_extra_variables',{})
-        
-        self.sigma_extra_lines = kwargs.pop('sigma_extra_lines', [])
-        self.sigma_extra_variables = kwargs.pop('sigma_extra_variables', {})
-        
-        # Dielectric matrix computation and inversion (epsilon)
-        self.epsilontask = EpsilonTask(
-            dirname = pjoin(self.dirname, '11-epsilon'),
-            ngkpt = self.ngkpt,
-            qshift = self.qshift,
-            extra_lines = self.epsilon_extra_lines,
-            extra_variables = self.epsilon_extra_variables,
-            **kwargs)
-
-        self.nns_helper_epsilon_task = nns_helper_epsilon(dirname=pjoin(self.dirname, '12-epsilon-nns'), **kwargs)
-
-
-        self.epsilontask_nns = EpsilonTask_NNS(
-            dirname = pjoin(self.dirname, '12-epsilon-nns'),
-            ngkpt = self.ngkpt,
-            qshift = self.qshift,
-            extra_lines = self.epsilon_extra_lines,
-            extra_variables = self.epsilon_extra_variables,
-            **kwargs)
-        kwargs.update(dict(eps0_nns_dir=pjoin(self.dirname, '12-epsilon-nns')))
-
-        # Self-energy calculation (sigma)
-        self.sigmatask = SigmaTask_NNS(
-            dirname = pjoin(self.dirname, '13-sigma'),
-            ngkpt = self.ngkpt,
-            extra_lines = self.sigma_extra_lines,
-            extra_variables = self.sigma_extra_variables,
-            eps0mat_fname = self.epsilontask.eps0mat_fname,
-            epsmat_fname = self.epsilontask.epsmat_fname,
-            **kwargs)
-        
-        # Add tasks to the workflow
-        self.add_tasks([self.epsilontask, 
-                        self.nns_helper_epsilon_task,
-                        self.epsilontask_nns ,
-                        self.sigmatask], merge=False)
-
-        self.truncation_flag = kwargs.get('truncation_flag')
-        self.sigma_kpts = kwargs.get('sigma_kpts')
-
+        if kwargs.get('GW', False):
+            self.make_gw_tasks_bgw(**kwargs)
+ 
         # ==== SIESTA/HPRO ==========
-        self.hpro_task = HPROTask(
-            dirname = pjoin(self.dirname, '16-reconstruction'),
-             **kwargs)
-        self.add_task(self.hpro_task)
+        self.make_hpro_task(**kwargs)
+
+    def make_dft_tasks_espresso_DFTonly(self, **kwargs):
+        """
+        Initialize all DFT tasks using Quantum Espresso.
+        Return a dictionary of file names.
+        """
+        if kwargs.get('SOC', False):
+            kwargs['variables'] = kwargs.get('variables', {})
+            kwargs['variables']['system'] = kwargs['variables'].get('system', {})
+            kwargs['variables']['system'].update({'lspinorb': True, 'noncolin':True})
 
 
-    @property
-    def has_kshift(self):
-        return any([i!=0 for i in self.kshift])
+        if 'charge_density_fname' in kwargs:
+            if 'data_file_fname' not in kwargs:
+                raise Exception("Error, when providing charge_density_fname, data_file_fname is required.")
 
-    @property
-    def sigma_kpts(self):
-        return self.sigmatask.input.kpts
+        else:
+            self.scftask = QeScfTask(
+                dirname = pjoin(self.dirname, '01-density'),
+                ngkpt = self.ngkpt,
+                kshift = self.kshift,
+                **kwargs)
 
-    @sigma_kpts.setter
-    def sigma_kpts(self, value):
-        if value:
-            self.sigmatask.input.kpts = value
+            self.add_task(self.scftask)
 
-    _truncation_flag = ''
-    @property
-    def truncation_flag(self):
-        return self._truncation_flag
+            # Add a scf2bgw task for scf (HPRO)
+            self.scf2bgwtask = Qe2BgwTask(
+                dirname = self.scftask.dirname,
+                ngkpt = self.ngkpt,
+                kshift = self.kshift,
+                rhog_flag = True,
+                **kwargs)
+            self.add_task(self.scf2bgwtask, merge=False)
+                
+            kwargs.update(
+                charge_density_fname = self.scftask.charge_density_fname,
+                data_file_fname = self.scftask.data_file_fname,
+                spin_polarization_fname = self.scftask.spin_polarization_fname)
+            
+        if kwargs.get('DFT_band', True):
+            self.wfnband_task = QeBgwFlow_band(
+                    dirname = pjoin(self.dirname, '05-band'),
+                    ngkpt = self.ngkpt,
+                    kshift = self.kshift,
+                    nbnd = self.n_z_valence + 12,
+                    **kwargs
+            )
+            self.add_task(self.wfnband_task)
 
-    @truncation_flag.setter
-    def truncation_flag(self, value):
 
-        for task in (self.epsilontask, self.sigmatask):
+        fnames = dict(VSC_fname = self.scftask.dirname+'/VSC')
 
-            # Remove old value
-            if self._truncation_flag in task.input.keywords:
-                i = task.input.keywords.index(self._truncation_flag)
-                del task.input.keywords[i]
-
-            # Add new value
-            if value:
-                task.input.keywords.append(value)
-
-        self._truncation_flag = value
-
+        return fnames
+    
     def make_dft_tasks_espresso(self, **kwargs):
         """
         Initialize all DFT tasks using Quantum Espresso.
         Return a dictionary of file names.
         """
+        if kwargs.get('SOC', False):
+            kwargs['variables'] = kwargs.get('variables', {})
+            kwargs['variables']['system'] = kwargs['variables'].get('system', {})
+            kwargs['variables']['system'].update({'lspinorb': True, 'noncolin':True})
+
 
         if 'charge_density_fname' in kwargs:
             if 'data_file_fname' not in kwargs:
@@ -329,55 +329,144 @@ class DFT_GW_HPRO_Flow(Workflow):
         else:
             self.add_tasks([self.wfntask_ksh, self.wfntask_qsh])
 
-        # TODO: NNS
-
-        self.wfntask_q_nns = QeBgwFlow_NNS(
-            dirname = pjoin(self.dirname, '06-wfnq-nns'),
-            ngkpt = self.ngkpt,
-            kshift = self.kshift,
-            # qshift = self.qshift,
-            # nbnd = None,
-            nbnd = self.n_z_valence + 4,
-            wfn_fname_nns_input = self.wfntask_ksh.wfn_fname,
-            **kwargs)
-        self.add_task(self.wfntask_q_nns)
-
-        # Unshifted wavefunction tasks for Sigma
-        # only if not already computed for Epsilon.
-        if self.has_kshift:
-
-            self.wfntask_ush = QeBgwFlow(
-                dirname = pjoin(self.dirname, '04-wfn_co'),
+        if kwargs.get('use_NNS', True):
+            self.wfntask_q_nns = QeBgwFlow_NNS(
+                dirname = pjoin(self.dirname, '06-wfnq-nns'),
                 ngkpt = self.ngkpt,
-                nbnd = self.nbnd,
-                rhog_flag = True,
+                kshift = self.kshift,
+                # qshift = self.qshift,
+                # nbnd = None,
+                nbnd = self.n_z_valence + 4,
+                wfn_fname_nns_input = self.wfntask_ksh.wfn_fname,
                 **kwargs)
+            self.add_task(self.wfntask_q_nns)
 
-            self.add_task(self.wfntask_ush)
 
-        else:
-            self.wfntask_ush = self.wfntask_ksh
+        self.wfnband_task = QeBgwFlow_band(
+                dirname = pjoin(self.dirname, '05-band'),
+                ngkpt = self.ngkpt,
+                kshift = self.kshift,
+                nbnd = self.n_z_valence + 12,
+                **kwargs
+        )
+        self.add_task(self.wfnband_task)
+
+        self.wfntask_ush = self.wfntask_ksh
 
         fnames = dict(VSC_fname = self.scftask.dirname+'/VSC',
-                      wfn_fname = self.wfntask_ksh.wfn_fname,
-                      wfnq_fname = self.wfntask_qsh.wfn_fname,
-                      wfn_co_fname = self.wfntask_ush.wfn_fname,
-                      rho_fname = self.wfntask_ush.rho_fname,
-                      vxc_dat_fname = self.wfntask_ush.vxc_dat_fname,
-                      wfn_nns_dir=self.wfntask_q_nns.dirname,
-                      wfn_nns_fname=self.wfntask_q_nns.wfn_fname)
+                    vxc_fname = self.wfntask_ksh.dirname+'/VXC',
+                    wfn_fname = self.wfntask_ksh.wfn_fname,
+                    wfnq_fname = self.wfntask_qsh.wfn_fname,
+                    wfn_co_fname = self.wfntask_ush.wfn_fname,
+                    rho_fname = self.wfntask_ush.rho_fname,
+                    # vxc_dat_fname = self.wfntask_ush.vxc_dat_fname,
+                    wfn_band_fname = self.wfnband_task.wfn_fname,
+                    )
+        
+        if kwargs.get('use_NNS', True):
+            fnames.update(dict(wfn_nns_dir=self.wfntask_q_nns.dirname,
+                    wfn_nns_fname=self.wfntask_q_nns.wfn_fname))
 
         return fnames
     
+    def make_gw_tasks_bgw(self, **kwargs):
+        # Set some common variables for Epsilon and Sigma
+        self.epsilon_extra_lines = kwargs.pop('epsilon_extra_lines', [])
+        self.epsilon_extra_variables = kwargs.pop('epsilon_extra_variables',{})
+        
+        self.sigma_extra_lines = kwargs.pop('sigma_extra_lines', [])
+        self.sigma_extra_variables = kwargs.pop('sigma_extra_variables', {})
+        
+        # Dielectric matrix computation and inversion (epsilon)
+        self.epsilontask = EpsilonTask(
+            dirname = pjoin(self.dirname, '11-epsilon'),
+            ngkpt = self.ngkpt,
+            qshift = self.qshift,
+            extra_lines = self.epsilon_extra_lines,
+            extra_variables = self.epsilon_extra_variables,
+            **kwargs)
+
+        if kwargs.get('use_NNS', True):
+            self.nns_helper_epsilon_task = nns_helper_epsilon(dirname=pjoin(self.dirname, '12-epsilon-nns'), **kwargs)
+            self.epsilontask_nns = EpsilonTask_NNS(
+                dirname = pjoin(self.dirname, '12-epsilon-nns'),
+                ngkpt = self.ngkpt,
+                qshift = self.qshift,
+                extra_lines = self.epsilon_extra_lines,
+                extra_variables = self.epsilon_extra_variables,
+                **kwargs)
+            kwargs.update(dict(eps0_nns_dir=pjoin(self.dirname, '12-epsilon-nns')))
+
+        # Self-energy calculation (sigma)
+        self.sigmatask = SigmaTask_NNS(
+            dirname = pjoin(self.dirname, '13-sigma'),
+            ngkpt = self.ngkpt,
+            extra_lines = self.sigma_extra_lines,
+            extra_variables = self.sigma_extra_variables,
+            eps0mat_fname = self.epsilontask.eps0mat_fname,
+            epsmat_fname = self.epsilontask.epsmat_fname,
+            **kwargs)
+
+        self.inteqp_task = IneqpTask_plot(
+            dirname = pjoin(self.dirname, '14-inteqp'),
+            eqp_co_fname = self.sigmatask.dirname+'/eqp1.dat',
+            wfn_fi_fname = self.wfnband_task.wfn_fname,
+            nbnd = self.n_z_valence,
+            **kwargs
+        )
+
+        # Add tasks to the workflow
+        if kwargs.get('use_NNS', True):
+            self.add_tasks([self.epsilontask, 
+                            self.nns_helper_epsilon_task,
+                            self.epsilontask_nns ,
+                            self.sigmatask,
+                            self.inteqp_task], merge=False)
+        else:
+            self.add_tasks([self.epsilontask, self.sigmatask, self.inteqp_task], merge=False)
+
+        self.truncation_flag = kwargs.get('truncation_flag')
+        self.sigma_kpts = kwargs.get('sigma_kpts')
+
+    def make_ao_basis(self, **kwargs):
+        self.aobasis_task = AobasisTask(
+             dirname = pjoin(self.dirname, '07-aobasis'),
+             **kwargs)
+        self.add_task(self.aobasis_task)
+        # kwargs.update(dict(aobasis_dirname=self.aobasis_task.dirname))
+        return dict(aobasis_dirname=self.aobasis_task.dirname)
+
+    def make_hpro_task(self, **kwargs):
+        self.hpro_task = HPROTask(
+            dirname = pjoin(self.dirname, '16-reconstruction'),
+             **kwargs)
+        self.add_task(self.hpro_task)
+
     def summary(self, verbose):
         pass
 
+    def write(self):
+        """
+        add config.json to directory
+        """
+        super().write()
+        with open(pjoin(self.dirname, 'config.json'), 'w') as f:
+            json.dump(self.config_input, f, indent=4)
 
-def check_pseudo(pseudo_dir='./from_oncvpsp/', pseudos=['S.upf','H.upf']):
+        # write cif to directory
+        self.structure.to(filename=pjoin(self.dirname, 'stru.cif'), fmt='cif')
+
+        # copy pseudopotential files from source to pp
+        subprocess.run(['mkdir',self.pp_dirname], capture_output=True, text=True)
+        for atom_ele in self.structure.elements:
+            subprocess.run(['cp', self.config_input['pseudo_dir_source']+ '/' + str(atom_ele)+'.upf', self.pp_dirname])
+            subprocess.run(['cp', self.config_input['pseudo_dir_source']+ '/' + str(atom_ele)+'.psml', self.pp_dirname])
+
+def check_pseudo(pseudo_dir_src='./from_oncvpsp/', pseudos=['S.upf','H.upf']):
     pattern = 'z_valence'
     pseudos_z_valence = {}
     for pseudo in pseudos:
-        result = subprocess.run(['grep', pattern, pseudo_dir+pseudo], capture_output=True, text=True)
+        result = subprocess.run(['grep', pattern, pseudo_dir_src+'/'+pseudo], capture_output=True, text=True)
         # print(result.stdout)
         match = re.search(r'[-+]?\d*\.?\d+', result.stdout)
         if match:
@@ -389,48 +478,68 @@ def check_pseudo(pseudo_dir='./from_oncvpsp/', pseudos=['S.upf','H.upf']):
     # print(pseudos_z_valence)
     return pseudos_z_valence
 
-
 if __name__ == "__main__":
-    pass
 
-    flow = DFT_GW_HPRO_Flow(
-        mpirun='ibrun',
-        nproc_flag = '-n',
-        nproc=2240,
-        nproc_per_node_flag='',
-        nproc_per_node='',
-        Siesta = '/work2/08237/bwhou/frontera/software/Anaconda/envs/siesta/bin/siesta',
-        hpro = '/scratch1/08237/bwhou/12-deepGWBSE/Deep-GWBSE/HPRO/src/calc.py',
-        PWFLAGS='-nk 16',
-        PW='pw.x',
-        dirname='flow',
-        stru_file = './fp-input/mat-3/stru.cif',
-        ecuteps = 15.0,
-        ncbnd_sigma = 4,
-        nvbnd_sigma = 5, # TODO: band check degeneracy sees not right
-        ngkpt = [12,12, 1],
-        qshift = [.001,.0,.0],
-        nbnd = 100,
-        ecutwfc = 75,
-        prefix = 'MoS2',
-        pseudo_dir = './from_oncvpsp/',
-        # pseudos = ['Si.upf','H.upf'],
-        pseudos = ['Mo.upf','S.upf'],
-        basis_set_siesta = 'DZP',
-        mesh_cutoff_siesta = 320,
-        dm_tolerance_siesta = 1e-6, 
-        max_scf_iter_siesta = 300,
-        epsilon_extra_lines=['restart','degeneracy_check_override','dont_check_norms'],
-        sigma_extra_lines=['degeneracy_check_override', 'dont_check_norms'],
-        pseudobands = True, # assert ture if parabands is ture
-        N_P_cond = 50,
-        N_S_cond = 30,
-        N_xi_cond = 10,
-        paraband = True,
-        nparaband = 3000,
-    )
+    import argparse
+    parser = argparse.ArgumentParser(description='Create a workflow for a single material.')
+    parser.add_help = True
+    parser.add_argument('-c', '--config', type=str, default='./config/single_mat_config.json', help='input config file')
+    args = parser.parse_args()
+    print(args.config)
+
+    assert os.path.exists(args.config), "config file not found"
+
+    read_from_existing = True
+    if read_from_existing: # allow to read config from existing file
+        # config_path = './config/single_mat_config.json'
+        config_path = args.config
+        print('read from existing config file:', config_path)
+        with open(config_path, 'r') as f:
+            config = json.load(f)
+        flow = DFT_GW_HPRO_Flow(**config)
+
+    else: # used for debugging
+        print('create a new config file')
+        flow = DFT_GW_HPRO_Flow(
+            mpirun='srun',
+            nproc_flag = '-n',
+            nproc=512,
+            nproc_per_node_flag='',
+            nproc_per_node='',
+            Siesta = '/global/homes/b/bwhou/anaconda3/envs/siesta/bin/siesta',
+            hpro = '/pscratch/sd/b/bwhou/12-deepGWBSE/Deep-GWBSE/HPRO/src/calc.py',
+            PWFLAGS='-nk 16',
+            PW='pw.x',
+            prefix = 'hBN', ###
+            dirname='flow-2', ###
+            stru_file = './fp-input/mat-3/stru.cif', ###
+            ecuteps = 20.0,
+            ncbnd_sigma = 4,
+            nvbnd_sigma = 5, 
+            ngkpt = [12, 12, 1],
+            qshift = [.001,.0,.0],
+            nbnd = 100,
+            ecutwfc = 75,
+            pseudo_dir_source = './from_oncvpsp/',
+            basis_set_siesta = 'DZP',
+            mesh_cutoff_siesta = 320,
+            dm_tolerance_siesta = 1e-6, 
+            max_scf_iter_siesta = 300,
+            epsilon_extra_lines=['restart','dont_check_norms','cell_slab_truncation'],
+            sigma_extra_lines=['dont_check_norms','frequency_dependence 1','screening_semiconductor','cell_slab_truncation','dont_use_vxcdat'],
+            use_NNS = True,
+            pseudobands = True, # assert ture if parabands is ture
+            N_P_cond = 10,
+            N_S_cond = 40,
+            N_xi_cond = 5,
+            paraband = True,
+            nparaband = 10000,
+            kpath_band = ['0 0 0 20','0.5 0 0 20','0.33333 0.33333 0 20', '0 0 0 20', '-0.333333 -0.33333 0 20'],
+            SOC = False,
+            GW = True,
+            DFT_band = True, # ignore this if GW is True
+        )
 
     flow.write()
 
-    # check_pseudo()
 

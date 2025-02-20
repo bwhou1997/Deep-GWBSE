@@ -81,6 +81,10 @@ class SigmaTask(BGWTask):
         extra_lines = kwargs.get('extra_lines',[])
         extra_variables = kwargs.get('extra_variables',{})
 
+        # Bowen Hou 2025/02/12
+        if "degeneracy_check_override" not in extra_lines:
+            extra_lines.append("degeneracy_check_override")
+
 
         # Use specified kpoints or compute them from grid.
         kpt_aliases = ('kpts', 'kpoints', 'sigma_kpts', 'sigma_k_points', 'sigma_kpoints')
@@ -160,7 +164,7 @@ class SigmaTask(BGWTask):
 
         # Set up the run script
         ex = 'sigma.cplx.x' if self._flavor_complex else 'sigma.real.x'
-        self.runscript['SIGMA'] = ex
+        self.runscript['SIGMA'] = os.path.join(kwargs.get("BGW_path",''),ex)
         self.runscript.append('$MPIRUN $SIGMA &> {}'.format(self._output_fname))
 
 
@@ -189,7 +193,8 @@ class SigmaTask(BGWTask):
     @vxc_dat_fname.setter
     def vxc_dat_fname(self, value):
         self._vxc_dat_fname = value
-        self.update_link(value, 'vxc.dat')
+        # self.update_link(value, 'vxc.dat')
+        self.update_link(value, 'VXC')
 
     @property
     def vxc_fname(self):

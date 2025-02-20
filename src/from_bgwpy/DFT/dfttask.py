@@ -99,7 +99,8 @@ class DFTTask(MPITask):
             fname = os.path.relpath(
                     os.path.join(self.dirname, self.pseudo_dir, pseudo))
             if not os.path.exists(fname):
-                warnings.warn('Pseudopotential not found:\n{}'.format(fname))
+                # warnings.warn('Pseudopotential not found:\n{}'.format(fname))
+                pass # omit warning for now
 
     _pseudo_dir = './'
     @property

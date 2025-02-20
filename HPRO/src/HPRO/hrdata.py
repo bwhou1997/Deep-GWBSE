@@ -24,6 +24,7 @@ def read_vloc(filename, interface):
         _, g_g_full = np.divmod(vscread.g_g, FFTgrid)
         vscg_full[g_g_full[:, 0], g_g_full[:, 1], g_g_full[:, 2]] = vscread.vscg
         vlocr = np.fft.ifftn(vscg_full, s=FFTgrid, norm='forward')
+        print(f'Maximum imaginary part of vlocr: {np.max(np.abs(vlocr.imag))}')
         assert np.max(np.abs(vlocr.imag)) < 1e-6
         vlocr = vlocr.real
     else:

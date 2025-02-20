@@ -40,7 +40,7 @@ class IneqpTask(BGWTask):
             number_val_bands_fine = kwargs.pop('number_val_bands_fine', 1),
             number_cond_bands_coarse = kwargs.pop('number_cond_bands_coarse', 1),
             number_cond_bands_fine = kwargs.pop('number_cond_bands_fine', 1),
-            *kwargs.get('extra_lines',[]),
+            *kwargs.get('extra_lines',["degeneracy_check_override","no_symmetries_fine_grid", "no_symmetries_shifted_grid", "use_symmetries_coarse_grid","use_momentum"]),
             **kwargs.get('extra_variables',{}))
 
         self.input.fname = self._input_fname

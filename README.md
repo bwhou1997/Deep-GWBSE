@@ -5,20 +5,27 @@ Deep-GWBSE is a deep learning model designed for DFT-GW-BSE calculations.
 Author: Bowen Hou (bowen.hou@yale.edu)
 
 ## TODO List:
-- NNS + parabands (2025/02/06 done) 
-- eqp.dat -> HPRO
+- NNS + parabands (2025/02/06 done) + inteqp (2025/02/11 done)
+- Checkpoint systems 
+- eqp.dat -> HPRO (working)
+  - initial workflow is built
+  - debug $\hat{V}_{vsc}$ and $\hat{V}_{vxc}$ (take it back to $\Sigma$, also see self-consistent $\Sigma$)
+  - apply it to HPRO
+- BSE
 - multiple materials + cleaning program
 - Train on different atom
 - Equi-transformer
 
 ## Table of Contents
-- [Introduction](#introduction)
+- [Features](#features)
 - [Installation](#installation)
 - [Usage](#usage)
 - [License](#license)
 
-## Introduction
+## Features
 This package provides multiple deep learning models for DFT-GW-BSE calculations from crystal structures, including the following:
+- fully-automatic BGW workflow ([high-throughput workflow](./src/note.md))
+- fully-automatic BSE workflow
 - equivariant graph neural networks
 - equivariant attention networks
 

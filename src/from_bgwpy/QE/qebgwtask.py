@@ -185,11 +185,11 @@ class Qe2BgwTask(QeTask):
         rho_defaults = dict(
             rhog_flag = True,
             rhog_file = 'rho.real',
-            vxcg_flag = False,
+            vxcg_flag = True,
             vxcg_file = 'VXC',
             vscg_flag = True,
             vscg_file = 'VSC',
-            vxc_flag = True,
+            vxc_flag = False,
             vxc_file = 'vxc.dat',
             vxc_diag_nmin = 1,
             vxc_diag_nmax = kwargs.get('nbnd', 4),
@@ -221,7 +221,8 @@ class Qe2BgwTask(QeTask):
         self.input.fname = self._input_fname
 
         # Run script
-        self.runscript['PW2BGW'] = 'pw2bgw.x'
+        # self.runscript['PW2BGW'] = 'pw2bgw.x'
+        self.runscript['PW2BGW'] = kwargs['PW2BGW']
         self.runscript.append('$MPIRUN $PW2BGW $PWFLAGS -in {} &> {}'.format(
                               self._input_fname, self._output_fname))
 
