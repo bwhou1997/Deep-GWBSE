@@ -298,7 +298,7 @@ class LCAODiagKernel:
             else:
                 f.write('\n')
             for ibnd in range(nbnd):
-                f.write(f'{1:8d}{ibnd+1:8d}{self.eigs[ikpt, ibnd]*hartree2ev:15.9f}\n')
+                f.write(f'{1:8d} {ibnd+1:8d} {self.eigs[ikpt, ibnd]*hartree2ev:15.9f}\n')
         f.close()
         # todo: write wavefunctions
     

@@ -10,7 +10,7 @@ Tweisted-angle study of hBN
 ```
 --Path 1--:
 1. Train:
-supercell.cif─(flow.py)─> MD─(md.py)─>fp-input─(flows.py)─> ml_dataset ──(deephe3-xx.py)─> model
+supercell.cif─(flow.py)─> MD─(md.py)─>fp-input─(flows.py)─> ml_dataset ──(deep-collect.py, deephe3-train.py)─> model
 
 2. Use:
 twist.cif───(deephe3-xx.py, diag_plot.py)─> band.png 
@@ -18,17 +18,20 @@ twist.cif───(deephe3-xx.py, diag_plot.py)─> band.png
 ```
 
                                            
-### 1. **fp-input** folder
-The fp-input folder serves as the starting point for the workflow. It contains the configuration, crystal structures, and pseudopotential files necessary for first-principles calculations. The structure is organized as follows:
+### 1. **stru-input** folder
+The stru-input folder contains the crystal structures
 ```bash
-fp-input
+stru-input
 ├── fpconfig.json
 ├── mat-1 # (extensible)
 |   └── stru.cif
 ├── mat-2
 |   └── stru.cif
 └── ...
-
+```
+### 1. **pp** folder
+The pp folder contains all .upf and .psml for QE and SIESTA
+```
 pseudo_src/ # (built-in)
 ├── ele1.upf
 ├── ele2.upf
@@ -38,9 +41,9 @@ pseudo_src/ # (built-in)
 └── ...
 ```
 
-### 2. **ml-train/test** folder
+### 3. **flows** folder
 ```bash
-ml-train/test
+flows/
 ├── mat-1
 |   ├── config.json
 |   ├── stru.cif
@@ -75,9 +78,32 @@ ml-train/test
 |   |   |   ├── info.json
 |   |   |   ├── lat.dat
 |   |   |   ├── orbital_types.dat
+|   |   |   ├── overlaps.h5
+|   |   |   ├── rlat.dat
 |   └── └── └── site_positions.dat
 |
 ├── mat-2
 |   └──  ...
 └── ...
 ```
+
+
+### 4. **ml-train/test** folder
+
+```
+ml-train/test
+├──graph_file (created by deep-preprocess.py)
+├──ham1
+|   ├── element.dat
+|   ├── hamiltonians.h5
+|   ├── info.json
+|   ├── lat.dat
+|   ├── orbital_types.dat
+|   ├── overlaps.h5
+|   ├── rlat.dat
+|   └── site_positions.dat
+├──ham2
+|   └──  ...
+└── ...
+```
+
