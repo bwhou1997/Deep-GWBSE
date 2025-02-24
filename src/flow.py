@@ -7,7 +7,7 @@ from from_bgwpy.config import flavors
 from from_bgwpy.config import is_dft_flavor_espresso, check_dft_flavor
 from from_bgwpy.external import Structure
 from from_bgwpy.core import Workflow
-from from_bgwpy.BGW import EpsilonTask, SigmaTask, IneqpTask
+from from_bgwpy.BGW import EpsilonTask, SigmaTask, IneqpTask, KernelTask, AbsorptionTask
 from from_bgwpy.QE import QeScfTask, QeBgwFlow, Qe2BgwTask, QeWfnTask
 from from_bgwpy.DFT import WfnBgwFlow
 from ase import Atoms
@@ -130,6 +130,7 @@ class DFT_GW_HPRO_Flow(Workflow):
         self.structure = kwargs['structure']
         self.atoms = ase.io.read(kwargs['stru_file'])
         self.ngkpt = kwargs.pop('ngkpt')
+        self.ngkpt_fi = kwargs.pop('ngkpt_fi')
         self.kshift = kwargs.pop('kshift', [.0,.0,.0])
         self.qshift = kwargs.pop('qshift', [.0,.0,.0])
         nband_aliases = ('nbnd', 'nband')
@@ -190,6 +191,10 @@ class DFT_GW_HPRO_Flow(Workflow):
  
         # ==== SIESTA/HPRO ==========
         self.make_hpro_task(**kwargs)
+
+        if kwargs.get('BSE', False):
+            self.make_bse_tasks_bgw(**kwargs)
+        
 
     def make_dft_tasks_espresso_DFTonly(self, **kwargs):
         """
@@ -441,6 +446,61 @@ class DFT_GW_HPRO_Flow(Workflow):
             dirname = pjoin(self.dirname, '16-reconstruction'),
              **kwargs)
         self.add_task(self.hpro_task)
+
+    def make_bse_tasks_bgw(self, **kwargs):
+
+        if kwargs.get('SOC', False):
+            kwargs['variables'] = kwargs.get('variables', {})
+            kwargs['variables']['system'] = kwargs['variables'].get('system', {})
+            kwargs['variables']['system'].update({'lspinorb': True, 'noncolin':True}) 
+        kwargs.update(
+                charge_density_fname = self.scftask.charge_density_fname,
+                data_file_fname = self.scftask.data_file_fname,
+                spin_polarization_fname = self.scftask.spin_polarization_fname,
+                eps0mat_fname = self.epsilontask.eps0mat_fname,
+                epsmat_fname = self.epsilontask.epsmat_fname)
+        kwargs.pop('vxc_fname')
+        kwargs.pop('wfn_fname')
+        kwargs.pop('rho_fname')
+
+        self.wfn_fi_task_sh = QeBgwFlow(
+            dirname = pjoin(self.dirname, '17-wfn_fi'),
+            ngkpt = self.ngkpt_fi,
+            kshift = self.kshift,
+            nbnd = self.n_z_valence+kwargs.get('nbnd_cond')+4,
+            rhog_flag = False,
+            **kwargs)  
+        self.add_tasks(self.wfn_fi_task_sh, merge=False)
+
+        self.kernel_extra_lines = kwargs.pop('kernel_extra_lines', [])
+        self.kernel_extra_variables = kwargs.pop('kernel_extra_variables',{})
+        
+        self.kerneltask = KernelTask(
+            dirname = pjoin(self.dirname, '18-kernel'),
+            extra_lines = self.kernel_extra_lines,
+            extra_variables = self.kernel_extra_variables,
+            **kwargs
+        )
+
+        
+        self.absorption_extra_lines = kwargs.pop('absorption_extra_lines', [])
+        self.absorption_extra_variables = kwargs.pop('absorption_extra_variables', {})
+
+        kwargs.update(
+                wfn_fi_fname = self.wfn_fi_task_sh.wfn_fname,
+                wfnq_fi_fname = self.wfn_fi_task_sh.wfn_fname,
+                bsemat_fname = self.kerneltask.bsemat_fname,
+                eqp_fname = self.sigmatask.eqp1_fname
+                )
+
+        self.absorptiontask = AbsorptionTask(
+            dirname = pjoin(self.dirname, '19-absorption'),
+            extra_lines = self.absorption_extra_lines,
+            extra_variables = self.absorption_extra_variables,
+            **kwargs
+        )
+        self.add_tasks([self.kerneltask, self.absorptiontask], merge=False)
+
 
     def summary(self, verbose):
         pass
