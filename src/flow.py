@@ -192,6 +192,7 @@ class DFT_GW_HPRO_Flow(Workflow):
         # ==== SIESTA/HPRO ==========
         self.make_hpro_task(**kwargs)
 
+        # ==== BSE Caculcations ==========
         if kwargs.get('BSE', False):
             self.make_bse_tasks_bgw(**kwargs)
         
@@ -449,6 +450,9 @@ class DFT_GW_HPRO_Flow(Workflow):
 
     def make_bse_tasks_bgw(self, **kwargs):
 
+        if "eqp_co_corrections" in kwargs['absorption_extra_lines']:
+            assert kwargs['GW'], "eqp_co_corrections is only available when GW is True"
+
         if kwargs.get('SOC', False):
             kwargs['variables'] = kwargs.get('variables', {})
             kwargs['variables']['system'] = kwargs['variables'].get('system', {})
@@ -462,6 +466,9 @@ class DFT_GW_HPRO_Flow(Workflow):
         kwargs.pop('vxc_fname')
         kwargs.pop('wfn_fname')
         kwargs.pop('rho_fname')
+
+        kwargs.update(dict(nbnd_cond = kwargs['nbnd_cond_co'],
+                           nbnd_val = kwargs['nbnd_val_co']))
 
         self.wfn_fi_task_sh = QeBgwFlow(
             dirname = pjoin(self.dirname, '17-wfn_fi'),
