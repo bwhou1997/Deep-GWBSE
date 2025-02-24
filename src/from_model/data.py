@@ -7,7 +7,7 @@ from torch.utils.data import Dataset, DataLoader, TensorDataset
 
 class ManyBodyData(Dataset):
     """
-raw_data_dir/
+raw_data_dir(flows)/
 ├── mat-1
 |   ├──02-wfn
 |   ├──0x-wfn-kernel (todo)
@@ -19,6 +19,16 @@ raw_data_dir/
 ├── mat-2
 |   └──  ...
 └── ..."""
+
+    """Output if workflow is 'WFN':
+Note: N_bands_i, N_kpoints_i, Rx_i could be different for different materials
+wfndata.h5
+├── mat-1/data (data.shape = (N_bands_1, N_kpoints_1, Rx_1, Ry_1, Rz_1_truncated))
+├── mat-2/data
+├── mat-3/data
+├── mat-4/...
+    """
+
     def __init__(self, raw_data_dir: str, dataset_dir: str, workflow: str,
                  dataset_name: str, multiprocessing: bool = False, load_dataset: bool = True,
                  N_bands: int = 20):
@@ -46,6 +56,7 @@ raw_data_dir/
 
         assert workflow in ['WFN','GW','BSE']
         self.data = None
+        self.multiprocessing = multiprocessing
 
 
     def __len__(self):
@@ -55,11 +66,19 @@ raw_data_dir/
         return self.data[idx], self.target[idx]
     
 
-    def process_worker(self):
+    def process_worker_WFN(self):
         pass
+        wfnfft()
+        ...
 
     def process(self):
         pass
+        # parallel over here
+        for i in range(self.multiprocessing):
+            self.process_worker_WFN(i)
 
     def summary(self):
         pass
+
+def wfnfft():
+    pass

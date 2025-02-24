@@ -17,6 +17,10 @@ twist.cif───(deephe3-xx.py, diag_plot.py)─> band.png
     model─┘
 ```
 
+### TODO ###
+
+- Xian: data.py (WFN task, Train VAE)
+- Bowen: Transformer
                                            
 ### 1. **stru-input** folder
 The stru-input folder contains the crystal structures
