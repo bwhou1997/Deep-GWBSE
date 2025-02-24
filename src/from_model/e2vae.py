@@ -10,33 +10,33 @@ from torch.utils.data import DataLoader
 import os
 from tqdm import tqdm
 
-
-
-# Define E(2)-Equivariant Space
-gspace = gspaces.Rot2dOnR2(N=12)  # 8 discrete rotations
-
 class single_e2CNN_module(nn.Module):
     """
     e2CNN + BatchNorm + ReLU + 2stride_Pooling (optional)
 
-    if headLayer:
+    headLayer:
         input: torch tensor
         output: GeometricTensor
     
-    else:
+    midLayer:
         input: GeometricTensor
         output: GeoemtricTensor
 
+    tailLayer:
+        input: GeometricTensor
+        output: torch tensor
+
     """
     def __init__(self, input_channels=1, output_channels=144, N_rotation=12, kernel_size=5, padding=2, sigma=0.66, 
-                pooling: bool = False, headLayer: bool = True):
+                pooling: bool = False, headLayer: bool = True, tailLayer: bool = False):
         super().__init__()
 
         self.N_rotation = N_rotation
         self.headLayer = headLayer
+        self.tailLayer = tailLayer
         self.r2_act = gspaces.Rot2dOnR2(N=N_rotation)
 
-        if N_rotation != -1: # Discrete rotations
+        if N_rotation != -1 and not tailLayer: # Discrete rotations
             assert output_channels % N_rotation == 0, "Output channels must be divisible by N_rotation"
 
         if headLayer:
@@ -45,7 +45,11 @@ class single_e2CNN_module(nn.Module):
             assert input_channels % N_rotation == 0, "Input channels must be divisible by N_rotation if not headLayer" 
             in_type = e2nn.FieldType(self.r2_act, input_channels//N_rotation*[self.r2_act.regular_repr])
 
-        out_type = e2nn.FieldType(self.r2_act, output_channels//N_rotation*[self.r2_act.regular_repr])     
+        if tailLayer:
+            out_type = e2nn.FieldType(self.r2_act, output_channels*[self.r2_act.trivial_repr])
+        else:
+            out_type = e2nn.FieldType(self.r2_act, output_channels//N_rotation*[self.r2_act.regular_repr])     
+  
         self.input_type = in_type   
         self.out_type = out_type
 
@@ -68,14 +72,89 @@ class single_e2CNN_module(nn.Module):
         x = self.cnn_block(x)
         if hasattr(self, 'pool'):
             x = self.pool(x)
+        if self.tailLayer:
+            x = x.tensor
         return x
 
+class single_e2TransposeCNN_module(nn.Module):
+    """
+    e2_Transpose_CNN + 2stride (optional) + BatchNorm + ReLU
+
+    headLayer:
+        input: torch tensor
+        output: GeometricTensor
+    
+    midLayer:
+        input: GeometricTensor
+        output: GeoemtricTensor
+
+    tailLayer:
+        input: GeometricTensor
+        output: torch tensor
+
+
+    """
+    def __init__(self, input_channels=1, output_channels=144, N_rotation=12, kernel_size=5,
+                doubleSize: bool = False, headLayer: bool = True, tailLayer: bool = False):
+        super().__init__()
+
+        self.N_rotation = N_rotation
+        self.headLayer = headLayer
+        self.tailLayer = tailLayer
+        self.r2_act = gspaces.Rot2dOnR2(N=N_rotation)
+
+        if N_rotation != -1 and not tailLayer: # Discrete rotations
+            assert output_channels % N_rotation == 0, "Output channels must be divisible by N_rotation"
+
+        if headLayer:
+            in_type = e2nn.FieldType(self.r2_act, input_channels*[self.r2_act.trivial_repr])
+        else:
+            assert input_channels % N_rotation == 0, "Input channels must be divisible by N_rotation if not headLayer" 
+            in_type = e2nn.FieldType(self.r2_act, input_channels//N_rotation*[self.r2_act.regular_repr])
+        
+        if tailLayer:
+            out_type = e2nn.FieldType(self.r2_act, output_channels*[self.r2_act.trivial_repr])
+        else:
+            out_type = e2nn.FieldType(self.r2_act, output_channels//N_rotation*[self.r2_act.regular_repr])     
+
+        self.input_type = in_type   
+        self.out_type = out_type
+
+        if doubleSize:
+            output_padding = 1
+            padding = (kernel_size - 1) // 2
+            stride = 2
+        else:
+            output_padding = 0
+            padding = kernel_size // 2
+            stride = 1
+
+        self.tcnn_block = e2nn.SequentialModule(
+            e2nn.R2ConvTransposed(in_type, out_type, kernel_size=kernel_size, stride=stride, padding=padding, output_padding=output_padding, bias=False),
+            e2nn.InnerBatchNorm(out_type),
+            e2nn.ReLU(out_type, inplace=True)
+        )
+
+    def forward(self, x):
+        if self.headLayer:
+            assert isinstance(x, torch.Tensor), "Input must be a torch tensor for headLayer"
+            x = e2nn.GeometricTensor(x, self.input_type)
+        else:
+            assert isinstance(x, e2nn.GeometricTensor), "Input tensor must be e2nn.GeometricTensor provided for non-headLayer"
+
+        x = self.tcnn_block(x)
+        if self.tailLayer:
+            x = x.tensor
+        return x
 
 class EquivariantEncoder_double_cnn(nn.Module):
     def __init__(self, input_channels=1, N_rotation=12,
                 hidden_cnn_channels: list=[96, 48, 48, 12], 
                 hidden_pooling: list=[-1.00, 0.66, -1.00, 0.66],
-                kernel_size=None, padding=None):
+                kernel_size=[5,5,3,3]):
+        """
+        hidden_pooling: -1 for no pooling, 0.66 for 2 stride pooling (H_out = H_in/2, W_out = W_in/2)
+        """
         super().__init__()
 
         self.input_channels = input_channels
@@ -84,46 +163,50 @@ class EquivariantEncoder_double_cnn(nn.Module):
         self.hidden_pooling = hidden_pooling
         self.hidden_pooling_bool = [False if i == -1 else True for i in hidden_pooling]
         self.kernel_size = kernel_size
-        self.padding = padding
         self.spatical_compression_factor = np.sum(self.hidden_pooling_bool) * 2 
 
         assert len(hidden_cnn_channels) == len(hidden_pooling), "Length of hidden_cnn_channels and hidden_pooling must be equal"
         assert len(hidden_cnn_channels) > 0, "At least one hidden layer must be present"
 
         if kernel_size is None:
-            self.kernel_size = [5] * len(hidden_cnn_channels)
-        if padding is None:
-            self.padding = [2] * len(hidden_cnn_channels)
+            self.kernel_size = [3] * len(hidden_cnn_channels)
+
+        self.padding = list(map(lambda x: x//2,self.kernel_size))
 
         self.mu_cnn_stack = []
         self.logvar_cnn_stack = []
-        for i in range(len(hidden_cnn_channels)):
-            if i == 0:
-                kwargs = dict(input_channels=input_channels, output_channels=hidden_cnn_channels[i],
-                                        N_rotation=N_rotation, kernel_size=self.kernel_size[i], padding=self.padding[i],
-                                        sigma=hidden_pooling[i], pooling=self.hidden_pooling_bool[i], headLayer=True)
-                self.mu_cnn_stack.append(single_e2CNN_module(**kwargs))
-                self.logvar_cnn_stack.append(single_e2CNN_module(**kwargs))
-            else:
-                kwargs = dict(input_channels=hidden_cnn_channels[i-1], output_channels=hidden_cnn_channels[i],
-                                        N_rotation=N_rotation, kernel_size=self.kernel_size[i], padding=self.padding[i],
-                                        sigma=hidden_pooling[i], pooling=self.hidden_pooling_bool[i], headLayer=False)
-                self.mu_cnn_stack.append(single_e2CNN_module(**kwargs))
-                self.logvar_cnn_stack.append(single_e2CNN_module(**kwargs))
 
-        # self.mu_cnn_stack = e2nn.ModuleList(mu_cnn_stack)
+        assert len(hidden_cnn_channels) > 1, "At least 2 hidden layers required"
+
+        for i in range(len(hidden_cnn_channels)):
+
+            kwargs = dict(output_channels=hidden_cnn_channels[i],
+                                    N_rotation=N_rotation, kernel_size=self.kernel_size[i], padding=self.padding[i],
+                                    sigma=hidden_pooling[i], pooling=self.hidden_pooling_bool[i])
+            if i == 0:
+                kwargs.update(dict(input_channels=input_channels, headLayer=True, tailLayer=False))
+
+            elif i == len(hidden_cnn_channels) - 1: # Last layer
+                kwargs.update(dict(input_channels=hidden_cnn_channels[i-1], headLayer=False, tailLayer=True))
+            else:
+                kwargs.update(dict(input_channels=hidden_cnn_channels[i-1], headLayer=False, tailLayer=False))
+
+            self.mu_cnn_stack.append(single_e2CNN_module(**kwargs))
+            self.logvar_cnn_stack.append(single_e2CNN_module(**kwargs))
+
         self.mu_cnn_stack = nn.ModuleList(self.mu_cnn_stack)
         self.logvar_cnn_stack = nn.ModuleList(self.logvar_cnn_stack)
 
         self.summary()
     def summary(self):
-        print(f'Encoder hidden {len(self.hidden_cnn_channels)} layers:', [f"{self.input_channels}->"]+self.hidden_cnn_channels)
+        print('==================== Encoder Summary ====================')
+        print(f'Encoder hidden {len(self.hidden_cnn_channels)} layers:', [f"{self.input_channels}->"]+self.hidden_cnn_channels[:-1]+[f"->{self.hidden_cnn_channels[-1]}"])
         print('Encoder pooling:', self.hidden_pooling)
         print('Encoder kernel_size:', self.kernel_size)
         print('Encoder padding:', self.padding)
 
-        channel_compression_rate = self.input_channels / self.hidden_cnn_channels[-1]
-        spatial_compression_rate = 1 / (np.sum(self.hidden_pooling_bool) * 4)
+        channel_compression_rate =  self.hidden_cnn_channels[-1] / self.input_channels
+        spatial_compression_rate = 1 / (4 ** np.sum(self.hidden_pooling_bool))
         print(f'Channel compression rate: {channel_compression_rate*100: .2f}%')
         print(f'Spatial compression rate: {spatial_compression_rate*100: .2f}%')
         print(f'Total compression rate: {channel_compression_rate * spatial_compression_rate*100: .2f}%')
@@ -143,251 +226,164 @@ class EquivariantEncoder_double_cnn(nn.Module):
             logvar = self.logvar_cnn_stack[i](logvar)
         return mu, logvar
 
-
-
-##################### %%
-
-# class e2CNN(nn.Module):
-#     def __init__(self, input_channels=1, output_channels=128, N_rotation=12):
-#         super().__init__()
-
-#         self.N_rotation = N_rotation
-#         self.r2_act = gspaces.Rot2dOnR2(N=N_rotation)
-#         in_type = e2nn.FieldType(self.r2_act, input_channels*[self.r2_act.trivial_repr])
-#         self.input_type = in_type
-
-#         # convolution 1
-#         out_type = e2nn.FieldType(self.r2_act, 24*[self.r2_act.regular_repr])
-#         self.block1 = e2nn.SequentialModule(
-#             # e2nn.MaskModule(in_type, 29, margin=1),
-#             e2nn.R2Conv(in_type, out_type, kernel_size=7, padding=3, bias=False),
-#             e2nn.InnerBatchNorm(out_type),
-#             e2nn.ReLU(out_type, inplace=True)
-#         )
-
-#         # convolution 2
-#         in_type = self.block1.out_type
-#         out_type = e2nn.FieldType(self.r2_act, 48*[self.r2_act.regular_repr])
-#         self.block2 = e2nn.SequentialModule(
-#             e2nn.R2Conv(in_type, out_type, kernel_size=5, padding=2, bias=False),
-#             e2nn.InnerBatchNorm(out_type),
-#             e2nn.ReLU(out_type, inplace=True)
-#         )
-#         self.pool1 = e2nn.SequentialModule(
-#             e2nn.PointwiseAvgPoolAntialiased(out_type, sigma=0.66, stride=2)
-#         )        
-
-#         # convolution 3
-#         in_type = self.block2.out_type
-#         out_type = e2nn.FieldType(self.r2_act, 48*[self.r2_act.regular_repr])
-#         self.block3 = e2nn.SequentialModule(
-#             e2nn.R2Conv(in_type, out_type, kernel_size=5, padding=2, bias=False),
-#             e2nn.InnerBatchNorm(out_type),
-#             e2nn.ReLU(out_type, inplace=True)
-#         )
-        
-#         # convolution 4
-#         # the old output type is the input type to the next layer
-#         in_type = self.block3.out_type
-#         # the output type of the fourth convolution layer are 96 regular feature fields of C8
-#         out_type = e2nn.FieldType(self.r2_act, 96*[self.r2_act.regular_repr])
-#         self.block4 = e2nn.SequentialModule(
-#             e2nn.R2Conv(in_type, out_type, kernel_size=5, padding=2, bias=False),
-#             e2nn.InnerBatchNorm(out_type),
-#             e2nn.ReLU(out_type, inplace=True)
-#         )
-#         self.pool2 = e2nn.SequentialModule(
-#            e2nn.PointwiseAvgPoolAntialiased(out_type, sigma=0.66, stride=2)
-#         )
-
-#         # convolution 5
-#         # the old output type is the input type to the next layer
-#         in_type = self.block4.out_type
-#         # the output type of the fifth convolution layer are 96 regular feature fields of C8
-#         out_type = e2nn.FieldType(self.r2_act, (output_channels // 8)*[self.r2_act.regular_repr])
-#         self.block5 = e2nn.SequentialModule(
-#             e2nn.R2Conv(in_type, out_type, kernel_size=5, padding=2, bias=False),
-#             e2nn.InnerBatchNorm(out_type),
-#             e2nn.ReLU(out_type, inplace=True)
-#         )
-        
-#         self.pool3 = e2nn.PointwiseAvgPoolAntialiased(out_type, sigma=0.66, stride=1, padding=0)
-
-#     def forward(self, input: torch.Tensor):
-#         # wrap the input tensor in a GeometricTensor
-#         # (associate it with the input type)
-#         x = e2nn.GeometricTensor(input, self.input_type)
-#         x = self.block1(x)
-#         x = self.block2(x)
-#         x = self.pool1(x)
-#         x = self.block3(x)
-#         x = self.block4(x)
-#         x = self.pool2(x)
-#         x = self.block5(x)
-#         # x = self.block6(x)
-#         # pool over the spatial dimensions
-#         x = self.pool3(x)
-#         # unwrap the output GeometricTensor
-#         # (take the Pytorch tensor and discard the associated representation)
-#         x = x.tensor
-
-#         return x        
-
-class c8CNNTranspose(nn.Module):
-    def __init__(self, input_channels=128, output_channels=1):
-        super().__init__()
-
-        self.r2_act = gspace
-        in_type = e2nn.FieldType(self.r2_act, (input_channels // 8) * [self.r2_act.regular_repr])
-        self.input_type = in_type
-
-        # Transposed convolution 1
-        out_type = e2nn.FieldType(self.r2_act, 96 * [self.r2_act.regular_repr])
-        self.block1 = e2nn.SequentialModule(
-            e2nn.R2ConvTransposed(in_type, out_type, kernel_size=5, stride=2 ,padding=1, bias=False),
-            e2nn.InnerBatchNorm(out_type),
-            e2nn.ReLU(out_type, inplace=True)
-        )
-
-
-        # Transposed convolution 2
-        in_type = self.block1.out_type
-        out_type = e2nn.FieldType(self.r2_act, 96 * [self.r2_act.regular_repr])
-        self.block2 = e2nn.SequentialModule(
-            e2nn.R2ConvTransposed(in_type, out_type, kernel_size=5,  stride=1, padding=2, bias=False),
-            e2nn.InnerBatchNorm(out_type),
-            e2nn.ReLU(out_type, inplace=True)
-        )
-
-
-        # Transposed convolution 3
-        in_type = self.block2.out_type
-        out_type = e2nn.FieldType(self.r2_act, 48 * [self.r2_act.regular_repr])
-        self.block3 = e2nn.SequentialModule(
-            e2nn.R2ConvTransposed(in_type, out_type, kernel_size=5, stride=2, padding=0, bias=False),
-            e2nn.InnerBatchNorm(out_type),
-            e2nn.ReLU(out_type, inplace=True)
-        )
-
-        # Transposed convolution 4
-        in_type = self.block3.out_type
-        out_type = e2nn.FieldType(self.r2_act, 48 * [self.r2_act.regular_repr])
-        self.block4 = e2nn.SequentialModule(
-            e2nn.R2ConvTransposed(in_type, out_type, kernel_size=5, stride=1, padding=2, bias=False),
-            e2nn.InnerBatchNorm(out_type),
-            e2nn.ReLU(out_type, inplace=True)
-        )
-
-
-        # Transposed convolution 5
-        in_type = self.block4.out_type
-        out_type = e2nn.FieldType(self.r2_act, 24 * [self.r2_act.regular_repr])
-        self.block5 = e2nn.SequentialModule(
-            e2nn.R2ConvTransposed(in_type, out_type, kernel_size=5, stride=2, padding=2, bias=False),
-            e2nn.InnerBatchNorm(out_type),
-            e2nn.ReLU(out_type, inplace=True)
-        )
-
-        # Final Transposed convolution
-        in_type = self.block5.out_type
-        out_type = e2nn.FieldType(self.r2_act, output_channels * [self.r2_act.trivial_repr])
-        self.block6 = e2nn.SequentialModule(
-            e2nn.R2ConvTransposed(in_type, out_type, kernel_size=7, stride=1, padding=2, bias=False),
-            e2nn.InnerBatchNorm(out_type),
-            e2nn.ReLU(out_type, inplace=True)
-        )
-
-
-        # upsampling to 28x28
-        self.upsample = nn.Upsample(size=28, mode='bilinear', align_corners=False)
-
-    def forward(self, input: torch.Tensor):
-        x = e2nn.GeometricTensor(input, self.input_type)
-        x = self.block1(x)
-        x = self.block2(x)
-        x = self.block3(x)
-        x = self.block4(x)
-        x = self.block5(x)
-        x = self.block6(x)
-        x = x.tensor
-        x = self.upsample(x)
-        return x
-
-# class EquivariantEncoder(nn.Module):
-#     def __init__(self, input_channels=1, latent_dim=32):
-#         super().__init__()
-#         self.CNN_c8_mu = c8CNN(input_channels, output_channels=latent_dim)
-#         # self.fc_mu = nn.Linear(128, latent_dim)
-#         # self.fc_logvar = nn.Linear(latent_dim*3*3, latent_dim)
-#         self.CNN_c8_sigma = c8CNN(input_channels, output_channels=latent_dim)
-
-#     def forward(self, x):
-#         mu = self.CNN_c8_mu(x)
-#         logvar = self.CNN_c8_sigma(x)
-#         # x = x.mean(dim=[2, 3])  # Global pooling
-#         # mu = self.fc_mu(x)
-#         # logvar = self.Relu1(self.fc_logvar(x))
-#         return mu, logvar
-
 class EquivariantDecoder(nn.Module):
-    def __init__(self, output_channels=1, latent_dim=32):
+    def __init__(self, input_channels=1, N_rotation=12,
+                hidden_cnn_channels: list=[12, 48, 48, 1], 
+                size_double_list: list=[True, False, True, False],
+                kernel_size=[3,3,5,5]):
         super().__init__()
 
-        # self.fc = nn.Linear(latent_dim, latent_dim * 3 * 3)
+        self.input_channels = input_channels
+        self.output_channels = hidden_cnn_channels[-1]
+        self.hidden_cnn_channels = hidden_cnn_channels
+        self.size_double_list = size_double_list
+        self.kernel_size = kernel_size
 
-        # Deconvolutions for upsampling
-        self.latent_dim = latent_dim
-        self.TCNN_c8 = c8CNNTranspose(input_channels=latent_dim, output_channels=output_channels)
+        if kernel_size is None:
+            self.kernel_size = [3] * len(hidden_cnn_channels)
+        
+        self.tcnn_stack = []
+        for i in range(len(hidden_cnn_channels)):
+            kwargs = dict( output_channels=hidden_cnn_channels[i],
+                                    N_rotation=N_rotation, kernel_size=self.kernel_size[i], doubleSize=size_double_list[i])
+            if i == 0: # First layer
+                kwargs.update(dict(input_channels=input_channels, headLayer=True, tailLayer=False))
+            elif i == len(hidden_cnn_channels) - 1: # Last layer
+                kwargs.update(dict(input_channels=hidden_cnn_channels[i-1], headLayer=False, tailLayer=True))
+            else: # Middle layers
+                kwargs.update(dict(input_channels=hidden_cnn_channels[i-1], headLayer=False, tailLayer=False))
 
-    def forward(self, z):
-        # Reshape to (batch_size, 32 * 8, 7, 7) to ensure proper upsampling
-        # z = self.fc(z).view(-1, self.latent_dim, 3, 3)  
-        x = self.TCNN_c8(z)
+            self.tcnn_stack.append(single_e2TransposeCNN_module(**kwargs))
+            
+        self.tcnn_stack = nn.ModuleList(self.tcnn_stack)
 
+        self.summary()
+
+    def summary(self):
+        print('==================== Decoder Summary ====================')
+        print(f'Decoder hidden {len(self.hidden_cnn_channels)} layers:', [f"{self.input_channels}->"]+self.hidden_cnn_channels[:-1]+[f"->{self.hidden_cnn_channels[-1]}"])
+        print('Decoder size doubling:', self.size_double_list)
+        print('Decoder kernel_size:', self.kernel_size)
+
+        channel_expansion_rate = self.hidden_cnn_channels[-1] / self.input_channels
+        spatial_expansion_rate = np.prod([4 if double else 1 for double in self.size_double_list])
+        print(f'Channel expansion rate: {channel_expansion_rate: .2f}')
+        print(f'Spatial expansion rate: {spatial_expansion_rate: .2f}')
+        print(f'Total expansion rate: {channel_expansion_rate * spatial_expansion_rate: .2f}')
+
+
+    def forward(self, x):
+        
+        for i in range(len(self.tcnn_stack)):
+            x = self.tcnn_stack[i](x)
         return x
 
+class EquivariantVAE(nn.Module):
+    def __init__(self, input_channels=1, N_rotation=12,
+                hidden_cnn_channels: list=[96, 48, 48, 12], 
+                hidden_pooling: list=[-1.00, 0.66, -1.00, 0.66],
+                kernel_size=[5,5,3,3]):
+        """
+        Decoder will mirror the encoder
 
-class VAE(nn.Module):
-    def __init__(self, input_channels=1, latent_dim=32):
+        Note: Input_channels and hidden_cnn_channels[-1] could be any number, but other hidden_cnn_channels should be divisible by N_rotation
+        """
         super().__init__()
-        self.encoder = EquivariantEncoder(input_channels, latent_dim)
-        self.decoder = EquivariantDecoder(input_channels, latent_dim)
+
+        self.encoder = EquivariantEncoder_double_cnn(input_channels=input_channels, 
+                                                     N_rotation=N_rotation, 
+                                                     hidden_cnn_channels=hidden_cnn_channels, 
+                                                     hidden_pooling=hidden_pooling, 
+                                                     kernel_size=kernel_size)
+        
+        dec_input_channels = hidden_cnn_channels[-1]
+        dec_hidden_cnn_channels = (hidden_cnn_channels[:-1])[::-1]
+        dec_hidden_cnn_channels.append(input_channels)
+        dec_kernel_size = kernel_size[::-1]
+        size_double_list = np.where(np.array(hidden_pooling[::-1]) == -1, False, True)
+
+        self.decoder = EquivariantDecoder(input_channels=dec_input_channels, N_rotation=N_rotation,
+                                          hidden_cnn_channels=dec_hidden_cnn_channels, 
+                                          size_double_list=size_double_list,
+                                          kernel_size=dec_kernel_size)
+
+        self.compression_rate = self.encoder.spatical_compression_factor
+
+        self.summary()
 
     def reparameterize(self, mu, logvar):
         std = torch.exp(0.5 * logvar)
         eps = torch.randn_like(std)
         return mu + eps * std 
 
+    def summary(self):
+        # Print model parameters
+        print('==================== VAE Summary ====================')
+        # encoder_parameters = sum(p.numel() for p in self.encoder.parameters())
+        # decoder_parameters = sum(p.numel() for p in self.decoder.parameters())
+        # print(f'Encoder parameters: {encoder_parameters}')
+        # print(f'Decoder parameters: {decoder_parameters}')
+        # print(f'Total parameters: {encoder_parameters + decoder_parameters}')
+        enc_para_number = print_model_size(self.encoder, "Encoder")
+        dec_para_number = print_model_size(self.decoder, "Decoder")
+        print(f'Total parameters: {enc_para_number + dec_para_number}')
+
     def forward(self, x):
+
+        H, W = x.shape[-2:]
+        if H % self.compression_rate != 0 and W % self.compression_rate != 0:
+            print("Warning: Input size not divisible by compression rate. Reconstruction may not match input size")
+
         mu, logvar = self.encoder(x)
         z = self.reparameterize(mu, logvar)
         x_recon = self.decoder(z)
         return x_recon, mu, logvar
 
 # Loss function
-def vae_loss(recon_x, x, mu, logvar):
+def vae_loss(recon_x, x, mu, logvar, beta=0.02):
     recon_loss = F.mse_loss(recon_x, x, reduction="sum")
-    kl_loss = -0.02 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())
+    kl_loss = -beta * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())
     return recon_loss + kl_loss
 
-
-def print_model_size(model):
+def print_model_size(model, model_name="Model"):
     param_size = 0
+    param_number = 0
     for param in model.parameters():
         param_size += param.nelement() * param.element_size()
+        param_number += param.numel()
     buffer_size = 0
     for buffer in model.buffers():
         buffer_size += buffer.nelement() * buffer.element_size()
     size_all_mb = (param_size + buffer_size) / 1024**2
-    print(f'Model size: {size_all_mb:.3f} MB')
+    print(f'{model_name} parameters: {param_number} with size of {size_all_mb:.3f} MB')
+    return param_number
 
+def unit_test():
+    #random seed
+
+    torch.manual_seed(36)
+
+    device = "cpu" # For testing
+    data = torch.randn(10, 1, 60, 60).to(device) # input image size should be divisible by 2^n (larger n the better, n determines hidden pooling layers)
+    vae = EquivariantVAE(input_channels=1,
+                         hidden_cnn_channels=[60,60,48,48,4],
+                         hidden_pooling=[-1,0.66,-1,-1,0.66],
+                         kernel_size=[7,5,5,3,3]).to(device)
+
+    x_recon, mu, logvar = vae(data)
+    print("\nUnit Test:")
+    print_model_size(vae)
+    if x_recon.shape == data.shape:
+        print("Reconstruction Shape: Pass")
+        loss = vae_loss(x_recon, data, mu, logvar)
+        print(loss)
+    else:
+        print("Reconstruction Shape: Fail")
+        print(f"Expected: {data.shape}, Got: {x_recon.shape}")
+
+    return vae
 
 if __name__ == "__main__":
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    data = torch.randn(10, 1, 28, 28).to(device)
+    unit_test()
 
-    c = single_e2CNN_module().to(device)
-    vae = VAE().to(device)
-    print_model_size(vae)
-    enc = EquivariantEncoder_double_cnn().to(device)
-    dec = EquivariantDecoder().to(device)
+    
