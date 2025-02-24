@@ -41,4 +41,5 @@ test_data
 fp-input-AAp-331
 fp-input-AB-661
 
-/src/from_model/data/
+/src/from_model/unittest/data/
+src/from_model/vae_e2_mnist.pth
