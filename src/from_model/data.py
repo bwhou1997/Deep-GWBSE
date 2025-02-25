@@ -82,3 +82,28 @@ wfndata.h5
 
 def wfnfft():
     pass
+
+
+class ToyDataSet(Dataset):
+
+    """
+    For testing purposes, we will use a toy dataset
+    """
+    d_model = 12
+    batch_size = 1 #
+    nk_max = 12*12
+    nc_max = 20
+    nv_max = 20
+    nb_max = nc_max + nv_max
+    d_latent = 12
+
+    # BSE data
+    cond_embedding = torch.rand((batch_size, nk_max, nc_max, d_latent))
+    val_embedding = torch.rand((batch_size, nk_max, nv_max, d_latent))
+    cond_band_index = torch.arange(1,nc_max+1)[None, None, :]
+    val_band_index = torch.arange(-1,-nv_max-1,-1)[None, None, :]
+
+    @classmethod
+    def get_BSE_data_batch(cls):
+        return cls.cond_embedding, cls.val_embedding, cls.cond_band_index, cls.val_band_index
+    

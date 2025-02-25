@@ -17,6 +17,13 @@ twist.cif───(deephe3-xx.py, diag_plot.py)─> band.png
     model─┘
 ```
 
+```
+--Path 2--:
+xxx
+```
+model scheme:
+![model](from_model/fig/model.png)
+
 ### TODO ###
 
 - Xian: data.py (WFN task, Train VAE)
