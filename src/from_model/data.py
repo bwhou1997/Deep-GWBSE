@@ -88,8 +88,13 @@ class ToyDataSet(Dataset):
 
     """
     For testing purposes, we will use a toy dataset
+
+    Note: each material is a "sentenece" in the transformer model
+    nk*nb: number of "words" in the "sentence"
+    d_latent: dimension of the "word" embedding
+
     """
-    d_model = 12
+    d_model = 96
     batch_size = 1 #
     nk_max = 12*12
     nc_max = 20
@@ -98,10 +103,15 @@ class ToyDataSet(Dataset):
     d_latent = 12
 
     # BSE data
-    cond_embedding = torch.rand((batch_size, nk_max, nc_max, d_latent))
-    val_embedding = torch.rand((batch_size, nk_max, nv_max, d_latent))
-    cond_band_index = torch.arange(1,nc_max+1)[None, None, :]
-    val_band_index = torch.arange(-1,-nv_max-1,-1)[None, None, :]
+    cond_embedding = torch.rand((batch_size, nk_max, nc_max, d_model)) # after VAE-Embeeding
+    val_embedding = torch.rand((batch_size, nk_max, nv_max, d_model)) # after VAE-Embeeding
+    cond_band_index = torch.arange(1,nc_max+1)[None, None, :, None].repeat(batch_size, nk_max, 1,1)
+    val_band_index = torch.arange(-1,-nv_max-1,-1)[None, None, :, None].repeat(batch_size, nk_max, 1,1)
+
+    cond_kpt = torch.rand((batch_size, nk_max, 1, 3)).repeat(1, 1, nc_max, 1)
+    val_kpt = torch.rand((batch_size, nk_max, 1, 3)).repeat(1, 1, nv_max, 1)
+    cond_kpt_weight = torch.rand((batch_size, nk_max, 1, 1)).repeat(1, 1, nc_max, 1)
+    val_kpt_weight = torch.rand((batch_size, nk_max, 1, 1)).repeat(1, 1, nv_max, 1)
 
     @classmethod
     def get_BSE_data_batch(cls):
