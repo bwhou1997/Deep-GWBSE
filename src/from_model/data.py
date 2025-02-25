@@ -94,7 +94,7 @@ class ToyDataSet(Dataset):
     d_latent: dimension of the "word" embedding
 
     """
-    d_model = 96
+    d_model = 36
     batch_size = 1 #
     nk_max = 12*12
     nc_max = 20
