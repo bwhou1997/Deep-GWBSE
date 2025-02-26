@@ -1,14 +1,14 @@
 ## Folder Structure
-Here is the general workflow
+General workflow
 ```
 
 Molecule Dynamncse─┐
-      external src───(Collect)─>fp-input ──(QE/SIESTA/GW + HPRO)─>─┌── ml-train-set──(ML)─> model
+      external src───(Collect)─>fp-input ──(QE/SIESTA/BGW + HPRO)─>─┌── ml-train-set──(ML)─> model
                ...─┘                                               └── ml-test-set
 ```
-Tweisted-angle study of hBN
+**Path 1** Tweisted-angle study of hBN
 ```
---Path 1--:
+
 1. Train:
 supercell.cif─(flow.py)─> MD─(md.py)─>fp-input─(flows.py)─> ml_dataset ──(deep-collect.py, deephe3-train.py)─> model
 
@@ -17,17 +17,29 @@ twist.cif───(deephe3-xx.py, diag_plot.py)─> band.png
     model─┘
 ```
 
+**Path 2** MBFormer for GW-BSE
 ```
 --Path 2--:
-xxx
-```
-model scheme:
-![model](from_model/fig/model.png)
+1. Train:
+external database─(collect.py)─>fp-input─(flows.py)─> ml_dataset ─(MBformer)─> model
 
-### TODO ###
+Features: G0W0, BSE (binding energy, |<cvk|S>|)
+```
+
+model scheme:
+![model](from_model/fig/01-model.png)
+
+GW scheme:
+![GW](from_model/fig/02-GW.png)
+
+BSE scheme:
+![BSE](from_model/fig/03-BSE.png)
+
+### TODO
 
 - Xian: data.py (WFN task, Train VAE)
 - Bowen: Transformer
+- Jinyuan: 
                                            
 ### 1. **stru-input** folder
 The stru-input folder contains the crystal structures
@@ -91,15 +103,17 @@ flows/
 |   |   |   ├── orbital_types.dat
 |   |   |   ├── overlaps.h5
 |   |   |   ├── rlat.dat
-|   └── └── └── site_positions.dat
-|
+|   |   └── └── site_positions.dat
+|   ├──17-wfn_fi
+|   ├──18-kernel
+|   └──19-absorption
 ├── mat-2
 |   └──  ...
 └── ...
 ```
 
 
-### 4. **ml-train/test** folder
+### 4. **DeepH-E3** input folder
 
 ```
 ml-train/test
