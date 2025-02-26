@@ -20,13 +20,19 @@ This package provides multiple deep learning models for DFT-GW-BSE calculations 
 - Fully-automatic GW+BSE workflow ([high-throughput workflow](./src/note.md))
 - Equivariant graph neural networks for DFT Hamiltonian
 
-- VAE+MBFormer: attention-based many-body transformer for GW-BSE
-  - model scheme:
-<img src="src/from_model/fig/01-model.png" width="100%">
-  - GW scheme:
-<img src="src/from_model/fig/02-GW.png" width="50%">
-  - BSE scheme:
-<img src="src/from_model/fig/03-BSE.png" width="40%">
+- VAE+MBFormer: attention-based many-body transformer for GW-BSE  
+  - model scheme:  
+    <p align="center">
+      <img src="src/from_model/fig/01-model.png" width="100%">
+    </p>
+  - GW scheme:  
+    <p align="center">
+      <img src="src/from_model/fig/02-GW.png" width="50%">
+    </p>
+  - BSE scheme:  
+    <p align="center">
+      <img src="src/from_model/fig/03-BSE.png" width="40%">
+    </p>
 
 ## Installation
 Pre-requisites First-principles Packages:
