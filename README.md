@@ -22,11 +22,11 @@ This package provides multiple deep learning models for DFT-GW-BSE calculations 
 
 - VAE+MBFormer: attention-based many-body transformer for GW-BSE
   - model scheme:
-![model](src/from_model/fig/01-model.png)
+<img src="src/from_model/fig/01-model.png" width="100%">
   - GW scheme:
-![GW](src/from_model/fig/02-GW.png){ width=50% }
+<img src="src/from_model/fig/02-GW.png" width="50%">
   - BSE scheme:
-![BSE](src/from_model/fig/03-BSE.png){ width=40% }
+<img src="src/from_model/fig/03-BSE.png" width="40%">
 
 ## Installation
 Pre-requisites First-principles Packages:
