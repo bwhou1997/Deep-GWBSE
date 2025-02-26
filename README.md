@@ -19,7 +19,14 @@ Author: Bowen Hou (bowen.hou@yale.edu)
 This package provides multiple deep learning models for DFT-GW-BSE calculations from crystal structures, including the following:
 - Fully-automatic GW+BSE workflow ([high-throughput workflow](./src/note.md))
 - Equivariant graph neural networks for DFT Hamiltonian
+
 - VAE+MBFormer: attention-based many-body transformer for GW-BSE
+  - model scheme:
+![model](src/from_model/fig/01-model.png)
+  - GW scheme:
+![GW](src/from_model/fig/02-GW.png)
+  - BSE scheme:
+![BSE](src/from_model/fig/03-BSE.png)
 
 ## Installation
 Pre-requisites First-principles Packages:

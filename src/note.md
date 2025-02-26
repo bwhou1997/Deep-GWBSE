@@ -26,14 +26,14 @@ external database─(collect.py)─>fp-input─(flows.py)─> ml_dataset ─(MBf
 Features: G0W0, BSE (binding energy, |<cvk|S>|)
 ```
 
-model scheme:
+<!-- model scheme:
 ![model](from_model/fig/01-model.png)
 
 GW scheme:
 ![GW](from_model/fig/02-GW.png)
 
 BSE scheme:
-![BSE](from_model/fig/03-BSE.png)
+![BSE](from_model/fig/03-BSE.png) -->
 
 ### TODO
 
