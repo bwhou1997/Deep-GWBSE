@@ -24,9 +24,9 @@ This package provides multiple deep learning models for DFT-GW-BSE calculations 
   - model scheme:
 ![model](src/from_model/fig/01-model.png)
   - GW scheme:
-![GW](src/from_model/fig/02-GW.png)
+![GW](src/from_model/fig/02-GW.png){ width=50% }
   - BSE scheme:
-![BSE](src/from_model/fig/03-BSE.png)
+![BSE](src/from_model/fig/03-BSE.png){ width=40% }
 
 ## Installation
 Pre-requisites First-principles Packages:
