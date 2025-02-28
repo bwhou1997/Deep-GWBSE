@@ -154,8 +154,11 @@ class PositionalEmbeddings_band_energy_kpt(nn.Module):
         band_emb = self.band_pos_emb(band_pos)
         return torch.cat((kpt_emb, energy_emb + band_emb), dim=-1)
 
-
-
+class KWeightSampling(nn.Module):
+    """
+    KWeightSampling is used to sample k-points based on the weights
+    """
+    # TODO
 
 
 if __name__ == "__main__":
