@@ -94,7 +94,7 @@ class QeBgwFlow(WfnBgwFlow):
         if kwargs.get('paraband_nproc'):
             kwargs.update(dict(PWFLAGS=' ',
                             #    nproc=min(kwargs['ngkpt'][0]*kwargs['ngkpt'][1]*kwargs['ngkpt'][2], kwargs["nproc"])))
-                            nproc=min(16, kwargs["nproc"])))
+                            nproc=min(kwargs["nproc_02wfn"], kwargs["nproc"])))
 
         super(QeBgwFlow, self).__init__(**kwargs)
 

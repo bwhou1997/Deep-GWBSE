@@ -12,7 +12,7 @@ def get_scf_input(prefix, pseudo_dir, pseudos, structure, ecutwfc, kpts, wtks):
         )
     
     inp.electrons.update(
-        electron_maxstep = 100,
+        electron_maxstep = 300,
         conv_thr = 1.0e-10,
         mixing_mode = 'plain',
         mixing_beta = 0.7,

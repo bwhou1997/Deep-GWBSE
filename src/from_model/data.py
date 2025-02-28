@@ -94,8 +94,8 @@ class ToyDataSet(Dataset):
     d_latent: dimension of the "word" embedding
 
     """
-    d_model = 36
-    batch_size = 1 #
+    d_model = 24 # divisible by 24
+    batch_size = 10 #
     nk_max = 12*12
     nc_max = 20
     nv_max = 20
@@ -107,6 +107,8 @@ class ToyDataSet(Dataset):
     val_embedding = torch.rand((batch_size, nk_max, nv_max, d_model)) # after VAE-Embeeding
     cond_band_index = torch.arange(1,nc_max+1)[None, None, :, None].repeat(batch_size, nk_max, 1,1)
     val_band_index = torch.arange(-1,-nv_max-1,-1)[None, None, :, None].repeat(batch_size, nk_max, 1,1)
+    cond_band_energy = torch.rand(nc_max)[None, None, :, None].repeat(batch_size, nk_max, 1,1)
+    val_band_energy = torch.rand(nc_max)[None, None, :, None].repeat(batch_size, nk_max, 1,1)
 
     cond_kpt = torch.rand((batch_size, nk_max, 1, 3)).repeat(1, 1, nc_max, 1)
     val_kpt = torch.rand((batch_size, nk_max, 1, 3)).repeat(1, 1, nv_max, 1)
