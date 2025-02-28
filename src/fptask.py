@@ -379,9 +379,12 @@ class QeBgwFlow_band(WfnBgwFlow):
         self.spin_polarization_fname = kwargs.get('spin_polarization_fname', 'dummy')
         assert kwargs['kpath_band'] # ["kx ky kz nk", ...]
         self.prefix = kwargs['prefix']
-        for kpt in kwargs['kpath_band']:
-            assert len(kpt.split()) == 4
-        self.kpath_band = ['K_POINTS crystal_b'] + [str(len(kwargs['kpath_band']))] + kwargs['kpath_band']
+
+        #  2025/02/27: setup kpath_band by user
+        # for kpt in kwargs['kpath_band']:
+        #     assert len(kpt.split()) == 4
+        # self.kpath_band = ['K_POINTS crystal_b'] + [str(len(kwargs['kpath_band']))] + kwargs['kpath_band']
+        self.kpath_band = kwargs['kpath_band']
 
         # band_helper
         self.nns_helper = nns_helper(dirname= self.dirname, **kwargs)

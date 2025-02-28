@@ -182,15 +182,17 @@ class DFT_GW_HPRO_Flow(Workflow):
             kwargs.update(fnames)
         
         # ==== Aobasis(SIESTA) ==== #
-        aobasis_dirname = self.make_ao_basis(**kwargs)
-        kwargs.update(aobasis_dirname)
+        if kwargs.get('siesta_calculator', False):
+            aobasis_dirname = self.make_ao_basis(**kwargs)
+            kwargs.update(aobasis_dirname)
 
         # ==== GW calculations ==== #
         if kwargs.get('GW', False):
             self.make_gw_tasks_bgw(**kwargs)
  
         # ==== SIESTA/HPRO ==========
-        self.make_hpro_task(**kwargs)
+        if kwargs.get('hpro_calcator', False):
+            self.make_hpro_task(**kwargs)
 
         # ==== BSE Caculcations ==========
         if kwargs.get('BSE', False):
@@ -293,7 +295,7 @@ class DFT_GW_HPRO_Flow(Workflow):
             dirname = pjoin(self.dirname, '02-wfn'),
             ngkpt = self.ngkpt,
             kshift = self.kshift,
-            nbnd = self.nbnd,
+            nbnd = self.n_z_valence+self.nbnd,
             rhog_flag = True,
             paraband_nproc = True,
             **kwargs)
@@ -474,7 +476,7 @@ class DFT_GW_HPRO_Flow(Workflow):
             dirname = pjoin(self.dirname, '17-wfn_fi'),
             ngkpt = self.ngkpt_fi,
             kshift = self.kshift,
-            nbnd = self.n_z_valence+kwargs.get('nbnd_cond')+4,
+            nbnd = self.n_z_valence+kwargs.get('nbnd_cond')+self.nbnd,
             rhog_flag = False,
             **kwargs)  
         self.add_tasks(self.wfn_fi_task_sh, merge=False)

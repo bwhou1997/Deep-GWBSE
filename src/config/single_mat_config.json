@@ -16,13 +16,23 @@
         "nproc_per_node": "",
     "2_QE_SETTING": "DFT (QE) settings",
         "PWFLAGS": "-nk 16",
+        "nproc_02wfn": 16,
         "DFT_band": true,
-        "ngkpt": [4,4,1],
-        "ngkpt_fi": [6,6,1],
+        "ngkpt": [6,6,1],
+        "ngkpt_fi": [9,9,1],
         "qshift": [0.001,0.0,0.0],
         "nbnd": 30,
         "ecutwfc": 75,
         "SOC": false,
+        "kpath_band": [
+            "K_POINTS crystal_b",
+            "5",
+            "0 0 0 20",
+            "0.5 0 0 20",
+            "0.33333 0.33333 0 20",
+            "0 0 0 20",
+            "-0.333333 -0.33333 0 20"
+        ],
     "3_BGW_SETTING": "BGW settings",
         "GW": true, 
         "BSE": true,
@@ -56,7 +66,8 @@
             "dont_check_norms",
             "cell_slab_truncation",
             "screening_semiconductor",
-            "use_symmetries_coarse_grid"
+            "use_symmetries_coarse_grid",
+            "screened_coulomb_cutoff 7.0"
         ],
         "absorption_extra_lines": [
             "dont_check_norms",
@@ -71,16 +82,11 @@
             "write_eigenvectors -1"
         ],
     "4_SIESTA": "SIESTA settings",
+        "siesta_calculator": true,
         "basis_set_siesta": "DZP",
         "mesh_cutoff_siesta": 320,
         "dm_tolerance_siesta": 1e-06,
         "max_scf_iter_siesta": 300,
-        "kpath_band": [
-            "0 0 0 20",
-            "0.5 0 0 20",
-            "0.33333 0.33333 0 20",
-            "0 0 0 20",
-            "-0.333333 -0.33333 0 20"
-        ],
-    "5_HPRO": "HPRO settings"
+    "5_HPRO": "HPRO settings",
+        "hpro_calcator": true
     }
