@@ -20,6 +20,7 @@
         "DFT_band": true,
         "ngkpt": [6,6,1],
         "ngkpt_fi": [9,9,1],
+        "smearing":true,
         "qshift": [0.001,0.0,0.0],
         "nbnd": 30,
         "ecutwfc": 75,
