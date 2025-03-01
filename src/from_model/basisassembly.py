@@ -22,6 +22,8 @@ class PassBasisAssembly(nn.Module):
     nbasis = 1
     def __init__(self,):
         super().__init__()
+    def get_dinput_from_dmodel(self, d_model):
+        return d_model
     def forward(self,x):
         return x
         
@@ -35,6 +37,11 @@ class ElectronHoleBasisAssembly_TensorProduct(nn.Module):
         output: x with shape (batch, nk, x2_band, x1_band, d_model^2)
         """
         super().__init__()
+    def get_dinput_from_dmodel(self, d_model):
+        d_input = np.sqrt(d_model)
+        assert d_input.is_integer(), "The dimension of the input should be a square number"
+        return int(d_input)
+
     def forward(self, x1, x2):
         assert x1.shape[-3] == x2.shape[-3], "The number of k-points should be the same"
         d_model1 = x1.shape[-1]
@@ -55,6 +62,11 @@ class ElectronHoleBasisAssembly_Concatenate(nn.Module):
         """
         super().__init__()
     
+    def get_dinput_from_dmodel(self, d_model):
+        d_input = d_model // 2
+        assert d_input * 2 == d_model, "The dimension of the input should be a even number"
+        return d_input
+
     def forward(self, x1, x2):
         assert x1.shape[-3] == x2.shape[-3], "The number of k-points should be the same"
         bb1, bb2 = b1b2_grid(x1.shape[-2], x2.shape[-2])
