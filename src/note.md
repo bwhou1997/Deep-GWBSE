@@ -4,7 +4,7 @@ General workflow
 
 Molecule Dynamncse─┐
       external src───(Collect)─>fp-input ──(QE/SIESTA/BGW + HPRO)─>─┌── ml-train-set──(ML)─> model
-               ...─┘                                               └── ml-test-set
+               ...─┘                                                └── ml-test-set
 ```
 **Path 1** Tweisted-angle study of hBN
 ```

@@ -31,8 +31,8 @@ class ElectronHoleBasisAssembly_TensorProduct(nn.Module):
     def __init__(self,):
         """
         Tensorproduct basis assembly: |cvk> = |ck> x |vk>
-        input: x1, x2 with shape (batch, nk, nc/nv, d_model)
-        output: x with shape (batch, nk, nc*nv, d_model^2)
+        input: x1, x2 with shape (batch, nk, nband, d_model)
+        output: x with shape (batch, nk, x2_band, x1_band, d_model^2)
         """
         super().__init__()
     def forward(self, x1, x2):
@@ -50,8 +50,8 @@ class ElectronHoleBasisAssembly_Concatenate(nn.Module):
     def __init__(self,):
         """
         Tensorproduct basis assembly: |cvk> = |ck> + |vk>
-        input: x1, x2 with shape (batch, nk, nc/nv, d_model)
-        output: x with shape (batch, nk, nc*nv, d_model*2)
+        input: x1, x2 with shape (batch, nk, nband, d_model)
+        output: x with shape (batch, nk, x2_band, x1_band, d_model*2)
         """
         super().__init__()
     
