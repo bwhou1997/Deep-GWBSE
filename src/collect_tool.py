@@ -16,11 +16,6 @@ import os
 import subprocess
 from tqdm import tqdm
 
-suffix = 'AB-661'
-md_input_fname = './flow-hBN-md/flow-hBN-AB-661/01-density/scf.in'
-md_output_fname = './flow-hBN-md/flow-hBN-AB-661/01-density/md.out'
-stru_dir = './fp-input-AB-661/'
-
 
 def collect_from_md(md_input_fname = './flow-hBN-md/flow-hBN-AB-661/01-density/scf.in',
                     md_output_fname = './flow-hBN-md/flow-hBN-AB-661/01-density/md.out',
@@ -89,6 +84,11 @@ def metal_seek(flows='./flows-bwhou'):
         scf_in = pjoin(root, "01-density",'scf.in')
         bands_dat = pjoin(root, "05-band",'bands.dat.gnu')
 
+        if not os.path.exists(scf_out) or not os.path.exists(scf_in) or not os.path.exists(bands_dat):
+            print(f"Missing files in {root}, skipping...")
+            summary['unknown'].append(mat_id)
+            continue
+
         # grep "Fermi" of scf_out
         print(f"Material: {mat_id}")
         result = subprocess.run(f"grep 'Fermi' {scf_out}", capture_output=True, shell=True)
@@ -145,8 +145,6 @@ def metal_seek(flows='./flows-bwhou'):
             print(f"  {mat_id} is a metal")
             summary['metal'].append(mat_id)
 
-        # break
-
     print("Summary:")
     print("  Metals:", len(summary['metal']))
     print("  Semiconductors:", len(summary['semiconductor']))
@@ -187,6 +185,7 @@ if __name__ == '__main__':
         if not args.md_suffix:
             args.md_suffix = ''
         collect_from_md(args.md_input, args.md_output, args.md_suffix)
+        
     elif args.mode == 'deeph':
         collect_from_flows_2_deep(args.deeph_flows)
     

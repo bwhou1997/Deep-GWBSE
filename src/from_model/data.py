@@ -29,11 +29,11 @@ wfndata.h5
 ├── mat-4/...
     """
 
-    def __init__(self, raw_data_dir: str, dataset_dir: str, workflow: str,
+    def __init__(self, raw_flows_dir: str, dataset_dir: str, workflow: str,
                  dataset_name: str, multiprocessing: bool = False, load_dataset: bool = True,
                  N_bands: int = 20):
         """
-        :param raw_data_dir: Path to the raw data directory
+        :param raw_flows_dir: Path to the raw data directory (flows)
         :param dataset_dir: Path to the dataset directory
         :param workflow: Workflow to process data, support ['WFN', 'GW','BSE'] now.
             'WFN': used to train VAE model (unsupervised)
@@ -80,6 +80,7 @@ wfndata.h5
     def summary(self):
         pass
 
+
 def wfnfft():
     pass
 
@@ -97,8 +98,8 @@ class ToyDataSet(Dataset):
     d_model = 24 # divisible by 24
     batch_size = 10 #
     nk_max = 12*12
-    nc_max = 20
-    nv_max = 20
+    nc_max = 8
+    nv_max = 2
     nb_max = nc_max + nv_max
     d_latent = 12
 
@@ -108,7 +109,7 @@ class ToyDataSet(Dataset):
     cond_band_index = torch.arange(1,nc_max+1)[None, None, :, None].repeat(batch_size, nk_max, 1,1)
     val_band_index = torch.arange(-1,-nv_max-1,-1)[None, None, :, None].repeat(batch_size, nk_max, 1,1)
     cond_band_energy = torch.rand(nc_max)[None, None, :, None].repeat(batch_size, nk_max, 1,1)
-    val_band_energy = torch.rand(nc_max)[None, None, :, None].repeat(batch_size, nk_max, 1,1)
+    val_band_energy = torch.rand(nv_max)[None, None, :, None].repeat(batch_size, nk_max, 1,1)
 
     cond_kpt = torch.rand((batch_size, nk_max, 1, 3)).repeat(1, 1, nc_max, 1)
     val_kpt = torch.rand((batch_size, nk_max, 1, 3)).repeat(1, 1, nv_max, 1)
@@ -116,6 +117,9 @@ class ToyDataSet(Dataset):
     val_kpt_weight = torch.rand((batch_size, nk_max, 1, 1)).repeat(1, 1, nv_max, 1)
 
     @classmethod
-    def get_BSE_data_batch(cls):
-        return cls.cond_embedding, cls.val_embedding, cls.cond_band_index, cls.val_band_index
-    
+    def get_ele_data_batch(cls):
+        return [cls.cond_embedding, cls.cond_kpt, cls.cond_band_index, cls.cond_band_energy]
+
+    @classmethod
+    def get_hole_data_batch(cls):
+        return [cls.val_embedding, cls.val_kpt, cls.val_band_index, cls.val_band_energy]

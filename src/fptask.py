@@ -284,7 +284,8 @@ class SigmaTask_NNS(SigmaTask):
     def __init__(self, dirname, **kwargs):
         if kwargs.get('use_NNS', True):
             # if 'extra_lines' not in kwargs:
-            kwargs['extra_lines'].append('subsample')
+            if 'subsample' not in kwargs['extra_lines']:
+                kwargs['extra_lines'].append('subsample')
             
         super().__init__(dirname, **kwargs)
 

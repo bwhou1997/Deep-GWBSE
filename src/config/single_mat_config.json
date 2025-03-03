@@ -80,7 +80,8 @@
             "use_momentum",
             "gaussian_broadening",
             "eqp_co_corrections",
-            "write_eigenvectors -1"
+            "write_eigenvectors -1",
+            "degeneracy_check_override"
         ],
     "4_SIESTA": "SIESTA settings",
         "siesta_calculator": true,

@@ -7,6 +7,7 @@ import torch
 import torchvision
 import torchvision.transforms as transforms
 from torch.utils.data import DataLoader
+from model_util import print_model_size
 import os
 from tqdm import tqdm
 
@@ -344,19 +345,6 @@ def vae_loss(recon_x, x, mu, logvar, beta=0.02):
     recon_loss = F.mse_loss(recon_x, x, reduction="sum")
     kl_loss = -beta * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())
     return recon_loss + kl_loss
-
-def print_model_size(model, model_name="Model"):
-    param_size = 0
-    param_number = 0
-    for param in model.parameters():
-        param_size += param.nelement() * param.element_size()
-        param_number += param.numel()
-    buffer_size = 0
-    for buffer in model.buffers():
-        buffer_size += buffer.nelement() * buffer.element_size()
-    size_all_mb = (param_size + buffer_size) / 1024**2
-    print(f'{model_name} parameters: {param_number} with size of {size_all_mb:.3f} MB')
-    return param_number
 
 def unit_test():
     #random seed
