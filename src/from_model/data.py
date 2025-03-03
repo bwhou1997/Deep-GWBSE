@@ -29,11 +29,11 @@ wfndata.h5
 ├── mat-4/...
     """
 
-    def __init__(self, raw_data_dir: str, dataset_dir: str, workflow: str,
+    def __init__(self, raw_flows_dir: str, dataset_dir: str, workflow: str,
                  dataset_name: str, multiprocessing: bool = False, load_dataset: bool = True,
                  N_bands: int = 20):
         """
-        :param raw_data_dir: Path to the raw data directory
+        :param raw_flows_dir: Path to the raw data directory (flows)
         :param dataset_dir: Path to the dataset directory
         :param workflow: Workflow to process data, support ['WFN', 'GW','BSE'] now.
             'WFN': used to train VAE model (unsupervised)
@@ -79,6 +79,7 @@ wfndata.h5
 
     def summary(self):
         pass
+
 
 def wfnfft():
     pass

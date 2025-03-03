@@ -4,8 +4,9 @@ import h5py as h5
 import os
 import matplotlib.pyplot as plt
 from scipy.io import FortranFile
-from utils import H5ls, time_watch, memory_watch, eV2Ry
+from model_util import H5ls, time_watch, memory_watch, eV2Ry
 from tqdm import tqdm
+
 class eqp_file():
     """
     These object decompose eqp.dat into data_DFT, data_GW, klist and spin_list
@@ -73,7 +74,6 @@ class eqp_file():
                 f.write("%s %s %s\n" % (j + 1, self.data_DFT[j, i], self.data_GW[j, i]))
             f.write('\n')
         f.close()
-
 
 class vloc:
     """
@@ -264,9 +264,13 @@ class vloc:
             print('resetting: vscg is different')
         self._set_vcsg = True
 
-
 class wfn:
     def __init__(self, wfn_file_h5):
+        # Status flags
+        self._read_header = False
+        self._get_wfn_g = False
+        self._get_wfn_r = False
+
         # Open the file
         self.wfn_file_h5 = wfn_file_h5
         self.wfn_file = h5.File(wfn_file_h5, 'r')
@@ -277,7 +281,6 @@ class wfn:
         self.names = h5ls.names
 
         # Get the header information
-        self._read_header = False
         self.crystal = {}
         self.gspace = {}
         self.kpoints = {}
@@ -312,10 +315,17 @@ class wfn:
         self.el = self.kpoints['el'][0]
         self.k_weights = self.kpoints['w']
         self.FFTgrid = self.gspace['FFTgrid']
+
     
     @time_watch
     @memory_watch()
     def get_wfn_g_in_grid(self):
+        """
+        Calculate the wavefunction in full G-grid   
+        Input: 
+        Output:
+            create self.wfn_nk_ggrid: (nb, nk, FFTgrid[0], FFTgrid[1], FFTgrid[2])
+        """
         assert self._read_header
         print('Loading wfn.h5...')
         # Be careful with the shape of the wavefunction coefficients, 
@@ -337,6 +347,12 @@ class wfn:
                 self.wfn_nk_ggrid[ib,ik,gx,gy,gz] = wfn_b[self.nkg_slice[ik][0]:self.nkg_slice[ik][1]]
         # print('Full G-grid wavefunction:', self.wfn_nk_ggrid.nbytes/1024/1024, 'MB')
         # Norm Check
+        self._get_wfn_g = True
+
+    def get_wfn_r_in_grid(self):
+        pass
+
+
 
 def eqp2vsc_hat(eqp_dat='./test_data/eqp_full.dat', vsc_file='./test_data/VSC', wfn_file='./test_data/wfn_full.h5'): 
     nqp = 8 # number of quasiparticle energies considered
@@ -364,31 +380,32 @@ def eqp2vsc_hat(eqp_dat='./test_data/eqp_full.dat', vsc_file='./test_data/VSC', 
     vsc.write_v()
     # print('vlocr shape:', vlocr.shape)
 
-from sklearn.linear_model import Ridge
-ridge = Ridge(alpha=0.01, solver='lsqr')
 if __name__ == '__main__':
     # eqp2vsc_hat(vsc_file='./test_data/VXC')
-    nqp = 8
-    eqp = eqp_file('./test_data/eqp_full.dat')
-    vsc = vloc('./test_data/VSC')
-    wf = wfn('./test_data/wfn_full.h5')
-    wf.get_wfn_g_in_grid()
+    # nqp = 8
+    # eqp = eqp_file('./test_data/eqp_full.dat')
+    vsc = vloc('../flows/mat-3/02-wfn/VSC')
+    wf = wfn('../flows/mat-3/02-wfn/wfn.h5')
+    # wf.get_wfn_g_in_grid()
 
-    vxc_corr_full_r = np.zeros(np.prod(wf.FFTgrid))
-    for ik in tqdm(range(wf.nk), desc='Building Sigma-Vxc in real space'):
-        # eqp.band_index start with 1
-        qp_index = eqp.band_index[ik,:nqp]-1
-        qp = eqp.data_GW[ik,:nqp] - eqp.data_DFT[ik,:nqp] # Sigma -Vxc
-        # corr_nk[qp_index, ik] = eqp.data_GW[ik] - eqp.data_DFT[ik] # Sigma -Vxc
-        wf_qp_g = wf.wfn_nk_ggrid[qp_index, ik] # (nb, ng)
-        wf_qp_nr = np.fft.ifftn(wf_qp_g, s=wf.FFTgrid, norm='forward', axes=(1,2,3)) / np.sqrt(np.prod(wf.FFTgrid))
 
-        # <r|Sigma'|r> = wf_qp_rn * <n|Sigma|n>, where Sigma' is an approximation of Sigma
-        wf_qp_nr_ = ((abs(wf_qp_nr)**2).reshape(nqp,-1))
-        # wf_qp_rn_pinv = np.linalg.pinv(wf_qp_nr_)
-        # vxc_corr_full_r += np.einsum('rn, n->r',  wf_qp_rn_pinv, qp) * wf.k_weights[ik] * eV2Ry 
-        ridge.fit(wf_qp_nr_, qp)
-        vxc_corr_full_r += ridge.coef_ * wf.k_weights[ik] * eV2Ry
+
+
+    # vxc_corr_full_r = np.zeros(np.prod(wf.FFTgrid))
+    # for ik in tqdm(range(wf.nk), desc='Building Sigma-Vxc in real space'):
+    #     # eqp.band_index start with 1
+    #     qp_index = eqp.band_index[ik,:nqp]-1
+    #     qp = eqp.data_GW[ik,:nqp] - eqp.data_DFT[ik,:nqp] # Sigma -Vxc
+    #     # corr_nk[qp_index, ik] = eqp.data_GW[ik] - eqp.data_DFT[ik] # Sigma -Vxc
+    #     wf_qp_g = wf.wfn_nk_ggrid[qp_index, ik] # (nb, ng)
+    #     wf_qp_nr = np.fft.ifftn(wf_qp_g, s=wf.FFTgrid, norm='forward', axes=(1,2,3)) / np.sqrt(np.prod(wf.FFTgrid))
+
+    #     # <r|Sigma'|r> = wf_qp_rn * <n|Sigma|n>, where Sigma' is an approximation of Sigma
+    #     wf_qp_nr_ = ((abs(wf_qp_nr)**2).reshape(nqp,-1))
+    #     # wf_qp_rn_pinv = np.linalg.pinv(wf_qp_nr_)
+    #     # vxc_corr_full_r += np.einsum('rn, n->r',  wf_qp_rn_pinv, qp) * wf.k_weights[ik] * eV2Ry 
+    #     ridge.fit(wf_qp_nr_, qp)
+    #     vxc_corr_full_r += ridge.coef_ * wf.k_weights[ik] * eV2Ry
 
 
     # vxc_corr_full_r = vxc_corr_full_r.reshape(wf.FFTgrid) # eV -> Ry
