@@ -46,7 +46,7 @@ class Trainer:
         self.loss = loss
         
         
-        self.tb_writer = SummaryWriter(os.path.join(self.save_path, "tensorboard"))
+        self.tb_writer = SummaryWriter(os.path.join(self.save_path, f"{self.model_name}-tensorboard"))
 
         pass
     
@@ -90,6 +90,9 @@ class Trainer:
 
 
     def evaluate(self, input=None):
+        """
+        To be overwritten by subclasses.
+        """
         self.model.eval()
         
         pass
@@ -98,15 +101,14 @@ class Trainer:
     #region Logging
 
 
-    def record(self, loss: float):
+    def record(self, epoch: int, **kwargs):
         """
         This method is expected to be called by `train_each_epoch`.
         `train_each_epoch` is expected to pass information like loss to this method.
         Details about how this information is collected are left to subclasses to implement.
         """
-
-        # Use Tensorboard?
-        self.tb_writer.add_scalar("Loss", loss)
+ 
+        self.tb_writer.add_scalar("Loss", kwargs["loss"], global_step=epoch)
 
     #endregion
         
