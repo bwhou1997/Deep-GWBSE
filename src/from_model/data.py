@@ -1,21 +1,31 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-
 from torch.utils.data import Dataset, DataLoader, TensorDataset
-
+from interface import wfn
+from model_util import time_watch, memory_watch
+import os
+from tqdm import tqdm
+from os.path import join as pjoin
+import h5py as h5
+import logging
+"""
+Author: Bowen Hou
+Developer: Bowen Hou, Xian Xu
+Date: 2025-03-03
+"""
 
 class ManyBodyData(Dataset):
     """
 raw_data_dir(flows)/
 ├── mat-1
 |   ├──02-wfn
-|   ├──0x-wfn-kernel (todo)
 |   ├──13-sigma
-|   |   ├── eqp1.dat # (G0W0 corr.)
-|   └── └── ...
-|   ├──kernel (todo)
-|   ├──absorption (todo)
+|   |   └── eqp1.dat # (G0W0 corr.)
+|   | ...
+|   ├──17-wfn_fi
+|   ├──18-kernel 
+|   ├──19-absorption 
 ├── mat-2
 |   └──  ...
 └── ..."""
@@ -29,34 +39,64 @@ wfndata.h5
 ├── mat-4/...
     """
 
-    def __init__(self, raw_flows_dir: str, dataset_dir: str, workflow: str,
-                 dataset_name: str, multiprocessing: bool = False, load_dataset: bool = True,
-                 N_bands: int = 20):
+    def __init__(self, flows_dir: str, dataset_dir: str, dataset_type: str='WFN',
+                 dataset_name: str='', multiprocessing: bool = False, load_dataset: bool = True, 
+                 **kwargs):
         """
-        :param raw_flows_dir: Path to the raw data directory (flows)
+        :param flows_dir: Path to the raw data directory (flows)
         :param dataset_dir: Path to the dataset directory
-        :param workflow: Workflow to process data, support ['WFN', 'GW','BSE'] now.
+        :param dataset_type: Workflow to process data, support ['WFN', 'GW','BSE'] now.
+
             'WFN': used to train VAE model (unsupervised)
-                - '02-wfn': wavefunction data
+                -  required dir: '02-wfn'
+                -  required kwargs: nc_wfn, nv_wfn
+                -  optional kwargs: cutoff, useWigner
+
             'GW': used to train GW-Transformer (supervised)
-                - '01-density': charge density data
-                - '02-wfn': wavefunction data
-                - '13-sigma': sigma data
+                -  required dir: '01-density','02-wfn', '13-sigma'
+                -  required kwargs: 
+                -  optional kwargs: 
+
             'BSE': used to train BSE-Transformer (supervised)
-                - '01-density': charge density data
-                - '02-wfn': wavefunction data
-                - 'kernel': kernel data
-                - 'absorption': absorption data
+                -  required dir: '01-density','17-wfn_fi', '18-kernel', '19-absorption'
+                -  required kwargs: 
+                -  optional kwargs: 
+
         :param dataset_name: Name of the dataset
         :param multiprocessing: Whether to use multiprocessing to process data
         :param load_dataset: Whether to load existing dataset
-        :param N_bands: Number of bands to use
+        :param **kwargs:
+            'GW'
+            nc_wfn:
+            nv_wfn:
         """
         super(ManyBodyData, self).__init__()
+        assert dataset_type in ['WFN','GW','BSE'], f"dataset_type should be one of ['WFN','GW','BSE']"
 
-        assert workflow in ['WFN','GW','BSE']
-        self.data = None
         self.multiprocessing = multiprocessing
+        self.flows_dir = flows_dir
+        self.dataset_dir = dataset_dir
+        self.dataset_type = dataset_type
+        self.dataset_name = dataset_name
+        self.kwargs = kwargs
+        
+        # dataset and hyperparameters
+        # - required:
+        self.data = None
+
+        # - optional:
+        # WFN:
+        self.isWFNDataset = False
+        self.nc_wfn = None
+        self.nv_wfn = None
+        self.cutoff = None
+        self.useWigner = None
+
+        # GW:
+        self.isGWDataset = False
+        
+        # BSE:
+        self.isBSEDataset = False
 
 
     def __len__(self):
@@ -65,24 +105,63 @@ wfndata.h5
     def __getitem__(self, idx):
         return self.data[idx], self.target[idx]
     
+    @classmethod
+    def from_existing_dataset(cls, existing_dataset_dir: str) -> 'ManyBodyData':
+        return cls()
 
-    def process_worker_WFN(self):
-        pass
-        wfnfft()
-        ...
+    def process_worker_WFN(self, folder, wfn_dir='02-wfn'):
+        wfn_fname = pjoin(pjoin(folder, wfn_dir, "wfn.h5"))
+        dateset_h5_fname = pjoin(self.dataset_dir, self.dataset_type+f'_datadet_{self.dataset_name}.h5')
+        mat_id = os.path.basename(folder)
+        assert wfn_dir in ['02-wfn'], f"Only support wfn_dir = '02-wfn' now"
+        assert os.path.exists(wfn_fname), f"{wfn_fname} does not exist"
+        assert os.path.exists(dateset_h5_fname), f"Dataset h5 file does not exist"
+        assert {"nc_wfn","nv_wfn"} <= set(self.kwargs.keys()), f"nc_wfn and nv_wfn are required kwargs for WFN dataset"
 
+        nc, nv = self.kwargs.get('nc_wfn'), self.kwargs.get('nv_wfn')
+        # TODO: use **kwargs when inteface.py/wfn.get_wfn_dataset() is updated
+        wf = wfn(wfn_fname)
+
+        datapoint =  wf.get_wfn_dataset(nc=nc, nv=nv)
+
+        with h5.File(dateset_h5_fname, 'a') as f:
+            if mat_id in f:
+                del f[mat_id]
+            f.create_group(mat_id)
+            for key, val in datapoint.items():
+                f[mat_id].create_dataset(key, data=val)
+
+        return datapoint
+        
     def process(self):
-        pass
-        # parallel over here
-        for i in range(self.multiprocessing):
-            self.process_worker_WFN(i)
+        """
+        folder_list: List["flow-mat-1", "flow-mat-2"]
+        """
+        # get materials list
+        folder_list = []
+        print(f'Looking for flows data under: {os.path.abspath(self.flows_dir)}')
+        for root, dirs, files in os.walk(self.flows_dir):
+            if "01-density" in dirs: # scf is foundation for all workflows
+                folder_list.append(root)
+        assert len(folder_list) > 0, f"No data found under {self.flows_dir}"
+        print(f"Found {len(folder_list)} materials")
+
+        # initialize dataset h5 file
+        os.makedirs(self.dataset_dir, exist_ok=True)
+        with h5.File(pjoin(self.dataset_dir, self.dataset_type+f'_datadet_{self.dataset_name}.h5'), 'w') as f:
+            print(f"Creating dataset file: {os.path.abspath(f.filename)} \n")
+
+        #==================Create Dataset==================#
+        if self.dataset_type == 'WFN':
+            self.data_list = [self.process_worker_WFN(folder) for folder in tqdm(folder_list, desc='Processing WFN data')]
+        elif self.dataset_type == 'GW':
+            raise NotImplementedError
+        elif self.dataset_type == 'BSE':
+            raise NotImplementedError
+
 
     def summary(self):
         pass
-
-
-def wfnfft():
-    pass
 
 
 class ToyDataSet(Dataset):
@@ -123,3 +202,10 @@ class ToyDataSet(Dataset):
     @classmethod
     def get_hole_data_batch(cls):
         return [cls.val_embedding, cls.val_kpt, cls.val_band_index, cls.val_band_energy]
+
+if __name__ == "__main__":
+    logging.basicConfig(level=logging.INFO)
+    wfdata = ManyBodyData(flows_dir='../../examples/flows', dataset_dir='./dataset', dataset_type='WFN', dataset_name='',
+                          nc_wfn=4, nv_wfn=2)    
+    wfdata.process()
+
