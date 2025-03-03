@@ -46,3 +46,6 @@ src/from_model/vae_e2_mnist.pth
 
 src/single_mat_config.json
 nc300
+src/from_model/unittest/data/
+src/from_model/tensorboard
+src/from_model/data
