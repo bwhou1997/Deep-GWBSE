@@ -34,13 +34,7 @@ GW scheme:
 
 BSE scheme:
 ![BSE](from_model/fig/03-BSE.png) -->
-
-### TODO
-
-- Xian: data.py (WFN task, Train VAE)
-- Bowen: Transformer
-- Jinyuan: 
-                                           
+                                 
 ### 1. **stru-input** folder
 The stru-input folder contains the crystal structures
 ```bash

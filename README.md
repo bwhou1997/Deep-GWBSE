@@ -6,8 +6,7 @@ Author: Bowen Hou (bowen.hou@yale.edu)
 Contributors: Jinyuan Wu (jinyuan.wu@yale.edu), Xian Xu (xian.xu@yale.edu)
 
 ## TODO List:
-- Checkpoint systems 
-- eqp.dat -> HPRO (working)
+- Checkpoint Systems 
 - CSI for BSE
 
 ## Table of Contents
