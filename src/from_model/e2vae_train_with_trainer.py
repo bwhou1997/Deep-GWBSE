@@ -47,7 +47,7 @@ class VAETrainer(Trainer):
         
         with torch.no_grad():
             if input is None:
-                for x, _ in test_loader:
+                for x, _ in self.validation_dataloader:
                     input = x
                     break # By default, get only one batch
             
@@ -60,81 +60,111 @@ class VAETrainer(Trainer):
 
 #%%
 
-# Model and training strategies
-num_epochs = 10
-beta = 0.02
-vae = EquivariantVAE(input_channels=1,
-                    hidden_cnn_channels=[60,60,48,48,4],
-                    hidden_pooling=[-1,0.66,-1,-1,0.66],
-                    kernel_size=[7,5,5,3,3])
-optimizer = torch.optim.Adam(vae.parameters(), lr=1e-3)
+def test_train():
+    # Model and training strategies
+    num_epochs = 10
+    beta = 0.02
+    vae = EquivariantVAE(input_channels=1,
+                        hidden_cnn_channels=[60,60,48,48,4],
+                        hidden_pooling=[-1,0.66,-1,-1,0.66],
+                        kernel_size=[7,5,5,3,3])
+    optimizer = torch.optim.Adam(vae.parameters(), lr=1e-3)
 
-# Data preparation
-# The images are normalized and converted to tensors
-transform = transforms.Compose([
-    transforms.Grayscale(num_output_channels=1),  # Ensure single channel
-    transforms.ToTensor()
-])
-train_dataset = torchvision.datasets.MNIST(root="./data", train=True, transform=transform, download=True)
-test_dataset = torchvision.datasets.MNIST(root="./data", train=False, transform=transform, download=True)
-train_loader = DataLoader(train_dataset, batch_size=64, shuffle=True)
-test_loader = DataLoader(test_dataset, batch_size=64, shuffle=False)
+    # Data preparation
+    # The images are normalized and converted to tensors
+    transform = transforms.Compose([
+        transforms.Grayscale(num_output_channels=1),  # Ensure single channel
+        transforms.ToTensor()
+    ])
+    train_dataset = torchvision.datasets.MNIST(root="./data", train=True, transform=transform, download=True)
+    test_dataset = torchvision.datasets.MNIST(root="./data", train=False, transform=transform, download=True)
+    train_loader = DataLoader(train_dataset, batch_size=64, shuffle=True)
+    test_loader = DataLoader(test_dataset, batch_size=64, shuffle=False)
 
-# Start training!
-vae_trainer = VAETrainer(vae, train_loader, test_loader, optimizer, beta=beta, model_name="vae_e2_minst", overwrite=True)
-vae_trainer.train(num_epochs)
+    # Start training!
+    vae_trainer = VAETrainer(vae, train_loader, test_loader, optimizer, beta=beta, model_name="vae_e2_minst", overwrite=True)
+    vae_trainer.train(num_epochs)
     
     
 # %%
 # Mini-testing
-x, x_recon = vae_trainer.evaluate()
-# Plot original vs reconstructed images
-fig, axes = plt.subplots(2, 10, figsize=(10, 3))
-for i in range(10):
-    axes[0, i].imshow(x[i, 0], cmap="gray")
-    axes[0, i].axis("off")
-    axes[1, i].imshow(x_recon[i, 0], cmap="gray")
-    axes[1, i].axis("off")
 
-axes[0, 0].set_ylabel("Original")
-axes[1, 0].set_ylabel("Reconstructed")
-plt.show()
+def test_evaluate():
+
+    beta = 0.02
+    vae = EquivariantVAE(input_channels=1,
+                        hidden_cnn_channels=[60,60,48,48,4],
+                        hidden_pooling=[-1,0.66,-1,-1,0.66],
+                        kernel_size=[7,5,5,3,3])
+    optimizer = torch.optim.Adam(vae.parameters(), lr=1e-3)
+
+    transform = transforms.Compose([
+        transforms.Grayscale(num_output_channels=1),  # Ensure single channel
+        transforms.ToTensor()
+    ])
+
+    train_dataset = torchvision.datasets.MNIST(root="./data", train=True, transform=transform, download=True)
+    test_dataset = torchvision.datasets.MNIST(root="./data", train=False, transform=transform, download=True)
+    train_loader = DataLoader(train_dataset, batch_size=64, shuffle=True)
+    test_loader = DataLoader(test_dataset, batch_size=64, shuffle=False)
+
+    # Read data from file
+    vae_trainer = VAETrainer(vae, train_loader, test_loader, optimizer, beta=beta, model_name="vae_e2_minst", overwrite=False)
+
+    x, x_recon = vae_trainer.evaluate()
+    # Plot original vs reconstructed images
+    fig, axes = plt.subplots(2, 10, figsize=(10, 3))
+    for i in range(10):
+        axes[0, i].imshow(x[i, 0], cmap="gray")
+        axes[0, i].axis("off")
+        axes[1, i].imshow(x_recon[i, 0], cmap="gray")
+        axes[1, i].axis("off")
+
+    axes[0, 0].set_ylabel("Original")
+    axes[1, 0].set_ylabel("Reconstructed")
+    plt.show()
+
+    test_id = 10
+    sample_image = train_dataset[test_id][0]  # Get an MNIST sample (assuming dataset is loaded)
+
+    # Test rotation equivariance for multiple angles
+    angles = [0, 45, 90, 135, 180, 225, 270, 315]
+    fig, axes = plt.subplots(len(angles), 4, figsize=(12, 3 * len(angles)))
+
+    for i, angle in enumerate(angles):
+        rotated_image = TF.rotate(sample_image, angle)
+        # Blow, unsqueezing is for creating a fake batch that contains only one sample;
+        # squeezing is to get the prediction from the fake output batch;
+        # [0] is because a VAE has three outputs at the same time.
+        # No need to send the dataset to or from the GPUs:
+        # everything is taken care of in `evaluate`
+        original_recon = vae_trainer.evaluate(input=sample_image.unsqueeze(0))[0].squeeze(0)
+        rotated_recon = vae_trainer.evaluate(input=rotated_image.unsqueeze(0))[0].squeeze(0)
+        
+        # One more squeezing because of the useless "channel" dimension
+        axes[i, 0].imshow(sample_image.squeeze(0), cmap="gray")
+        axes[i, 0].set_title("Original Image")
+        axes[i, 0].axis("off")
+
+        axes[i, 1].imshow(rotated_image.squeeze(0), cmap="gray")
+        axes[i, 1].set_title(f"Rotated Input ({angle}°)")
+        axes[i, 1].axis("off")
+
+        axes[i, 2].imshow(original_recon.squeeze(0), cmap="gray")
+        axes[i, 2].set_title("Reconstruction")
+        axes[i, 2].axis("off")
+
+        axes[i, 3].imshow(rotated_recon.squeeze(0), cmap="gray")
+        axes[i, 3].set_title(f"Reconstruction of Rotated Input")
+        axes[i, 3].axis("off")
+
+    plt.tight_layout()
+    plt.show()
+
 # %%
-test_id = 10
-sample_image = train_dataset[test_id][0]  # Get an MNIST sample (assuming dataset is loaded)
 
-# Test rotation equivariance for multiple angles
-angles = [0, 45, 90, 135, 180, 225, 270, 315]
-fig, axes = plt.subplots(len(angles), 4, figsize=(12, 3 * len(angles)))
-
-for i, angle in enumerate(angles):
-    rotated_image = TF.rotate(sample_image, angle)
-    # Blow, unsqueezing is for creating a fake batch that contains only one sample;
-    # squeezing is to get the prediction from the fake output batch;
-    # [0] is because a VAE has three outputs at the same time.
-    # No need to send the dataset to or from the GPUs:
-    # everything is taken care of in `evaluate`
-    original_recon = vae_trainer.evaluate(input=sample_image.unsqueeze(0))[0].squeeze(0)
-    rotated_recon = vae_trainer.evaluate(input=rotated_image.unsqueeze(0))[0].squeeze(0)
-    
-    # One more squeezing because of the useless "channel" dimension
-    axes[i, 0].imshow(sample_image.squeeze(0), cmap="gray")
-    axes[i, 0].set_title("Original Image")
-    axes[i, 0].axis("off")
-
-    axes[i, 1].imshow(rotated_image.squeeze(0), cmap="gray")
-    axes[i, 1].set_title(f"Rotated Input ({angle}°)")
-    axes[i, 1].axis("off")
-
-    axes[i, 2].imshow(original_recon.squeeze(0), cmap="gray")
-    axes[i, 2].set_title("Reconstruction")
-    axes[i, 2].axis("off")
-
-    axes[i, 3].imshow(rotated_recon.squeeze(0), cmap="gray")
-    axes[i, 3].set_title(f"Reconstruction of Rotated Input")
-    axes[i, 3].axis("off")
-
-plt.tight_layout()
-plt.show()
+if __name__ == "__main__":
+    test_train()
+    test_evaluate()
 
 # %%
