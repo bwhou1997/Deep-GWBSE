@@ -52,3 +52,4 @@ src/from_model/data
 *-tensorboard/
 nc300
 src/from_model/test.py
+dataset
