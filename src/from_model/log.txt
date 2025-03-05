@@ -1,0 +1,44 @@
+2025-03-05 13:52:20,314 - INFO - Saved model not loaded because it is to be overwritten.
+2025-03-05 13:52:21,435 - INFO - Eopch 1 starts.
+2025-03-05 13:52:59,126 - INFO - Best model saved.
+2025-03-05 13:52:59,146 - INFO - Checkpoint at epoch 1
+2025-03-05 13:52:59,147 - INFO - Eopch 1 finishes.
+2025-03-05 13:52:59,147 - INFO - Eopch 2 starts.
+2025-03-05 13:53:37,455 - INFO - Best model saved.
+2025-03-05 13:53:37,478 - INFO - Checkpoint at epoch 2
+2025-03-05 13:53:37,478 - INFO - Eopch 2 finishes.
+2025-03-05 13:53:37,479 - INFO - Eopch 3 starts.
+2025-03-05 13:54:12,048 - INFO - Best model saved.
+2025-03-05 13:54:12,069 - INFO - Checkpoint at epoch 3
+2025-03-05 13:54:12,069 - INFO - Eopch 3 finishes.
+2025-03-05 13:54:12,069 - INFO - Eopch 4 starts.
+2025-03-05 13:54:48,297 - INFO - Best model saved.
+2025-03-05 13:54:48,316 - INFO - Checkpoint at epoch 4
+2025-03-05 13:54:48,316 - INFO - Eopch 4 finishes.
+2025-03-05 13:54:48,316 - INFO - Eopch 5 starts.
+2025-03-05 13:55:22,959 - INFO - Best model saved.
+2025-03-05 13:55:22,976 - INFO - Checkpoint at epoch 5
+2025-03-05 13:55:22,976 - INFO - Eopch 5 finishes.
+2025-03-05 13:55:22,976 - INFO - Eopch 6 starts.
+2025-03-05 13:55:57,189 - INFO - Best model saved.
+2025-03-05 13:55:57,209 - INFO - Checkpoint at epoch 6
+2025-03-05 13:55:57,209 - INFO - Eopch 6 finishes.
+2025-03-05 13:55:57,209 - INFO - Eopch 7 starts.
+2025-03-05 13:56:29,861 - INFO - Best model saved.
+2025-03-05 13:56:29,878 - INFO - Checkpoint at epoch 7
+2025-03-05 13:56:29,878 - INFO - Eopch 7 finishes.
+2025-03-05 13:56:29,878 - INFO - Eopch 8 starts.
+2025-03-05 13:57:03,910 - INFO - Best model saved.
+2025-03-05 13:57:03,927 - INFO - Checkpoint at epoch 8
+2025-03-05 13:57:03,927 - INFO - Eopch 8 finishes.
+2025-03-05 13:57:03,927 - INFO - Eopch 9 starts.
+2025-03-05 13:57:39,871 - INFO - Best model saved.
+2025-03-05 13:57:39,890 - INFO - Checkpoint at epoch 9
+2025-03-05 13:57:39,891 - INFO - Eopch 9 finishes.
+2025-03-05 13:57:39,891 - INFO - Eopch 10 starts.
+2025-03-05 13:58:15,689 - INFO - Best model saved.
+2025-03-05 13:58:15,707 - INFO - Checkpoint at epoch 10
+2025-03-05 13:58:15,708 - INFO - Eopch 10 finishes.
+2025-03-05 13:58:15,726 - INFO - The final model saved. Training ends.
+2025-03-05 13:58:16,338 - INFO - Saved model loaded.
+2025-03-05 13:58:16,338 - INFO - Saved model loaded.
