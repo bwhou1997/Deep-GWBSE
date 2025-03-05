@@ -9,38 +9,71 @@ from tqdm import tqdm
 from os.path import join as pjoin
 import h5py as h5
 import logging
+import numpy as np
 """
 Author: Bowen Hou
-Developer: Bowen Hou, Xian Xu
 Date: 2025-03-03
 """
 
+class DataSetInfo:
+    """
+    Basic Info for the dataset
+    dataset_type = WFN, GW, BSE
+    """
+    def __init__(self, dataset_type: str='WFN', **kwargs):
+        if isinstance(dataset_type, bytes):
+            dataset_type = dataset_type.decode('utf-8')
+        if dataset_type == 'WFN':
+            self.dataset_type = 'WFN'
+            assert {"nc_wfn","nv_wfn"} <= set(kwargs.keys()), f"nc_wfn and nv_wfn are required kwargs for WFN dataset"
+            self.nc_wfn = kwargs.get('nc_wfn')
+            self.nv_wfn = kwargs.get('nv_wfn')
+            self.cutoff = kwargs.get('cutoff', np.nan)
+            self.useWigner = kwargs.get('useWigner', np.nan)
+        
+        if dataset_type == 'GW':
+            self.dataset_type = 'GW'
+
+        if dataset_type == 'BSE':
+            self.dataset_type = 'BSE'
+        
+        # common attributes
+        # update after loading dataset
+        self.mat_id = kwargs.get('mat_id', [])
+    
+    def show_info(self,):
+        print(f"\n{str(self.dataset_type)} Dataset Info:")
+        for key, value in self.__dict__.items():
+            print(f"{key}: {value}")
+        print("Total number of data: ", len(self.mat_id))
+
+
 class ManyBodyData(Dataset):
     """
-raw_data_dir(flows)/
-├── mat-1
-|   ├──02-wfn
-|   ├──13-sigma
-|   |   └── eqp1.dat # (G0W0 corr.)
-|   | ...
-|   ├──17-wfn_fi
-|   ├──18-kernel 
-|   ├──19-absorption 
-├── mat-2
-|   └──  ...
-└── ..."""
+    raw_data_dir(flows)/
+    ├── mat-1
+    |   ├──02-wfn
+    |   ├──13-sigma
+    |   |   └── eqp1.dat # (G0W0 corr.)
+    |   | ...
+    |   ├──17-wfn_fi
+    |   ├──18-kernel 
+    |   ├──19-absorption 
+    ├── mat-2
+    |   └──  ...
+    └── ...
+    """
 
-    """Output if workflow is 'WFN':
-Note: N_bands_i, N_kpoints_i, Rx_i could be different for different materials
-wfndata.h5
-├── mat-1/data (data.shape = (N_bands_1, N_kpoints_1, Rx_1, Ry_1, Rz_1_truncated))
-├── mat-2/data
-├── mat-3/data
-├── mat-4/...
+    """dataset general format:
+    dataset.h5
+    ├── info: see DataSetInfo
+    ├── mat-1/{datapoint1}
+    ├── mat-2/{datapoint2}
+    ├── mat-3/...
     """
 
     def __init__(self, flows_dir: str, dataset_dir: str, dataset_type: str='WFN',
-                 dataset_name: str='', multiprocessing: bool = False, load_dataset: bool = True, 
+                 dataset_fname: str='dataset.h5', multiprocessing: bool = False, load_dataset: bool = True, 
                  **kwargs):
         """
         :param flows_dir: Path to the raw data directory (flows)
@@ -51,6 +84,8 @@ wfndata.h5
                 -  required dir: '02-wfn'
                 -  required kwargs: nc_wfn, nv_wfn
                 -  optional kwargs: cutoff, useWigner
+                -  datapoint: {'wfn': (nk, nc+nv, Rx, Ry, Rz(cutoff)), 'kpt': (nk, 3), 'band_indices': (nk, nc+nv, 1), 
+                               'el': (nk, nc+nv, 1), 'kpt_weights': (nk, nc+nv, 1), 'kpt': (nk, nc+nv, 3)}
 
             'GW': used to train GW-Transformer (supervised)
                 -  required dir: '01-density','02-wfn', '13-sigma'
@@ -62,13 +97,13 @@ wfndata.h5
                 -  required kwargs: 
                 -  optional kwargs: 
 
-        :param dataset_name: Name of the dataset
+        :param dataset_name: name of the dataset
         :param multiprocessing: Whether to use multiprocessing to process data
         :param load_dataset: Whether to load existing dataset
-        :param **kwargs:
-            'GW'
-            nc_wfn:
-            nv_wfn:
+        Output: 
+            self.data: [datapoint1, datapoint2, ...]
+            self.info: DataSetInfo
+            dataset.h5:
         """
         super(ManyBodyData, self).__init__()
         assert dataset_type in ['WFN','GW','BSE'], f"dataset_type should be one of ['WFN','GW','BSE']"
@@ -77,46 +112,115 @@ wfndata.h5
         self.flows_dir = flows_dir
         self.dataset_dir = dataset_dir
         self.dataset_type = dataset_type
-        self.dataset_name = dataset_name
+        self.dataset_fname = dataset_fname
         self.kwargs = kwargs
         
         # dataset and hyperparameters
         # - required:
         self.data = None
+        self.info = DataSetInfo(dataset_type=dataset_type, **kwargs)
 
-        # - optional:
-        # WFN:
-        self.isWFNDataset = False
-        self.nc_wfn = None
-        self.nv_wfn = None
-        self.cutoff = None
-        self.useWigner = None
-
-        # GW:
-        self.isGWDataset = False
+        if load_dataset and os.path.exists(pjoin(dataset_dir, dataset_fname)):
+            print(f"Loading existing dataset: {os.path.abspath(pjoin(dataset_dir, dataset_fname))}")
+            self.load_dataset()
+        else:
+            if not os.path.exists(pjoin(dataset_dir, dataset_fname)):
+                print(f"Dataset file not found: {os.path.abspath(pjoin(dataset_dir, dataset_fname))}")
+            print(f"Creating new dataset: {os.path.abspath(pjoin(dataset_dir, dataset_fname))}")
+            self.process()
         
-        # BSE:
-        self.isBSEDataset = False
-
+        assert self.data is not None, "Data is not loaded or processed"
+        self.info.show_info()
 
     def __len__(self):
         return len(self.data)
 
     def __getitem__(self, idx):
-        return self.data[idx], self.target[idx]
+        return self.data[idx]
     
     @classmethod
-    def from_existing_dataset(cls, existing_dataset_dir: str) -> 'ManyBodyData':
-        return cls()
+    def from_existing_dataset(cls, existing_dataset_fname: str) -> 'ManyBodyData':
+        assert os.path.exists(existing_dataset_fname), f"{existing_dataset_fname} does not exist"
+        dataset_dir, dataset_fname = os.path.dirname(existing_dataset_fname), os.path.basename(existing_dataset_fname)
+        print('Loading dataset info')
+        info_dict = {}
+        with h5.File(existing_dataset_fname, 'r') as f:
+            for key, value in f['info'].items():
+                info_dict[key] = value[()]
+
+        dataset_type = info_dict.pop('dataset_type')
+        info = DataSetInfo(dataset_type,
+                           **info_dict)
+        # info.show_info()
+        return cls(flows_dir=None, 
+                   dataset_dir=dataset_dir, 
+                   dataset_type=info.dataset_type, 
+                   load_dataset=True, 
+                   dataset_fname=dataset_fname,
+                   **info_dict)
+
+    def load_dataset(self):
+        """
+        load existing dataset
+        """
+        self.data = []
+        with h5.File(pjoin(self.dataset_dir, self.dataset_fname), 'r') as f:
+            print("updating info from existing dataset")
+            for key, value in f['info'].items():
+                if key == 'dataset_type':
+                    assert self.info.dataset_type == value[()].decode('utf-8'), f"Dataset type mismatch: set {self.info.dataset_type}, get {value[()].decode('utf-8')}"
+                self.info.__dict__[key] = value[()]
+            print("loading data")
+            for mat_id in self.info.mat_id:
+                datapoint = {}
+                for key, val in f[mat_id].items():
+                    datapoint[key] = val[()]
+                self.data.append(datapoint)
+
+        # print(f"Loading existing dataset: {os.path.abspath(self.data.filename)}")
+
+    def process(self):
+        """
+        folder_list: List["flow-mat-1", "flow-mat-2"]
+        """
+        # get materials list
+        folder_list = []
+        print(f'Looking for flows data under: {os.path.abspath(self.flows_dir)}')
+        for root, dirs, files in os.walk(self.flows_dir):
+            if "01-density" in dirs: # scf is foundation for all workflows
+                folder_list.append(root)
+        assert len(folder_list) > 0, f"No data found under {self.flows_dir}"
+        print(f"Found {len(folder_list)} materials")
+        self.info.mat_id = np.array([os.path.basename(folder) for folder in folder_list], dtype='S')
+
+        # initialize dataset h5 file
+        os.makedirs(self.dataset_dir, exist_ok=True)    
+        with h5.File(pjoin(self.dataset_dir, self.dataset_fname), 'w') as f:
+            # put info dict into h5 file
+            f.create_group('info')
+            for key, value in self.info.__dict__.items():
+                f['info'].create_dataset(key, data=value)
+            print(f"Creating dataset file: {os.path.abspath(f.filename)} \n")
+
+        #==================Create Dataset==================#
+        if self.dataset_type == 'WFN':
+            self.data = [self.process_worker_WFN(folder) for folder in tqdm(folder_list, desc='Processing WFN data')]
+        elif self.dataset_type == 'GW':
+            raise NotImplementedError
+        elif self.dataset_type == 'BSE':
+            raise NotImplementedError
+
 
     def process_worker_WFN(self, folder, wfn_dir='02-wfn'):
+        """
+        This function processes the WFN data for a single material
+        """
         wfn_fname = pjoin(pjoin(folder, wfn_dir, "wfn.h5"))
-        dateset_h5_fname = pjoin(self.dataset_dir, self.dataset_type+f'_datadet_{self.dataset_name}.h5')
+        dateset_h5_fname = pjoin(self.dataset_dir, self.dataset_fname)
         mat_id = os.path.basename(folder)
         assert wfn_dir in ['02-wfn'], f"Only support wfn_dir = '02-wfn' now"
         assert os.path.exists(wfn_fname), f"{wfn_fname} does not exist"
         assert os.path.exists(dateset_h5_fname), f"Dataset h5 file does not exist"
-        assert {"nc_wfn","nv_wfn"} <= set(self.kwargs.keys()), f"nc_wfn and nv_wfn are required kwargs for WFN dataset"
 
         nc, nv = self.kwargs.get('nc_wfn'), self.kwargs.get('nv_wfn')
         # TODO: use **kwargs when inteface.py/wfn.get_wfn_dataset() is updated
@@ -132,34 +236,7 @@ wfndata.h5
                 f[mat_id].create_dataset(key, data=val)
 
         return datapoint
-        
-    def process(self):
-        """
-        folder_list: List["flow-mat-1", "flow-mat-2"]
-        """
-        # get materials list
-        folder_list = []
-        print(f'Looking for flows data under: {os.path.abspath(self.flows_dir)}')
-        for root, dirs, files in os.walk(self.flows_dir):
-            if "01-density" in dirs: # scf is foundation for all workflows
-                folder_list.append(root)
-        assert len(folder_list) > 0, f"No data found under {self.flows_dir}"
-        print(f"Found {len(folder_list)} materials")
-
-        # initialize dataset h5 file
-        os.makedirs(self.dataset_dir, exist_ok=True)
-        with h5.File(pjoin(self.dataset_dir, self.dataset_type+f'_datadet_{self.dataset_name}.h5'), 'w') as f:
-            print(f"Creating dataset file: {os.path.abspath(f.filename)} \n")
-
-        #==================Create Dataset==================#
-        if self.dataset_type == 'WFN':
-            self.data_list = [self.process_worker_WFN(folder) for folder in tqdm(folder_list, desc='Processing WFN data')]
-        elif self.dataset_type == 'GW':
-            raise NotImplementedError
-        elif self.dataset_type == 'BSE':
-            raise NotImplementedError
-
-
+    
     def summary(self):
         pass
 
@@ -205,7 +282,16 @@ class ToyDataSet(Dataset):
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
-    wfdata = ManyBodyData(flows_dir='../../examples/flows', dataset_dir='./dataset', dataset_type='WFN', dataset_name='',
-                          nc_wfn=4, nv_wfn=2)    
-    wfdata.process()
 
+    """Usage"""
+    # 1. Create new dataset
+    wfdata = ManyBodyData(flows_dir='../../examples/flows', dataset_dir='./dataset', dataset_type='WFN',
+                          load_dataset=False, nc_wfn=4, nv_wfn=2)    
+
+    # 2. Load existing dataset
+    # Recommend: use classmethod from_existing_dataset() to load existing dataset
+    wfdata = ManyBodyData.from_existing_dataset('./dataset/dataset.h5')
+
+    # Not recommended: set load_dataset=True
+    #   wfdata = ManyBodyData(flows_dir='../../examples/flows', dataset_dir='./dataset', dataset_type='WFN',
+    #                       load_dataset=True, nc_wfn=4, nv_wfn=2)    

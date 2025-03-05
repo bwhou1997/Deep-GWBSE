@@ -440,9 +440,9 @@ if __name__ == '__main__':
     # eqp = eqp_file('./test_data/eqp_full.dat')
     logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 
-    vsc = vloc('../flows/mat-5/02-wfn/VSC')
-    wf = wfn('../flows/mat-5/02-wfn/wfn.h5')
+    # vsc = vloc('../../examples/flows/mat-5/02-wfn/VSC')
+    wf = wfn('../../examples/flows/mat-5/02-wfn/wfn.h5')
     dp = wf.get_wfn_dataset()
 
-    assert abs(abs(dp['wfn'][5,4,10,10,100])- 0.0005052843835956082) < 1e-6
+    assert abs(abs(dp['wfn'][0,4, 10,10,100])-0.0005837156537000325) < 1e-6
 

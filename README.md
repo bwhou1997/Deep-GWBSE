@@ -3,10 +3,10 @@
 Deep-GWBSE is a deep learning model designed for DFT-GW-BSE calculations. 
 
 Author: Bowen Hou (bowen.hou@yale.edu)
+Contributors: Jinyuan Wu (jinyuan.wu@yale.edu), Xian Xu (xian.xu@yale.edu)
 
 ## TODO List:
-- Checkpoint systems 
-- eqp.dat -> HPRO (working)
+- Checkpoint Systems 
 - CSI for BSE
 
 ## Table of Contents
@@ -31,7 +31,7 @@ This package provides multiple deep learning models for DFT-GW-BSE calculations 
     </p>
   - BSE scheme:  
     <p align="center">
-      <img src="src/from_model/fig/03-BSE.png" width="40%">
+      <img src="src/from_model/fig/03-BSE.png" width="50%">
     </p>
 
 ## Installation
