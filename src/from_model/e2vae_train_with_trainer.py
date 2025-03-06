@@ -17,6 +17,9 @@ import matplotlib.pyplot as plt
 from e2vae import EquivariantVAE, vae_loss
 
 class VAETrainer(Trainer):
+    """
+    For options in `kwargs`, see the `__init__` function of `Trainer`.
+    """
     def __init__(self, model, training_dataloader, validation_dataloader, optimizer, beta: float, 
                  save_path=os.getcwd(),
                  model_name="vae_e2",
@@ -28,19 +31,6 @@ class VAETrainer(Trainer):
     def get_loss(self, x: torch.Tensor)->torch.Tensor:
         x_recon, mu, logvar = self.model(x)
         return self.loss(x_recon, x, mu, logvar)
-
-    def train_each_epoch(self, epoch_idx: int):
-        total_loss = 0.0
-
-        for x, _ in tqdm(self.training_dataloader, f"Epoch {epoch_idx+1}"):
-            x = x.to(self.device)
-            self.optimizer.zero_grad()
-            this_loss = self.get_loss(x)
-            this_loss.backward()
-            self.optimizer.step()
-            total_loss += this_loss.item()
-        
-        self.record(epoch_idx, loss=total_loss / len(self.training_dataloader))
         
     def evaluate(self, input=None):
         self.model.eval()
@@ -57,6 +47,18 @@ class VAETrainer(Trainer):
         input = input.cpu().numpy()
         x_recon = x_recon.cpu().numpy()
         return input, x_recon
+    
+    def validate(self, input=None):
+        self.model.eval()
+        
+        with torch.no_grad():
+            if input is None:
+                for x, _ in self.validation_dataloader:
+                    input = x
+                    break # By default, get only one batch
+        
+            input = input.to(self.device)
+            return self.get_loss(input).item()
 
 #%%
 

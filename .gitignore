@@ -50,6 +50,7 @@ nc300
 src/from_model/unittest/data/
 src/from_model/tensorboard
 src/from_model/data
+src/from_model/log.txt
 *-tensorboard/
 nc300
 src/from_model/test.py
