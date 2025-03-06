@@ -5,81 +5,129 @@ from scipy.interpolate import griddata
 from interface import wfn
 import torch.nn.functional as F
 from scipy.ndimage import zoom
+import time
+from scipy.interpolate import LinearNDInterpolator
+import logging
 import plotly.graph_objects as go
-from tqdm import tqdm
-############# Toy data
+from model_util import time_watch
 au2ang = 0.52917721067
 
+logging.basicConfig(level=logging.DEBUG, format='%(message)s')
+
 wf = wfn('../../examples/flows/mat-5/02-wfn/wfn.h5')
-w00 = abs(wf.get_wfn_dataset()['wfn'][0,0])
+w00_3D = abs(wf.get_wfn_dataset()['wfn'][0,0])
 lattice = wf.crystal['avec'] * wf.crystal['alat'] * au2ang
+FFT_grid_shape = w00_3D.shape
 
+class Wigner2D:
+    def __init__(self, lattice: np.ndarray, FFT_grid_shape: np.array, 
+                 AngstromPerPixel:float=0.1,**kwargs):
+        """
+        Args:
+            lattice (np.ndarray): lattice vectors in Cartesian (A). (3, 3)
+            FFT_grid_shape (np.array): FFT grid in fractional coordinates. (Rx, Ry, Rz)
+            AngstromPerPixel (float): 
+                Wigner2D output a uniform grid matrix (nxn), we define AngstromPerPixel as
+                the distance between two adjacent points in the grid. This is used to make 
+                sure CNN kernel can always be applied to the same area when scanning the grid.
+                e.g. if AngstromPerPixel = 0.1, and the grid is 40x40, then the output will be 4Ax4A area.
+        kwargs:
+            upsampling_factor (float): upsampling wavefunction in original grid (not recommended for too large).
+        """
+        self.upsampling_factor = kwargs.get('upsampling_factor', 1)
+        self.AreaPerPixel = AngstromPerPixel
 
-# periodic condition
-shift = 20
-w00 = np.concatenate([ w00[:,shift:],w00[:,:shift]], axis=1)
-############## 2D case
-# Function to fold a point into the Wigner-Seitz cell
-wf_original_size = w00.shape
-wf_frac_upsampling_factor = 1
-upsampling_size = (round(wf_original_size[0] * wf_frac_upsampling_factor), 
-                   round(wf_original_size[1] * wf_frac_upsampling_factor),
-                   round(wf_original_size[2] * wf_frac_upsampling_factor)) 
-final_grid_res_x = 40
-final_grid_res_y = 40
-final_grid_res_z = 30
+        # Lattice
+        self.lattice = lattice
+        self.lattice_2D = lattice[:2, :2] # 2D (2, 2)
+        grid_size = 2
+        self.lattice_points = np.array([
+            m * self.lattice_2D[0] + n * self.lattice_2D[1]
+            for m in range(-grid_size, grid_size+1)
+            for n in range(-grid_size, grid_size+1)])
 
-#############
-def fold_to_wigner_seitz(points, lattice_points):
-    tree = cKDTree(lattice_points)
-    _, indices = tree.query(points)
-    return points - lattice_points[indices]
+        # Real Space Grid
+        self.upsampling_FFT_grid_size = (round(FFT_grid_shape[0] * self.upsampling_factor),
+                                         round(FFT_grid_shape[1] * self.upsampling_factor))
+        grid_x = np.linspace(0, 1, self.upsampling_FFT_grid_size[0], endpoint=False)
+        grid_y = np.linspace(0, 1, self.upsampling_FFT_grid_size[1], endpoint=False)
+        grid_points_frac = np.array([[x, y] for x in grid_x for y in grid_y])
+        # real-space primitive cell grid in Cartesian (A)
+        self.grid_points = np.dot(grid_points_frac, self.lattice_2D) 
+        # real-space wigner cell grid in Cartesian (A) 
+        self.grid_points_folded = np.array([self.fold_to_wigner_seitz(pt, self.lattice_points) for pt in self.grid_points])
 
-grid_x = np.linspace(0, 1, upsampling_size[0], endpoint=False)
-grid_y = np.linspace(0, 1, upsampling_size[1], endpoint=False)
-grid_z = np.linspace(0, 1, upsampling_size[2], endpoint=False)
-grid_points_frac = np.array([[x, y, z] for x in grid_x for y in grid_y for z in grid_z])
+        self.x_min, self.x_max = self.grid_points_folded[:, 0].min(), self.grid_points_folded[:, 0].max()
+        self.y_min, self.y_max = self.grid_points_folded[:, 1].min(), self.grid_points_folded[:, 1].max()
+        xi = np.arange(self.x_min, self.x_max, self.AreaPerPixel)
+        yi = np.arange(self.y_min, self.y_max, self.AreaPerPixel)
+        self.xi, self.yi = np.meshgrid(xi, yi)
 
-# Convert to Cartesian coordinates
-grid_points = np.dot(grid_points_frac, lattice)
+        print(f'Wigner2D initialized. Output grid shape: {self.xi.shape}, AreaPerPixel: {self.AreaPerPixel} A/pixel')
 
-grid_size = 2
-lattice_points = np.array([
-    m * lattice[0] + n * lattice[1] + p * lattice[2]
-    for m in range(-grid_size, grid_size+1)
-    for n in range(-grid_size, grid_size+1)
-    for p in range(-grid_size, grid_size+1)
-])
+    @classmethod
+    def fold_to_wigner_seitz(cls, points, lattice_points):
+        tree = cKDTree(lattice_points)
+        _, indices = tree.query(points)
+        return points - lattice_points[indices]
 
-folded_grid_points = fold_to_wigner_seitz(grid_points, lattice_points)
+    @time_watch
+    def WignerInterpolate(self, wf_3D: np.ndarray, **kwargs):
+        """
+        Args:
+            wf_3D (np.ndarray): 
+                wavefunction in 3D fractional coordinate of a KS state. (FFT_grid_shape)
+            **kwargs:
+                method (str): interpolation method. Default is 'linear'.
+        Returns:
+            Only conduct Wigner interpolation on 2D slice of wf_3D (The z axis is preserved, like batch)
+            wf_wigner (np.ndarray): Wigner interpolation result. (xi.shape, z)
+        """
+        wf_3D = np.abs(wf_3D)**2 # modulus squared of wavefunction
+        self.density_matrix = zoom(wf_3D, (self.upsampling_factor, self.upsampling_factor, 1), order=3)
+        zi = []
+        for z_idex in range(self.density_matrix.shape[2]):
+            slice_data = self.density_matrix[:, :, z_idex].flatten()
+            zi_slice = griddata(self.grid_points_folded, slice_data, (self.xi, self.yi), 
+                                method=kwargs.get('method', 'linear'))
+            zi.append(zi_slice)
+        self.zi = np.array(zi)
+        self.zi = np.transpose(self.zi, (1, 2, 0))
+        return self.zi
+    
+    def plot(self, **kwargs):
+        assert hasattr(self, 'zi'), "Please run WignerInterpolate first"
 
+        # Create the plotly figure
+        fig, ax = plt.subplots(figsize=(6,6))
+        im = ax.imshow(self.zi.sum(axis=2), extent=[self.x_min, self.x_max, self.y_min, self.y_max], origin='lower', cmap='viridis', aspect='auto')
+        plt.colorbar(im, label="Interpolated Density")
+        plt.title("Upsampled Density Map in Wigner-Seitz Cell")
+        plt.show()
 
-xi, yi, zi = np.mgrid[
-    folded_grid_points[:, 0].min():folded_grid_points[:, 0].max():final_grid_res_x*1j,
-    folded_grid_points[:, 1].min():folded_grid_points[:, 1].max():final_grid_res_y*1j,
-    folded_grid_points[:, 2].min():folded_grid_points[:, 2].max():final_grid_res_z*1j
-]
+        xi, yi, zi = np.mgrid[
+        self.grid_points_folded[:, 0].min():self.grid_points_folded[:, 0].max():self.zi.shape[0]*1j,
+        self.grid_points_folded[:, 1].min():self.grid_points_folded[:, 1].max():self.zi.shape[1]*1j,
+        0:self.lattice[2,2]:self.zi.shape[2]*1j]
 
-print("interpolating")
+        fig = go.Figure(data=go.Volume(
+            x=xi.flatten(), y=yi.flatten(), z=zi.flatten(),
+            value=self.zi.flatten(),
+            opacity=0.2, surface_count=20, colorscale='Viridis'
+        ))
+        fig.update_layout(title='3D Wigner-Seitz Density Visualization')
+        fig.show()
 
-density_matrix = zoom(w00, (1, wf_frac_upsampling_factor, wf_frac_upsampling_factor), order=3).flatten()
-# zi_interp = griddata(folded_grid_points, density_matrix, (xi, yi, zi), method='linear', fill_value=0)
+if __name__ == '__main__':
+    # logging.basicConfig(level=logging.DEBUG, format='%(message)s')
 
-xyz_points = np.vstack([xi.flatten(), yi.flatten(), zi.flatten()]).T
+    wf = wfn('../../examples/flows/mat-5/02-wfn/wfn.h5')
+    w00_3D = abs(wf.get_wfn_dataset()['wfn'][0,0])
+    lattice = wf.crystal['avec'] * wf.crystal['alat'] * au2ang
+    FFT_grid_shape = w00_3D.shape
+    shift = 20
+    w00_3D = np.concatenate([ w00_3D[:,shift:],w00_3D[:,:shift]], axis=1)
 
-# Create an empty array to store the interpolated values
-zi_interp = np.zeros(xyz_points.shape[0])
-
-# Process each point one by one (or in batches if needed)
-# for i in tqdm(range(xyz_points.shape[0]), desc="Interpolating grid points"):
-#     # Interpolate at each point
-#     zi_interp[i] = griddata(folded_grid_points, density_matrix, xyz_points[i], method='linear', fill_value=0)
-
-
-# fig = go.Figure(data=go.Volume(
-#     x=xi.flatten(), y=yi.flatten(), z=zi.flatten(),
-#     value=zi_interp.flatten(),
-#     opacity=0.2, surface_count=20, colorscale='Viridis'
-# ))
-# fig.update_layout(title='3D Wigner-Seitz Density Visualization')
-# fig.show()
+    wigner = Wigner2D(lattice, FFT_grid_shape, AngstromPerPixel=0.05 ,upsampling_factor=1.4)
+    wigner.WignerInterpolate(w00_3D)
+    wigner.plot()
