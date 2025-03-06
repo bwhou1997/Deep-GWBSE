@@ -43,12 +43,14 @@ fp-input-AB-661
 fp-input-all
 /src/from_model/unittest/data/
 src/from_model/vae_e2_mnist.pth
+src/from_model/vae_e2_mnist_best.pth
 
 src/single_mat_config.json
 nc300
 src/from_model/unittest/data/
 src/from_model/tensorboard
 src/from_model/data
+src/from_model/log.txt
 *-tensorboard/
 nc300
 src/from_model/test.py

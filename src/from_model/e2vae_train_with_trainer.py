@@ -17,30 +17,20 @@ import matplotlib.pyplot as plt
 from e2vae import EquivariantVAE, vae_loss
 
 class VAETrainer(Trainer):
+    """
+    For options in `kwargs`, see the `__init__` function of `Trainer`.
+    """
     def __init__(self, model, training_dataloader, validation_dataloader, optimizer, beta: float, 
                  save_path=os.getcwd(),
                  model_name="vae_e2",
-                 overwrite=False):
+                 **kwargs):
         loss = lambda recon_x, x, mu, logvar: vae_loss(recon_x, x, mu, logvar, beta=beta)
-        super().__init__(model, training_dataloader, validation_dataloader, optimizer, loss, save_path=save_path, model_name=model_name, overwrite=overwrite)
+        super().__init__(model, training_dataloader, validation_dataloader, optimizer, loss, save_path=save_path, model_name=model_name, **kwargs)
         self.beta = beta
 
     def get_loss(self, x: torch.Tensor)->torch.Tensor:
         x_recon, mu, logvar = self.model(x)
         return self.loss(x_recon, x, mu, logvar)
-
-    def train_each_epoch(self, epoch_idx: int):
-        total_loss = 0.0
-
-        for x, _ in tqdm(self.training_dataloader, f"Epoch {epoch_idx+1}"):
-            x = x.to(self.device)
-            self.optimizer.zero_grad()
-            this_loss = self.get_loss(x)
-            this_loss.backward()
-            self.optimizer.step()
-            total_loss += this_loss.item()
-        
-        self.record(epoch_idx, loss=total_loss / len(self.training_dataloader))
         
     def evaluate(self, input=None):
         self.model.eval()
@@ -57,6 +47,18 @@ class VAETrainer(Trainer):
         input = input.cpu().numpy()
         x_recon = x_recon.cpu().numpy()
         return input, x_recon
+    
+    def validate(self, input=None):
+        self.model.eval()
+        
+        with torch.no_grad():
+            if input is None:
+                for x, _ in self.validation_dataloader:
+                    input = x
+                    break # By default, get only one batch
+        
+            input = input.to(self.device)
+            return self.get_loss(input).item()
 
 #%%
 
@@ -82,11 +84,10 @@ def test_train():
     test_loader = DataLoader(test_dataset, batch_size=64, shuffle=False)
 
     # Start training!
-    vae_trainer = VAETrainer(vae, train_loader, test_loader, optimizer, beta=beta, model_name="vae_e2_minst", overwrite=True)
+    vae_trainer = VAETrainer(vae, train_loader, test_loader, optimizer, beta=beta, model_name="vae_e2_minst", overwrite=True, checkpoint=True, best_model=True)
     vae_trainer.train(num_epochs)
     
     
-# %%
 # Mini-testing
 
 def test_evaluate():
@@ -161,10 +162,29 @@ def test_evaluate():
     plt.tight_layout()
     plt.show()
 
+def model_consistency():
+    print("Loading the last model and the best model and check if they are the same.")
+    vae_last = EquivariantVAE(input_channels=1,
+                        hidden_cnn_channels=[60,60,48,48,4],
+                        hidden_pooling=[-1,0.66,-1,-1,0.66],
+                        kernel_size=[7,5,5,3,3])
+    vae_best = EquivariantVAE(input_channels=1,
+                        hidden_cnn_channels=[60,60,48,48,4],
+                        hidden_pooling=[-1,0.66,-1,-1,0.66],
+                        kernel_size=[7,5,5,3,3])
+    vae_last.load_state_dict(torch.load("./vae_e2_minst.pth"), strict=False)
+    vae_best.load_state_dict(torch.load("./vae_e2_minst_best.pth"), strict=False)
+    for p1, p2 in zip(vae_last.parameters(), vae_best.parameters()):
+        if p1.data.ne(p2.data).sum() > 0:
+            print("The last model is not the best model.")
+    return print("The last model is the best model.")
+
+
 # %%
 
 if __name__ == "__main__":
     test_train()
     test_evaluate()
+    model_consistency()
 
 # %%
