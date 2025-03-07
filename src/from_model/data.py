@@ -49,10 +49,10 @@ class DataSetInfo:
         self.mat_id = kwargs.get('mat_id', []) # updated after processing
     
     def show_info(self,):
-        print(f"\n{str(self.dataset_type)} Dataset Info:")
+        print(f"\n======{str(self.dataset_type)} Dataset Info:=======")
         for key, value in self.__dict__.items():
             print(f"{key}: {value}")
-        print("Total number of data: ", len(self.mat_id))
+        print("Total number of data: ", len(self.mat_id),'\n\n')
 
 
 class ManyBodyData(Dataset):
@@ -179,6 +179,8 @@ class ManyBodyData(Dataset):
             for key, value in f['info'].items():
                 if key == 'dataset_type':
                     assert self.info.dataset_type == value[()].decode('utf-8'), f"Dataset type mismatch: set {self.info.dataset_type}, get {value[()].decode('utf-8')}"
+                    self.info.__dict__[key] = value[()].decode('utf-8')
+                    continue
                 self.info.__dict__[key] = value[()]
             print("loading data")
             for mat_id in self.info.mat_id:
@@ -194,25 +196,11 @@ class ManyBodyData(Dataset):
         folder_list: List["flow-mat-1", "flow-mat-2"]
         """
         #==================General Setting==================#
-        # All dataset follows the same h5 structure and flow.
-        # get materials list
-        folder_list = []
-        print(f'Looking for flows data under: {os.path.abspath(self.flows_dir)}')
-        for root, dirs, files in os.walk(self.flows_dir):
-            if "01-density" in dirs: # scf is foundation for all workflows
-                folder_list.append(root)
-        assert len(folder_list) > 0, f"No data found under {self.flows_dir}"
-        print(f"Found {len(folder_list)} materials")
-        self.info.mat_id = np.array([os.path.basename(folder) for folder in folder_list], dtype='S')
+        # Filter valid folders
+        folder_list, self.info.mat_id = self.mat_statistics(self.flows_dir, self.dataset_type)
 
         # initialize dataset h5 file
-        os.makedirs(self.dataset_dir, exist_ok=True)    
-        with h5.File(pjoin(self.dataset_dir, self.dataset_fname), 'w') as f:
-            # put info dict into h5 file
-            f.create_group('info')
-            for key, value in self.info.__dict__.items():
-                f['info'].create_dataset(key, data=value)
-            print(f"Creating dataset file: {os.path.abspath(f.filename)} \n")
+        self.init_dataset_h5()
 
         #==================Dataset Specific Setting==================#
         if self.dataset_type == 'WFN':
@@ -223,14 +211,61 @@ class ManyBodyData(Dataset):
             raise NotImplementedError
 
 
-    def process_worker_WFN(self, folder, wfn_dir='02-wfn'):
+    def init_dataset_h5(self):
+        os.makedirs(self.dataset_dir, exist_ok=True)    
+        with h5.File(pjoin(self.dataset_dir, self.dataset_fname), 'w') as f:
+            # put info dict into h5 file
+            f.create_group('info')
+            for key, value in self.info.__dict__.items():
+                f['info'].create_dataset(key, data=value)
+            print(f"Creating dataset file: {os.path.abspath(f.filename)}")
+
+
+    @classmethod
+    def mat_statistics(cls, flows_dir:str, dataset_type:type='WFN')-> tuple[list, np.ndarray]:
+        """
+        classmethod:
+            Get the statistics of the dataset
+            For different task, the required folders are different (see __init__)
+            return: 
+                folder_list: List["flow-mat-1", "flow-mat-2"]
+                self.info.mat_id: np.array(["mat-1", "mat-2"], dtype='S')
+        """
+        folder_list = []
+
+        print(f'Looking for flows data under: {os.path.abspath(flows_dir)}')
+        for root, dirs, files in os.walk(flows_dir):
+            # add rules to filter valid folders
+
+            if dataset_type == 'WFN':
+                if '02-wfn' in dirs: # scf is foundation for all workflows
+                    if os.path.exists(pjoin(pjoin(root, "02-wfn/wfn.h5"))):
+                        folder_list.append(root)
+
+            elif dataset_type == 'GW':
+                raise NotImplementedError
+            
+            elif dataset_type == 'BSE':
+                raise NotImplementedError
+            
+        assert len(folder_list) > 0, f"No data found under {flows_dir}"
+        print(f"Found {len(folder_list)} materials")
+
+        mat_id = np.array([os.path.basename(folder) for folder in folder_list], dtype='S')
+
+        return folder_list, mat_id
+
+
+    def process_worker_WFN(self, folder:str)-> dict:
         """
         This function processes the WFN data for a single material
+        folder: flow folder (not flows)
         """
+        wfn_dir='02-wfn'
         wfn_fname = pjoin(pjoin(folder, wfn_dir, "wfn.h5"))
         dateset_h5_fname = pjoin(self.dataset_dir, self.dataset_fname)
         mat_id = os.path.basename(folder)
-        assert wfn_dir in ['02-wfn'], f"Only support wfn_dir = '02-wfn' now"
+
         assert os.path.exists(wfn_fname), f"{wfn_fname} does not exist"
         assert os.path.exists(dateset_h5_fname), f"Dataset h5 file does not exist"
 
