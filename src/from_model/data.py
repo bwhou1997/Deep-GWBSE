@@ -69,9 +69,8 @@ class ManyBodyData(Dataset):
     ├── mat-2
     |   └──  ...
     └── ...
-    """
-
-    """dataset general format:
+    
+    dataset general format:
     dataset.h5
     ├── info: see DataSetInfo
     ├── mat-1/{datapoint1}
@@ -255,7 +254,6 @@ class ManyBodyData(Dataset):
 
         return folder_list, mat_id
 
-
     def process_worker_WFN(self, folder:str)-> dict:
         """
         This function processes the WFN data for a single material
@@ -286,6 +284,11 @@ class ManyBodyData(Dataset):
 
         return datapoint
     
+    @classmethod
+    def merge_dataset(self,):
+        pass
+
+
     def summary(self):
         pass
 

@@ -105,13 +105,27 @@ class WignerXY:
         assert np.isrealobj(wf_3D), "wf_3D must be a real matrix"
         self.wf_3D = wf_3D
         charge_total = np.sum(self.wf_3D)
-        self.density_matrix = zoom(self.wf_3D, (self.upsampling_factor, self.upsampling_factor, 1), order=3)
 
+        start_time = time.time()
+
+        # TODO: ensure periodic boundary condition when interpolating
+        # pad_size = 4 # 2 is enough for periodic boundary condition
+        # circular_padded_density_matrix = np.pad(self.wf_3D, ((pad_size,pad_size), (pad_size,pad_size),(0,0)), mode='wrap')
+        # density_matrix_upsampled = zoom(circular_padded_density_matrix, (self.upsampling_factor, self.upsampling_factor, 1), order=1)
+        # resized_pad = round(pad_size * self.upsampling_factor)
+        # self.density_matrix = density_matrix_upsampled[resized_pad:-resized_pad, resized_pad:-resized_pad, :]
+
+        self.density_matrix = zoom(self.wf_3D, (self.upsampling_factor, self.upsampling_factor, 1), order=1)
+        logging.debug(f'Zooming completed in {time.time() - start_time:.4f} seconds')
+
+        start_time = time.time()
         zi = []
         tree = cKDTree(self.grid_points_folded)
         query_points = np.vstack([self.xi.flatten(), self.yi.flatten()]).T
         distances, indices = tree.query(query_points, k=1)
+        logging.debug(f'KDTree query completed in {time.time() - start_time:.4f} seconds')
 
+        start_time = time.time()
         for z_index in range(self.density_matrix.shape[2]):
             interpolated_values = self.density_matrix[:, :, z_index].flatten()[indices]
             
@@ -120,22 +134,19 @@ class WignerXY:
 
             zi_slice = interpolated_values.reshape(self.xi.shape)
             zi.append(zi_slice)
+        logging.debug(f'Interpolation completed in {time.time() - start_time:.4f} seconds')
 
+        start_time = time.time()
         self.zi = np.array(zi).transpose(1, 2, 0)
         charge_total_new = np.where(np.isnan(self.zi), 0, self.zi).sum()
         self.zi = np.where(np.isnan(self.zi), np.nan, self.zi * charge_total / charge_total_new)
+        logging.debug(f'Normalization completed in {time.time() - start_time:.4f} seconds')
+
         return self.zi
 
 
     def plot(self, go_3D:bool=False, **kwargs):
         assert hasattr(self, 'zi'), "Please run WignerInterpolate first"
-
-        # Create the plotly figure
-        # fig, ax = plt.subplots(figsize=(6,6))
-        # im = ax.imshow(self.zi.sum(axis=2), extent=[self.x_min, self.x_max, self.y_min, self.y_max], origin='lower', cmap='viridis', aspect='auto')
-        # plt.colorbar(im, label="Interpolated Density")
-        # plt.title("Upsampled Density Map in Wigner-Seitz Cell")
-        # plt.show()
 
         fig, axes = plt.subplots(1, 2, figsize=(12, 5))
         im1 = axes[0].imshow(self.zi.sum(axis=2), extent=[self.x_min, self.x_max, self.y_min, self.y_max], 
