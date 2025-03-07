@@ -70,7 +70,7 @@ def time_watch(func):
         start_time = time.perf_counter()
         result = func(*args, **kwargs)
         end_time = time.perf_counter()
-        print(f"{func.__name__} time used: {end_time - start_time:.6f} seconds")
+        logging.debug(f"{func.__name__} time used: {end_time - start_time:.6f} seconds")
         return result
     return wrapper
 

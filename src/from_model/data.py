@@ -10,6 +10,7 @@ from os.path import join as pjoin
 import h5py as h5
 import logging
 import numpy as np
+import copy
 """
 Author: Bowen Hou
 Date: 2025-03-03
@@ -19,18 +20,25 @@ class DataSetInfo:
     """
     Basic Info for the dataset
     dataset_type = WFN, GW, BSE
+
+    This class is used as variable register for different dataset types
+    Only the related attributes will be used in the info
     """
     def __init__(self, dataset_type: str='WFN', **kwargs):
         if isinstance(dataset_type, bytes):
             dataset_type = dataset_type.decode('utf-8')
+
         if dataset_type == 'WFN':
             self.dataset_type = 'WFN'
             assert {"nc_wfn","nv_wfn"} <= set(kwargs.keys()), f"nc_wfn and nv_wfn are required kwargs for WFN dataset"
             self.nc_wfn = kwargs.get('nc_wfn')
             self.nv_wfn = kwargs.get('nv_wfn')
-            self.cutoff = kwargs.get('cutoff', np.nan)
-            self.useWigner = kwargs.get('useWigner', np.nan)
-        
+            self.useWignerXY = kwargs.get('useWignerXY', np.nan)
+            self.cell_slab_truncation = kwargs.get('cell_slab_truncation', np.nan) # Required for Wigner
+            self.AngstromPerPixel = kwargs.get('AngstromPerPixel', np.nan) # Required for Wigner
+            self.AngstromPerPixel_z = kwargs.get('AngstromPerPixel_z', np.nan) # Required for Wigner
+            self.upsampling_factor = kwargs.get('upsampling_factor', np.nan) # Required for Wigner
+
         if dataset_type == 'GW':
             self.dataset_type = 'GW'
 
@@ -38,8 +46,7 @@ class DataSetInfo:
             self.dataset_type = 'BSE'
         
         # common attributes
-        # update after loading dataset
-        self.mat_id = kwargs.get('mat_id', [])
+        self.mat_id = kwargs.get('mat_id', []) # updated after processing
     
     def show_info(self,):
         print(f"\n{str(self.dataset_type)} Dataset Info:")
@@ -76,6 +83,7 @@ class ManyBodyData(Dataset):
                  dataset_fname: str='dataset.h5', multiprocessing: bool = False, load_dataset: bool = True, 
                  **kwargs):
         """
+        :param **kwargs: all parameters related to specific dataset ['WFN','GW','BSE'], see DataSetInfo
         :param flows_dir: Path to the raw data directory (flows)
         :param dataset_dir: Path to the dataset directory
         :param dataset_type: Workflow to process data, support ['WFN', 'GW','BSE'] now.
@@ -83,7 +91,9 @@ class ManyBodyData(Dataset):
             'WFN': used to train VAE model (unsupervised)
                 -  required dir: '02-wfn'
                 -  required kwargs: nc_wfn, nv_wfn
-                -  optional kwargs: cutoff, useWigner
+                -  optional kwargs: useWignerXY
+                                    cell_slab_truncation, AngstromPerPixel, AngstromPerPixel_z
+                                    upsample_factor(speedup dataset creation, but not recommended)
                 -  datapoint: {'wfn': (nk, nc+nv, Rx, Ry, Rz(cutoff)), 'kpt': (nk, 3), 'band_indices': (nk, nc+nv, 1), 
                                'el': (nk, nc+nv, 1), 'kpt_weights': (nk, nc+nv, 1), 'kpt': (nk, nc+nv, 3)}
 
@@ -183,6 +193,8 @@ class ManyBodyData(Dataset):
         """
         folder_list: List["flow-mat-1", "flow-mat-2"]
         """
+        #==================General Setting==================#
+        # All dataset follows the same h5 structure and flow.
         # get materials list
         folder_list = []
         print(f'Looking for flows data under: {os.path.abspath(self.flows_dir)}')
@@ -202,7 +214,7 @@ class ManyBodyData(Dataset):
                 f['info'].create_dataset(key, data=value)
             print(f"Creating dataset file: {os.path.abspath(f.filename)} \n")
 
-        #==================Create Dataset==================#
+        #==================Dataset Specific Setting==================#
         if self.dataset_type == 'WFN':
             self.data = [self.process_worker_WFN(folder) for folder in tqdm(folder_list, desc='Processing WFN data')]
         elif self.dataset_type == 'GW':
@@ -222,11 +234,13 @@ class ManyBodyData(Dataset):
         assert os.path.exists(wfn_fname), f"{wfn_fname} does not exist"
         assert os.path.exists(dateset_h5_fname), f"Dataset h5 file does not exist"
 
-        nc, nv = self.kwargs.get('nc_wfn'), self.kwargs.get('nv_wfn')
+        kwargs = copy.deepcopy(self.kwargs)
+
+        nc, nv = kwargs.pop('nc_wfn'), kwargs.pop('nv_wfn')
         # TODO: use **kwargs when inteface.py/wfn.get_wfn_dataset() is updated
         wf = wfn(wfn_fname)
 
-        datapoint =  wf.get_wfn_dataset(nc=nc, nv=nv)
+        datapoint =  wf.get_wfn_dataset(nc=nc, nv=nv, **kwargs)
 
         with h5.File(dateset_h5_fname, 'a') as f:
             if mat_id in f:
@@ -286,12 +300,13 @@ if __name__ == "__main__":
     """Usage"""
     # 1. Create new dataset
     wfdata = ManyBodyData(flows_dir='../../examples/flows', dataset_dir='./dataset', dataset_type='WFN',
-                          load_dataset=False, nc_wfn=4, nv_wfn=2)    
+                          load_dataset=False, nc_wfn=4, nv_wfn=2, cell_slab_truncation=60, useWignerXY=True, 
+                        AngstromPerPixel=0.1, AngstromPerPixel_z=0.2, upsampling_factor=1)    
 
     # 2. Load existing dataset
     # Recommend: use classmethod from_existing_dataset() to load existing dataset
     wfdata = ManyBodyData.from_existing_dataset('./dataset/dataset.h5')
 
-    # Not recommended: set load_dataset=True
+    # 3. (Not recommended) set load_dataset=True
     #   wfdata = ManyBodyData(flows_dir='../../examples/flows', dataset_dir='./dataset', dataset_type='WFN',
     #                       load_dataset=True, nc_wfn=4, nv_wfn=2)    

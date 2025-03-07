@@ -7,15 +7,15 @@ from scipy.io import FortranFile
 from model_util import H5ls, time_watch, memory_watch, eV2Ry
 from tqdm import tqdm
 import logging
-
+import wigner
+from scipy.ndimage import zoom
+import time
+import matplotlib.pyplot as plt
 class eqp_file:
     """
     These object decompose eqp.dat into data_DFT, data_GW, klist and spin_list
     """
     def __init__(self,fname):
-        print('Reading eqp')
-        self.fname = fname
-        self.read_eqp()
         # These variables are initialized
         # (1) nbnd, nk
         # (2) data_GW, data_DFT -> (nk, nbnd)
@@ -23,6 +23,10 @@ class eqp_file:
         # (4) klist -> (nk,)
 
         # self.write()
+        print('Reading eqp')
+        self.fname = fname
+        self.read_eqp()
+
 
     def read_eqp(self):
         f = open(self.fname, 'r')
@@ -316,6 +320,7 @@ class wfn:
         self.el = self.kpoints['el'][0]
         self.k_weights = self.kpoints['w']
         self.FFTgrid = self.gspace['FFTgrid']
+        self.lattice = self.crystal['avec'] * self.crystal['alat'] * 0.52917721067 # lattice in Cartesian coordinates, in angstrom
 
         self.ifmax = self.kpoints['ifmax']
         self.nspin = self.kpoints['nspin']
@@ -355,7 +360,7 @@ class wfn:
 
         self._get_wfn_g = True
 
-    def get_wfn_r_in_grid(self, nc:int=1 ,nv:int=1)-> np.ndarray:
+    def get_wfn_r_in_grid(self, nc:int=1 ,nv:int=1, **kwargs)-> np.ndarray:
         """
         Calculate the real-space wavefunction near Fermi level (all kpoints)a
         Input:
@@ -363,7 +368,7 @@ class wfn:
             nv: number of valence bands
             nk: number of kpoints  (default -1: all kpoints) (TODO)
         Output:
-            wfn_r: (nk, nb, FFTgrid[0], FFTgrid[1], FFTgrid[2])
+            wfn_r: (nk, nb, FFTgrid[0], FFTgrid[1], FFTgrid[2]), |phi(r)|^2
             el: (nk, nb, 1) eigenvalues corresponding to the wfn_r
         """
         if False: # add kpoints selection
@@ -393,17 +398,35 @@ class wfn:
         wfn_r = wfn_r.transpose(1,0,2,3,4)
         el_r = el_r.transpose(1,0,2)
 
-        assert (abs(wfn_r**2).sum(axis=(2,3,4)) - 1 < 1e-6).all(), 'Check Norm Failed'
-        return wfn_r, el_r
+        assert ((abs(wfn_r)**2).sum(axis=(2,3,4)) - 1 < 1e-6).all(), 'Check Norm Failed'
+        return abs(wfn_r)**2, el_r
 
-    def get_wfn_dataset(self, nc:int=6 ,nv:int=2, cutoff:bool=False, useWigner:bool=False,
-                        set_mask:bool=False, **kwargs)->dict:
+    def get_wfn_dataset(self, nc:int=6 ,nv:int=2, cell_slab_truncation:int=40, useWignerXY:bool=False, 
+                        AngstromPerPixel:float=0.1, **kwargs)->dict:
         """
         Get the dataset of the wavefunction for ML
         Input:
-            cutoff: whether to use the cutoff (TODO)
-            useWigner: whether to use Wigner-Seitz (TODO)
-            other parameters: see get_wfn_r_in_grid
+            useWignerXY (Highly recommended for 2D materials!): 
+                fold the wavefunction into the Wigner-Seitz cell for X-Y plane
+
+            cell_slab_truncation (required if useWignerXY is True): 
+                number of grids to preserve along z direction after
+                truncation rule: 
+                    For 2D system, we find the argmax of the sum of the wavefunction along z direction,
+                    and truncate the cell centered at the argmax by cell_slab_truncation slices
+                    e.g. if we set cell_slab_truncation = 40, and AngstromPerPixel_z = 0.1, then we preserve
+                    40x0.1A=4A in z direction.
+
+            AngstromPerPixel (required if useWignerXY is True): 
+                pixel size in angstrom, only used when useWigner is True
+                (see WignerXY __init__ for detail)
+
+            AngstromPerPixel_z (default: AngstromPerPixel): 
+                pixel size in angstrom, used to standardize the wavefunction along z direction
+
+            other parameters (**kwargs): 
+                see get_wfn_r_in_grid
+                see WignerXY for detail
         Output:
             {
                 "wfn": (nk, nc+nv, FFTgrid[0], FFTgrid[1], FFTgrid[2]),
@@ -415,12 +438,54 @@ class wfn:
         """
         logging.debug(f'Creating dataset for {self.wfn_file_h5}')
 
-        wfn_r, el_r = self.get_wfn_r_in_grid(nc=nc, nv=nv)
+        wfn_r, el_r = self.get_wfn_r_in_grid(nc=nc, nv=nv, **kwargs)
         band_indices = np.array([iv - nv for iv in range(nv)] + [ic + 1 for ic in range(nc)], \
                                 dtype=int)[None,:,None].repeat(self.nk, axis=0)
 
         kpt = self.kpoints['rk'][:, None, :].repeat(nc + nv, axis=1)
         kpt_weights = self.k_weights[:, None, None].repeat(nc + nv, axis=1)
+
+        # self.wfn_r_original = wfn_r
+        # self.z_projection_original = np.sum(wfn_r, axis=(0,1,2,3))
+
+
+
+        if cell_slab_truncation:
+            assert AngstromPerPixel is not None, 'AngstromPerPixel is required when cell_slab_truncation is not None'
+
+            AngstromPerPixel_z = kwargs.get('AngstromPerPixel_z', AngstromPerPixel)
+
+            # standardize the wavefunction along z-wavefunction (make grid as 0.1A/pixel along z direction)
+            target_z_dim = round(self.lattice[2,2] / AngstromPerPixel_z)
+            # resize_wfn_r = lambda image: cv2.resize(image.reshape(1, -1), (target_z_dim,1), interpolation=cv2.INTER_CUBIC).squeeze()
+            resize_wfn_r = lambda image: zoom(image, target_z_dim/self.FFTgrid[2], order=3)
+            wfn_r = np.apply_along_axis(resize_wfn_r, axis=4, arr=wfn_r)
+            logging.debug(f'ratio: {target_z_dim/self.FFTgrid[2]:.2f}, wfn_r shape: {wfn_r.shape},z_AngstromPerPixel: {self.lattice[2,2]/wfn_r.shape[4]:.2f}')
+
+            self.z_projection = np.sum(wfn_r, axis=(0,1,2,3))
+
+            wfn_r = wfn_r / np.sum(wfn_r, axis=(2,3,4), keepdims=True) # normalize the wavefunction
+            wfn_r = np.roll(wfn_r, wfn_r.shape[-1]//2 - np.argmax(self.z_projection) , axis=4) # center the argmax of the z_projection
+            wfn_r = wfn_r[:,:,:,:,max(wfn_r.shape[-1]//2-cell_slab_truncation//2, 0):min(wfn_r.shape[-1]//2+cell_slab_truncation//2, wfn_r.shape[-1]-1)]
+            logging.debug(f'Average charge after truncation: {np.sum(wfn_r, axis=(2,3,4)).mean():.2f}')
+
+        if useWignerXY:
+            assert cell_slab_truncation is not None, 'cell_slab_truncation is required when useWignerXY is True'
+            assert AngstromPerPixel is not None, 'AngstromPerPixel is required when useWignerXY is True'
+            assert np.allclose(self.lattice[2,:2], 0), 'Wigner: only support 2D system for now (a3=(0,0,c))'
+
+            self.wigner = wigner.WignerXY(self.lattice, 
+                                          self.FFTgrid, 
+                                          AngstromPerPixel, 
+                                          **kwargs)
+            wfn_r_wigner = np.zeros((wfn_r.shape[0], wfn_r.shape[1], self.wigner.xi.shape[0], self.wigner.xi.shape[1], wfn_r.shape[-1]), dtype=wfn_r.dtype)
+            for k in range(wfn_r.shape[0]):
+                for b in range(wfn_r.shape[1]):
+                    wfn_r_wigner[k,b] = self.wigner.WignerInterpolate(wfn_r[k,b], **kwargs)
+            wfn_r = wfn_r_wigner
+        else:
+            print('Raw fractional wavefunction will be saved:', wfn_r.shape)
+            pass
 
         dataset = {
             "wfn": wfn_r,
@@ -442,7 +507,7 @@ if __name__ == '__main__':
 
     # vsc = vloc('../../examples/flows/mat-5/02-wfn/VSC')
     wf = wfn('../../examples/flows/mat-5/02-wfn/wfn.h5')
-    dp = wf.get_wfn_dataset()
+    dp = wf.get_wfn_dataset(useWignerXY=True, cell_slab_truncation=60, AngstromPerPixel=0.1, AngstromPerPixel_z=0.1)
 
-    assert abs(abs(dp['wfn'][0,4, 10,10,100])-0.0005837156537000325) < 1e-6
+    assert abs(abs(dp['wfn'][0,0,  5,5,30])-0.0008177179225316558) < 1e-7 # unit test
 

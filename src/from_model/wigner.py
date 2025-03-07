@@ -2,7 +2,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from scipy.spatial import Voronoi, Delaunay, cKDTree
 from scipy.interpolate import griddata
-from interface import wfn
+
 import torch.nn.functional as F
 from scipy.ndimage import zoom
 import time
@@ -11,15 +11,7 @@ import logging
 import plotly.graph_objects as go
 from model_util import time_watch
 au2ang = 0.52917721067
-
-logging.basicConfig(level=logging.DEBUG, format='%(message)s')
-
-wf = wfn('../../examples/flows/mat-5/02-wfn/wfn.h5')
-w00_3D = abs(wf.get_wfn_dataset()['wfn'][0,0])
-lattice = wf.crystal['avec'] * wf.crystal['alat'] * au2ang
-FFT_grid_shape = w00_3D.shape
-
-class Wigner2D:
+class WignerXY:
     def __init__(self, lattice: np.ndarray, FFT_grid_shape: np.array, 
                  AngstromPerPixel:float=0.1,**kwargs):
         """
@@ -32,7 +24,7 @@ class Wigner2D:
                 sure CNN kernel can always be applied to the same area when scanning the grid.
                 e.g. if AngstromPerPixel = 0.1, and the grid is 40x40, then the output will be 4Ax4A area.
         kwargs:
-            upsampling_factor (float): upsampling wavefunction in original grid (not recommended for too large).
+            upsampling_factor (float): upsampling wavefunction in original grid (not recommended).
         """
         self.upsampling_factor = kwargs.get('upsampling_factor', 1)
         self.AreaPerPixel = AngstromPerPixel
@@ -63,7 +55,7 @@ class Wigner2D:
         yi = np.arange(self.y_min, self.y_max, self.AreaPerPixel)
         self.xi, self.yi = np.meshgrid(xi, yi)
 
-        print(f'Wigner2D initialized. Output grid shape: {self.xi.shape}, AreaPerPixel: {self.AreaPerPixel} A/pixel')
+        logging.debug(f'Wigner2D initialized. Output grid shape: {self.xi.shape}, AreaPerPixel: {self.AreaPerPixel} A/pixel')
 
     @classmethod
     def fold_to_wigner_seitz(cls, points, lattice_points):
@@ -73,6 +65,7 @@ class Wigner2D:
 
     @time_watch
     def WignerInterpolate(self, wf_3D: np.ndarray, **kwargs):
+        assert np.isrealobj(wf_3D), "wf_3D must be a real matrix"
         """
         Args:
             wf_3D (np.ndarray): 
@@ -83,8 +76,8 @@ class Wigner2D:
             Only conduct Wigner interpolation on 2D slice of wf_3D (The z axis is preserved, like batch)
             wf_wigner (np.ndarray): Wigner interpolation result. (xi.shape, z)
         """
-        wf_3D = np.abs(wf_3D)**2 # modulus squared of wavefunction
-        self.density_matrix = zoom(wf_3D, (self.upsampling_factor, self.upsampling_factor, 1), order=3)
+        self.wf_3D = wf_3D
+        self.density_matrix = zoom(self.wf_3D, (self.upsampling_factor, self.upsampling_factor, 1), order=3)
         zi = []
         for z_idex in range(self.density_matrix.shape[2]):
             slice_data = self.density_matrix[:, :, z_idex].flatten()
@@ -99,11 +92,25 @@ class Wigner2D:
         assert hasattr(self, 'zi'), "Please run WignerInterpolate first"
 
         # Create the plotly figure
-        fig, ax = plt.subplots(figsize=(6,6))
-        im = ax.imshow(self.zi.sum(axis=2), extent=[self.x_min, self.x_max, self.y_min, self.y_max], origin='lower', cmap='viridis', aspect='auto')
-        plt.colorbar(im, label="Interpolated Density")
-        plt.title("Upsampled Density Map in Wigner-Seitz Cell")
+        # fig, ax = plt.subplots(figsize=(6,6))
+        # im = ax.imshow(self.zi.sum(axis=2), extent=[self.x_min, self.x_max, self.y_min, self.y_max], origin='lower', cmap='viridis', aspect='auto')
+        # plt.colorbar(im, label="Interpolated Density")
+        # plt.title("Upsampled Density Map in Wigner-Seitz Cell")
+        # plt.show()
+
+        fig, axes = plt.subplots(1, 2, figsize=(12, 5))
+        im1 = axes[0].imshow(self.zi.sum(axis=2), extent=[self.x_min, self.x_max, self.y_min, self.y_max], 
+                            origin='lower', cmap='viridis', aspect='auto')
+        axes[0].set_title("Wigner Cell")
+        plt.colorbar(im1, ax=axes[0], label="Interpolated Density")
+        im2 = axes[1].imshow(self.wf_3D.sum(axis=2), extent=[self.x_min, self.x_max, self.y_min, self.y_max], 
+                            origin='lower', cmap='viridis', aspect='auto')
+        axes[1].set_title("Primitive Cell")
+        plt.colorbar(im2, ax=axes[1], label="w00_3D Density")
+        plt.suptitle("Comparison of Upsampled Density Map and w00_3D in Wigner-Seitz Cell")
         plt.show()
+
+        ###########
 
         xi, yi, zi = np.mgrid[
         self.grid_points_folded[:, 0].min():self.grid_points_folded[:, 0].max():self.zi.shape[0]*1j,
@@ -119,15 +126,21 @@ class Wigner2D:
         fig.show()
 
 if __name__ == '__main__':
-    # logging.basicConfig(level=logging.DEBUG, format='%(message)s')
+    import interface
+    logging.basicConfig(level=logging.DEBUG, format='%(message)s')
+    # logging.basicConfig(level=logging.INFO, format='%(message)s')
 
-    wf = wfn('../../examples/flows/mat-5/02-wfn/wfn.h5')
-    w00_3D = abs(wf.get_wfn_dataset()['wfn'][0,0])
+    wf = interface.wfn('../../examples/flows/mat-5/02-wfn/wfn.h5')
+    w00_3D = abs(wf.get_wfn_dataset(cell_slab_truncation=15, AngstromPerPixel_z=0.2)['wfn'][0,3,:,:,:])
     lattice = wf.crystal['avec'] * wf.crystal['alat'] * au2ang
     FFT_grid_shape = w00_3D.shape
-    shift = 20
-    w00_3D = np.concatenate([ w00_3D[:,shift:],w00_3D[:,:shift]], axis=1)
+    shift = 14
+    w00_3D = np.concatenate([w00_3D[shift:],w00_3D[:shift]], axis=0)
 
-    wigner = Wigner2D(lattice, FFT_grid_shape, AngstromPerPixel=0.05 ,upsampling_factor=1.4)
+    wigner = WignerXY(lattice, FFT_grid_shape, AngstromPerPixel=0.05 ,upsampling_factor=1.4)
     wigner.WignerInterpolate(w00_3D)
+
+    assert abs(np.where(np.isnan(wigner.zi),0,wigner.zi).sum() - np.where(np.isnan(wigner.zi),0,wigner.zi).sum()) < 1e-6, "Wigner Unit Test Failed"
+
     wigner.plot()
+
