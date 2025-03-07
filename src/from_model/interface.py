@@ -481,7 +481,13 @@ class wfn:
             wfn_r_wigner = np.zeros((wfn_r.shape[0], wfn_r.shape[1], self.wigner.xi.shape[0], self.wigner.xi.shape[1], wfn_r.shape[-1]), dtype=wfn_r.dtype)
             for k in range(wfn_r.shape[0]):
                 for b in range(wfn_r.shape[1]):
-                    wfn_r_wigner[k,b] = self.wigner.WignerInterpolate(wfn_r[k,b], **kwargs)
+                    # Note: see wigner.py for benchmark between regular interpolation and fast one!
+                    # If use fast nearest interpolation, use upsampling > 1 for finer original grid!!
+                    ##################################################################################
+                    # wfn_r_wigner[k,b] = self.wigner.WignerInterpolate(wfn_r[k,b])
+                    wfn_r_wigner[k,b] = self.wigner.Wigner_fast_nearest_interpolation(wfn_r[k,b], max_distance=AngstromPerPixel)
+                    ##################################################################################
+
             wfn_r = wfn_r_wigner
         else:
             print('Raw fractional wavefunction will be saved:', wfn_r.shape)
@@ -507,7 +513,8 @@ if __name__ == '__main__':
 
     # vsc = vloc('../../examples/flows/mat-5/02-wfn/VSC')
     wf = wfn('../../examples/flows/mat-5/02-wfn/wfn.h5')
-    dp = wf.get_wfn_dataset(useWignerXY=True, cell_slab_truncation=60, AngstromPerPixel=0.1, AngstromPerPixel_z=0.1)
+    dp = wf.get_wfn_dataset(useWignerXY=True, cell_slab_truncation=60, AngstromPerPixel=0.1, AngstromPerPixel_z=0.1,
+                            upsampling_factor=3)
 
-    assert abs(abs(dp['wfn'][0,0,  5,5,30])-0.0008177179225316558) < 1e-7 # unit test
+    assert abs(abs(dp['wfn'][0,0,  5,5,30])-0.0009043516125740184) < 1e-7 # unit test
 

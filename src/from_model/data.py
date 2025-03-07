@@ -93,7 +93,7 @@ class ManyBodyData(Dataset):
                 -  required kwargs: nc_wfn, nv_wfn
                 -  optional kwargs: useWignerXY
                                     cell_slab_truncation, AngstromPerPixel, AngstromPerPixel_z
-                                    upsample_factor(speedup dataset creation, but not recommended)
+                                    upsample_factor(This is highly recommened for fast_cK)
                 -  datapoint: {'wfn': (nk, nc+nv, Rx, Ry, Rz(cutoff)), 'kpt': (nk, 3), 'band_indices': (nk, nc+nv, 1), 
                                'el': (nk, nc+nv, 1), 'kpt_weights': (nk, nc+nv, 1), 'kpt': (nk, nc+nv, 3)}
 
@@ -300,8 +300,8 @@ if __name__ == "__main__":
     """Usage"""
     # 1. Create new dataset
     wfdata = ManyBodyData(flows_dir='../../examples/flows', dataset_dir='./dataset', dataset_type='WFN',
-                          load_dataset=False, nc_wfn=4, nv_wfn=2, cell_slab_truncation=60, useWignerXY=True, 
-                        AngstromPerPixel=0.1, AngstromPerPixel_z=0.2, upsampling_factor=1)    
+                          load_dataset=False, nc_wfn=4, nv_wfn=2, cell_slab_truncation=30, useWignerXY=True, 
+                        AngstromPerPixel=0.1, AngstromPerPixel_z=0.2, upsampling_factor=2)    
 
     # 2. Load existing dataset
     # Recommend: use classmethod from_existing_dataset() to load existing dataset

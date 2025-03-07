@@ -1,7 +1,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
 from scipy.spatial import Voronoi, Delaunay, cKDTree
-from scipy.interpolate import griddata
+from scipy.interpolate import griddata, RBFInterpolator
 
 import torch.nn.functional as F
 from scipy.ndimage import zoom
@@ -64,7 +64,7 @@ class WignerXY:
         return points - lattice_points[indices]
 
     @time_watch
-    def WignerInterpolate(self, wf_3D: np.ndarray, **kwargs):
+    def WignerInterpolate(self, wf_3D: np.ndarray):
         assert np.isrealobj(wf_3D), "wf_3D must be a real matrix"
         """
         Args:
@@ -77,18 +77,57 @@ class WignerXY:
             wf_wigner (np.ndarray): Wigner interpolation result. (xi.shape, z)
         """
         self.wf_3D = wf_3D
+        charge_total = np.sum(self.wf_3D)
         self.density_matrix = zoom(self.wf_3D, (self.upsampling_factor, self.upsampling_factor, 1), order=3)
         zi = []
         for z_idex in range(self.density_matrix.shape[2]):
             slice_data = self.density_matrix[:, :, z_idex].flatten()
-            zi_slice = griddata(self.grid_points_folded, slice_data, (self.xi, self.yi), 
-                                method=kwargs.get('method', 'linear'))
+            zi_slice = griddata(self.grid_points_folded, slice_data, (self.xi, self.yi), method='linear')
             zi.append(zi_slice)
         self.zi = np.array(zi)
         self.zi = np.transpose(self.zi, (1, 2, 0))
+
+        charge_total_new = np.where(np.isnan(self.zi), 0, self.zi).sum()
+        self.zi = np.where(np.isnan(self.zi), np.nan, self.zi * charge_total / charge_total_new)
         return self.zi
     
-    def plot(self, **kwargs):
+    @time_watch        
+    def Wigner_fast_nearest_interpolation(self, wf_3D, max_distance=0.1):
+
+        """
+        Args:
+            wf_3D (np.ndarray): Input wavefunction data.
+            max_distance (float): Maximum allowed distance for interpolation. 
+                                Points farther than this will be set to NaN.
+        Returns:
+            np.ndarray: Interpolated result with NaNs where no nearby data exists.
+        """
+        assert np.isrealobj(wf_3D), "wf_3D must be a real matrix"
+        self.wf_3D = wf_3D
+        charge_total = np.sum(self.wf_3D)
+        self.density_matrix = zoom(self.wf_3D, (self.upsampling_factor, self.upsampling_factor, 1), order=3)
+
+        zi = []
+        tree = cKDTree(self.grid_points_folded)
+        query_points = np.vstack([self.xi.flatten(), self.yi.flatten()]).T
+        distances, indices = tree.query(query_points, k=1)
+
+        for z_index in range(self.density_matrix.shape[2]):
+            interpolated_values = self.density_matrix[:, :, z_index].flatten()[indices]
+            
+            # Set points too far from known data to NaN
+            interpolated_values[distances > max_distance] = np.nan  
+
+            zi_slice = interpolated_values.reshape(self.xi.shape)
+            zi.append(zi_slice)
+
+        self.zi = np.array(zi).transpose(1, 2, 0)
+        charge_total_new = np.where(np.isnan(self.zi), 0, self.zi).sum()
+        self.zi = np.where(np.isnan(self.zi), np.nan, self.zi * charge_total / charge_total_new)
+        return self.zi
+
+
+    def plot(self, go_3D:bool=False, **kwargs):
         assert hasattr(self, 'zi'), "Please run WignerInterpolate first"
 
         # Create the plotly figure
@@ -111,19 +150,19 @@ class WignerXY:
         plt.show()
 
         ###########
+        if go_3D:
+            xi, yi, zi = np.mgrid[
+            self.grid_points_folded[:, 0].min():self.grid_points_folded[:, 0].max():self.zi.shape[0]*1j,
+            self.grid_points_folded[:, 1].min():self.grid_points_folded[:, 1].max():self.zi.shape[1]*1j,
+            0:self.lattice[2,2]:self.zi.shape[2]*1j]
 
-        xi, yi, zi = np.mgrid[
-        self.grid_points_folded[:, 0].min():self.grid_points_folded[:, 0].max():self.zi.shape[0]*1j,
-        self.grid_points_folded[:, 1].min():self.grid_points_folded[:, 1].max():self.zi.shape[1]*1j,
-        0:self.lattice[2,2]:self.zi.shape[2]*1j]
-
-        fig = go.Figure(data=go.Volume(
-            x=xi.flatten(), y=yi.flatten(), z=zi.flatten(),
-            value=self.zi.flatten(),
-            opacity=0.2, surface_count=20, colorscale='Viridis'
-        ))
-        fig.update_layout(title='3D Wigner-Seitz Density Visualization')
-        fig.show()
+            fig = go.Figure(data=go.Volume(
+                x=xi.flatten(), y=yi.flatten(), z=zi.flatten(),
+                value=self.zi.flatten(),
+                opacity=0.2, surface_count=20, colorscale='Viridis'
+            ))
+            fig.update_layout(title='3D Wigner-Seitz Density Visualization')
+            fig.show()
 
 if __name__ == '__main__':
     import interface
@@ -134,13 +173,17 @@ if __name__ == '__main__':
     w00_3D = abs(wf.get_wfn_dataset(cell_slab_truncation=15, AngstromPerPixel_z=0.2)['wfn'][0,3,:,:,:])
     lattice = wf.crystal['avec'] * wf.crystal['alat'] * au2ang
     FFT_grid_shape = w00_3D.shape
-    shift = 14
+    shift = 2
     w00_3D = np.concatenate([w00_3D[shift:],w00_3D[:shift]], axis=0)
 
-    wigner = WignerXY(lattice, FFT_grid_shape, AngstromPerPixel=0.05 ,upsampling_factor=1.4)
+    wigner = WignerXY(lattice, FFT_grid_shape, AngstromPerPixel=0.05 ,upsampling_factor=1)
     wigner.WignerInterpolate(w00_3D)
+    wigner.plot(go_3D=False)
 
-    assert abs(np.where(np.isnan(wigner.zi),0,wigner.zi).sum() - np.where(np.isnan(wigner.zi),0,wigner.zi).sum()) < 1e-6, "Wigner Unit Test Failed"
+    wigner = WignerXY(lattice, FFT_grid_shape, AngstromPerPixel=0.05 ,upsampling_factor=3)
+    wigner.Wigner_fast_nearest_interpolation(w00_3D, max_distance=0.05)
+    wigner.plot(go_3D=True)
 
-    wigner.plot()
+
+    assert abs(np.where(np.isnan(wigner.zi),0,wigner.zi).sum() - 0.05038487949550353) < 1e-6, "Wigner Unit Test Failed"
 
