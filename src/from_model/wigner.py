@@ -173,14 +173,14 @@ if __name__ == '__main__':
     w00_3D = abs(wf.get_wfn_dataset(cell_slab_truncation=15, AngstromPerPixel_z=0.2)['wfn'][0,3,:,:,:])
     lattice = wf.crystal['avec'] * wf.crystal['alat'] * au2ang
     FFT_grid_shape = w00_3D.shape
-    shift = 2
+    shift = 14
     w00_3D = np.concatenate([w00_3D[shift:],w00_3D[:shift]], axis=0)
 
     wigner = WignerXY(lattice, FFT_grid_shape, AngstromPerPixel=0.05 ,upsampling_factor=1)
     wigner.WignerInterpolate(w00_3D)
     wigner.plot(go_3D=False)
 
-    wigner = WignerXY(lattice, FFT_grid_shape, AngstromPerPixel=0.05 ,upsampling_factor=3)
+    wigner = WignerXY(lattice, FFT_grid_shape, AngstromPerPixel=0.05 ,upsampling_factor=8)
     wigner.Wigner_fast_nearest_interpolation(w00_3D, max_distance=0.05)
     wigner.plot(go_3D=True)
 
