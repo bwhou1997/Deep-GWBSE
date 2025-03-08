@@ -197,33 +197,28 @@ class ManyBodyData(Dataset):
         folder_list: List["flow-mat-1", "flow-mat-2"]
         """
         #==================General Setting==================#
-        # Filter valid folders
+        #====Filter valid folders===
         folder_list, self.info.mat_id = self.mat_statistics(self.flows_dir, self.dataset_type)
 
-        # initialize dataset h5 file
+        #===initialize dataset h5 file===
         self.init_dataset_h5(self.multiprocessing)
 
         #==================Dataset Specific Setting==================#
-        if not self.multiprocessing:
-
-            if self.dataset_type == 'WFN':
-                self.data = [self.process_worker_WFN(folder) for folder in tqdm(folder_list, desc='Processing WFN data')]
-            elif self.dataset_type == 'GW':
-                raise NotImplementedError
-            elif self.dataset_type == 'BSE':
-                raise NotImplementedError
+        #===Get processor===
+        if self.dataset_type == 'WFN':
+            processor = self.process_worker_WFN
+        elif self.dataset_type == 'GW':
+            raise NotImplementedError
+        elif self.dataset_type == 'BSE':
+            raise NotImplementedError
         
+        #===Process data===
+        if self.multiprocessing:
+            with Pool() as pool:
+                self.data = list(tqdm(pool.imap(processor, folder_list), total=len(folder_list), desc='Processing WFN data'))
+                self.merge_dataset_h5(list(map(lambda x: x.decode('utf-8'), self.info.mat_id)), save_original=False, dataset_fname=self.dataset_fname)
         else:
-            if self.dataset_type == 'WFN':
-                with Pool() as pool:
-                    self.data = list(tqdm(pool.imap(self.process_worker_WFN, folder_list), total=len(folder_list), desc='Processing WFN data'))
-            elif self.dataset_type == 'GW':
-                raise NotImplementedError
-            elif self.dataset_type == 'BSE':
-                raise NotImplementedError
-        
-            self.merge_dataset_h5(list(map(lambda x: x.decode('utf-8'), self.info.mat_id)), save_original=False, dataset_fname=self.dataset_fname)
-
+            self.data = [processor(folder) for folder in tqdm(folder_list, desc='Processing WFN data')]
 
     def init_dataset_h5(self, multiprocessing: bool = False):
         """
@@ -347,6 +342,7 @@ class ManyBodyData(Dataset):
                 f[mat_id].create_dataset(key, data=val)
 
         return datapoint
+    
     def summary(self):
         pass
 class ToyDataSet(Dataset):
@@ -397,14 +393,13 @@ if __name__ == "__main__":
                           load_dataset=False, nc_wfn=4, nv_wfn=2, cell_slab_truncation=30, useWignerXY=True, 
                         AngstromPerPixel=0.1, AngstromPerPixel_z=0.2, upsampling_factor=2, multiprocessing=True)    
 
-    # 2. Load existing dataset
-    # Recommend: use classmethod from_existing_dataset() to load existing dataset
+    # 2. Load existing dataset: classmethod (Recommend)
     wfdata = ManyBodyData.from_existing_dataset('./dataset/dataset.h5')
 
-    # 3. (Not recommended) set load_dataset=True
-    #   wfdata = ManyBodyData(flows_dir='../../examples/flows', dataset_dir='./dataset', dataset_type='WFN',
+    # 3. Load existing dataset: using load_dataset=True (Not recommend)
+    # wfdata = ManyBodyData(flows_dir='../../examples/flows', dataset_dir='./dataset', dataset_type='WFN',
     #                       load_dataset=True, nc_wfn=4, nv_wfn=2)    
 
-    # Unit Test
+    """Unit Test"""
     assert abs(wfdata[1]['wfn'][0,0,14,13,15] - 2.1230801376011337e-06 < 1e-10), "Unit Test Failed"
     print("Unit Test Passed")
