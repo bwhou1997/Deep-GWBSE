@@ -22,8 +22,8 @@ class DataSetInfo:
     Basic Info for the dataset
     dataset_type = WFN, GW, BSE
 
-    This class is used as variable register for different dataset types
-    The registered attributes will be saved into info dict
+    This class saves all the hyperparameters (required and optional) for the dataset
+    All the hyperparameters are saved in the __dict__ attribute and with assigned default values
     """
     def __init__(self, dataset_type: str='WFN', **kwargs):
         if isinstance(dataset_type, bytes):
@@ -42,6 +42,7 @@ class DataSetInfo:
                 self.wfn_base_set(**kwargs)
             else:
                 raise NotImplementedError("GW dataset from non-DFT is not implemented yet")
+                self.vae_base_set(**kwargs)
      
         if dataset_type == 'BSE':
             self.dataset_type = 'BSE'
@@ -56,18 +57,23 @@ class DataSetInfo:
         assert {"nc_wfn","nv_wfn"} <= set(kwargs.keys()), f"nc_wfn and nv_wfn are required kwargs for WFN dataset"
         self.nc_wfn = kwargs.get('nc_wfn')
         self.nv_wfn = kwargs.get('nv_wfn')
-        self.useWignerXY = kwargs.get('useWignerXY', np.nan)
-        self.cell_slab_truncation = kwargs.get('cell_slab_truncation', np.nan) # Required for Wigner
-        self.AngstromPerPixel = kwargs.get('AngstromPerPixel', np.nan) # Required for Wigner
-        self.AngstromPerPixel_z = kwargs.get('AngstromPerPixel_z', np.nan) # Required for Wigner
-        self.upsampling_factor = kwargs.get('upsampling_factor', np.nan) # Required for Wigner
+        self.useWignerXY = kwargs.get('useWignerXY', False)
+        self.cell_slab_truncation = kwargs.get('cell_slab_truncation', 40) # Required for Wigner
+        self.AngstromPerPixel = kwargs.get('AngstromPerPixel', 0.1) # Required for Wigner
+        self.AngstromPerPixel_z = kwargs.get('AngstromPerPixel_z', 0.1) # Required for Wigner
+        self.upsampling_factor = kwargs.get('upsampling_factor', 1) # Required for Wigner
 
     def eqp_base_set(self, **kwargs):
-        assert {"nc_sigma","nv_sigma","from_dft"} <= set(kwargs.keys()), f"nc_wfn, nv_wfn, from_dft are required kwargs for WFN dataset"
+        assert {"nc_sigma","nv_sigma","nc_wfn","nv_wfn"} <= set(kwargs.keys()), f"nc, nv are required kwargs for GW dataset"
         self.nc_wfn = kwargs.get('nc_sigma')
         self.nv_wfn = kwargs.get('nv_sigma')      
-        self.from_dft = kwargs.get('from_dft', False)
+        self.nc_wfn = kwargs.get('nc_wfn')
+        self.nv_wfn = kwargs.get('nv_wfn')
+        self.from_dft = kwargs.get('from_dft', True)
         self.prdict_only = kwargs.get('predict_only', False)
+    
+    def vae_base_set(self, **kwargs):
+        pass
 
 
     def show_info(self,):
@@ -122,8 +128,9 @@ class ManyBodyData(Dataset):
             'GW': used to train GW-Transformer (supervised)
                 -  required dir: '02-wfn', '13-sigma', 
                 -  [optional] dir: '05-band'[optional: predict_only]
-                -  required kwargs: nc_wfn, nv_wfn, nc_sigma, nv_sigma, from_dft: bool
-                -  [optional] kwargs: predict_only:bool=False, 
+                -  required kwargs: nc_wfn, nv_wfn, nc_sigma, nv_sigma 
+                -  [optional] kwargs: from_dft: bool=True, # save wfn instead of VAE latent space
+                                      predict_only:bool=False, 
                                       other parameters are same as WFN
                 -  datapoint: 
                     from_dft:
@@ -347,30 +354,29 @@ class ManyBodyData(Dataset):
     def process_worker_WFN(self, folder:str)-> dict:
         """
         This function processes the WFN data for a single material
+        this func: get kwargs -> get wfn file (diff dir should be considered in future) -> create datapoint -> save data to h5 file
         folder: flow folder (not flows)
         """
-        wfn_dir='02-wfn'
-        wfn_fname = pjoin(pjoin(folder, wfn_dir, "wfn.h5"))
+        # get info
+        info = copy.deepcopy(dict(self.info.__dict__))
+        nc, nv = info.pop('nc_wfn'), info.pop('nv_wfn')
+
+        # get wfn file
+        wfn_fname = pjoin(pjoin(folder, '02-wfn', "wfn.h5"))
+        assert os.path.exists(wfn_fname), f"{wfn_fname} does not exist"
         mat_id = os.path.basename(folder)
 
+        # create datapoint
+        wf = wfn(wfn_fname)
+        datapoint =  wf.get_wfn_dataset(nc=nc, nv=nv, **info)
+
+        # save data to h5 file
         # if use multiprocessing, save data to mat_id+dataset_fname
         # else save data to dataset_fname
         if not self.multiprocessing:
             dataset_h5_fname = pjoin(self.dataset_dir, self.dataset_fname)
         else:
             dataset_h5_fname = pjoin(self.dataset_dir, mat_id+self.dataset_fname)
-
-        assert os.path.exists(wfn_fname), f"{wfn_fname} does not exist"
-        assert os.path.exists(dataset_h5_fname), f"Dataset h5 file does not exist"
-
-        kwargs = copy.deepcopy(self.kwargs)
-
-        nc, nv = kwargs.pop('nc_wfn'), kwargs.pop('nv_wfn')
-        # TODO: use **kwargs when inteface.py/wfn.get_wfn_dataset() is updated
-        wf = wfn(wfn_fname)
-
-        datapoint =  wf.get_wfn_dataset(nc=nc, nv=nv, **kwargs)
-
         with h5.File(dataset_h5_fname, 'a') as f:
             if mat_id in f:
                 del f[mat_id]
@@ -379,7 +385,25 @@ class ManyBodyData(Dataset):
                 f[mat_id].create_dataset(key, data=val)
 
         return datapoint
-    
+
+    def process_worker_GW(self, folder:str)-> dict:
+        """
+        This function processes the GW data for a single material
+        """
+
+        # get kwargs
+        info = copy.deepcopy(self.info.__dict__)
+        nc, nv, nc_sigma, nv_sigma = info.pop('nc_wfn'), info.pop('nv_wfn'), \
+                                     info.pop('nc_sigma'), info.pop('nv_sigma')
+
+        # build src
+
+        # build tgt
+
+
+        # build label
+        pass
+
     def summary(self):
         pass
 class ToyDataSet(Dataset):
@@ -438,5 +462,5 @@ if __name__ == "__main__":
     #                       load_dataset=True, nc_wfn=4, nv_wfn=2)    
 
     """Unit Test"""
-    assert abs(wfdata[1]['wfn'][0,0,14,13,15] - 2.1230801376011337e-06 < 1e-10), "Unit Test Failed"
+    assert abs(wfdata[1]['wfn'][0,0,14,13,15] - 2.1230801376011337e-06) < 1e-10, "Unit Test Failed"
     print("Unit Test Passed")
