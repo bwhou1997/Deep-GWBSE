@@ -12,7 +12,7 @@ from scipy.ndimage import zoom
 import time
 import matplotlib.pyplot as plt
 from pathos.multiprocessing import ProcessingPool as Pool
-class eqp_file:
+class eqp:
     """
     These object decompose eqp.dat into data_DFT, data_GW, klist and spin_list
     """
@@ -523,7 +523,7 @@ class kernel:
         pass
 
 if __name__ == '__main__':
-    # eqp = eqp_file('./test_data/eqp_full.dat')
+    # eqp = eqp('./test_data/eqp_full.dat')
     logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 
     # vsc = vloc('../../examples/flows/mat-5/02-wfn/VSC')

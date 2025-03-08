@@ -23,7 +23,7 @@ class DataSetInfo:
     dataset_type = WFN, GW, BSE
 
     This class is used as variable register for different dataset types
-    Only the related attributes will be used in the info
+    The registered attributes will be saved into info dict
     """
     def __init__(self, dataset_type: str='WFN', **kwargs):
         if isinstance(dataset_type, bytes):
@@ -31,24 +31,45 @@ class DataSetInfo:
 
         if dataset_type == 'WFN':
             self.dataset_type = 'WFN'
-            assert {"nc_wfn","nv_wfn"} <= set(kwargs.keys()), f"nc_wfn and nv_wfn are required kwargs for WFN dataset"
-            self.nc_wfn = kwargs.get('nc_wfn')
-            self.nv_wfn = kwargs.get('nv_wfn')
-            self.useWignerXY = kwargs.get('useWignerXY', np.nan)
-            self.cell_slab_truncation = kwargs.get('cell_slab_truncation', np.nan) # Required for Wigner
-            self.AngstromPerPixel = kwargs.get('AngstromPerPixel', np.nan) # Required for Wigner
-            self.AngstromPerPixel_z = kwargs.get('AngstromPerPixel_z', np.nan) # Required for Wigner
-            self.upsampling_factor = kwargs.get('upsampling_factor', np.nan) # Required for Wigner
+            self.wfn_base_set(**kwargs)
 
         if dataset_type == 'GW':
             self.dataset_type = 'GW'
+            self.eqp_base_set(**kwargs)
 
+            # for src and tgt
+            if kwargs.get('from_dft'):
+                self.wfn_base_set(**kwargs)
+            else:
+                raise NotImplementedError("GW dataset from non-DFT is not implemented yet")
+     
         if dataset_type == 'BSE':
             self.dataset_type = 'BSE'
         
         # common attributes
         self.mat_id = kwargs.get('mat_id', []) # updated after processing
     
+    def wfn_base_set(self, **kwargs):
+        """
+        see interface.py/wfn.get_wfn_dataset()
+        """
+        assert {"nc_wfn","nv_wfn"} <= set(kwargs.keys()), f"nc_wfn and nv_wfn are required kwargs for WFN dataset"
+        self.nc_wfn = kwargs.get('nc_wfn')
+        self.nv_wfn = kwargs.get('nv_wfn')
+        self.useWignerXY = kwargs.get('useWignerXY', np.nan)
+        self.cell_slab_truncation = kwargs.get('cell_slab_truncation', np.nan) # Required for Wigner
+        self.AngstromPerPixel = kwargs.get('AngstromPerPixel', np.nan) # Required for Wigner
+        self.AngstromPerPixel_z = kwargs.get('AngstromPerPixel_z', np.nan) # Required for Wigner
+        self.upsampling_factor = kwargs.get('upsampling_factor', np.nan) # Required for Wigner
+
+    def eqp_base_set(self, **kwargs):
+        assert {"nc_sigma","nv_sigma","from_dft"} <= set(kwargs.keys()), f"nc_wfn, nv_wfn, from_dft are required kwargs for WFN dataset"
+        self.nc_wfn = kwargs.get('nc_sigma')
+        self.nv_wfn = kwargs.get('nv_sigma')      
+        self.from_dft = kwargs.get('from_dft', False)
+        self.prdict_only = kwargs.get('predict_only', False)
+
+
     def show_info(self,):
         print(f"\n======{str(self.dataset_type)} Dataset Info:=======")
         for key, value in self.__dict__.items():
@@ -91,25 +112,39 @@ class ManyBodyData(Dataset):
             'WFN': used to train VAE model (unsupervised)
                 -  required dir: '02-wfn'
                 -  required kwargs: nc_wfn, nv_wfn
-                -  optional kwargs: useWignerXY
-                                    cell_slab_truncation, AngstromPerPixel, AngstromPerPixel_z
-                                    upsample_factor(This is highly recommened for fast_cK)
-                -  datapoint: {'wfn': (nk, nc+nv, Rx, Ry, Rz(cutoff)), 'kpt': (nk, 3), 'band_indices': (nk, nc+nv, 1), 
-                               'el': (nk, nc+nv, 1), 'kpt_weights': (nk, nc+nv, 1), 'kpt': (nk, nc+nv, 3)}
+                -  [optional] kwargs : useWignerXY, cell_slab_truncation, AngstromPerPixel, AngstromPerPixel_z
+                                     upsample_factor (This is highly recommened for fast_cK)
+                -  datapoint: {'wfn': (nk, nc_wfn+nv_wfn, Rx, Ry, Rz(cutoff)), 'kpt': (nk, 3), 'band_indices': (nk, nc_wfn+nv_wfn, 1), 
+                               'el': (nk, nc_wfn+nv_wfn 1), 'kpt_weights': (nk, nc_wfn+nv_wfn, 1), 'kpt': (nk, nc_wfn+nv_wfn, 3)}
 
             'GW': used to train GW-Transformer (supervised)
-                -  required dir: '01-density','02-wfn', '13-sigma'
-                -  required kwargs: 
-                -  optional kwargs: 
-
+                -  required dir: '02-wfn', '13-sigma', 
+                -  [optional] dir: '05-band'[optional: predict_only]
+                -  required kwargs: nc_wfn, nv_wfn, nc_sigma, nv_sigma, from_dft: bool
+                -  [optional] kwargs: predict_only:bool=False, 
+                                      other parameters are same as WFN
+                -  datapoint: 
+                    from_dft:
+                    - {'src':dict, 'tgt':dict, 'label':dict[optional: not created if predict_only]}
+                    -  src: same as "WFN" datapoint
+                    -  tgt: same as "WFN" datapoint, with nc_sigma, nv_sigma instead of nc_wfn, nv_wfn
+                    -  label: {'mf': (nk, nc_sigma+nv_sigma, 1), 'qp': (nk, nc_sigma+nv_sigma, 1), 'corr': (nk, nc_sigma+nv_sigma, 1)}
+                    not from_dft:
+                    - {'src':dict, 'tgt':dict, 'label':dict[optional: not created if predict_only]}
+                    - src: not implemented yet
+                    - tgt: not implemented yet
+                    - label: same as from_dft
+                    
             'BSE': used to train BSE-Transformer (supervised)
                 -  required dir: '01-density','17-wfn_fi', '18-kernel', '19-absorption'
                 -  required kwargs: 
-                -  optional kwargs: 
+                -  [optional] kwargs: 
 
         :param dataset_name: name of the dataset
         :param multiprocessing: Whether to use multiprocessing to process data
         :param load_dataset: Whether to load existing dataset
+        :param onlySave (TODO): Whether to only save the dataset without loading (used for large dataset)
+
         Output: 
             self.data: [datapoint1, datapoint2, ...]
             self.info: DataSetInfo
