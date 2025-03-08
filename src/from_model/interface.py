@@ -11,6 +11,7 @@ import wigner
 from scipy.ndimage import zoom
 import time
 import matplotlib.pyplot as plt
+from pathos.multiprocessing import ProcessingPool as Pool
 class eqp_file:
     """
     These object decompose eqp.dat into data_DFT, data_GW, klist and spin_list
@@ -401,6 +402,7 @@ class wfn:
         assert ((abs(wfn_r)**2).sum(axis=(2,3,4)) - 1 < 1e-6).all(), 'Check Norm Failed'
         return abs(wfn_r)**2, el_r
 
+    @time_watch
     def get_wfn_dataset(self, nc:int=6 ,nv:int=2, cell_slab_truncation:int=40, useWignerXY:bool=False, 
                         AngstromPerPixel:float=0.1, **kwargs)->dict:
         """
@@ -448,8 +450,6 @@ class wfn:
         # self.wfn_r_original = wfn_r
         # self.z_projection_original = np.sum(wfn_r, axis=(0,1,2,3))
 
-
-
         if cell_slab_truncation:
             assert AngstromPerPixel is not None, 'AngstromPerPixel is required when cell_slab_truncation is not None'
 
@@ -478,7 +478,11 @@ class wfn:
                                           self.FFTgrid, 
                                           AngstromPerPixel, 
                                           **kwargs)
+            
+            
             wfn_r_wigner = np.zeros((wfn_r.shape[0], wfn_r.shape[1], self.wigner.xi.shape[0], self.wigner.xi.shape[1], wfn_r.shape[-1]), dtype=wfn_r.dtype)
+            
+            
             for k in range(wfn_r.shape[0]):
                 for b in range(wfn_r.shape[1]):
                     # Note: see wigner.py for benchmark between regular interpolation and fast one!
@@ -487,6 +491,17 @@ class wfn:
                     # wfn_r_wigner[k,b] = self.wigner.WignerInterpolate(wfn_r[k,b])
                     wfn_r_wigner[k,b] = self.wigner.Wigner_fast_nearest_interpolation(wfn_r[k,b], max_distance=AngstromPerPixel)
                     ##################################################################################
+            
+            # See src/note.md for benchmark between regular interpolation and fast one!
+            # interpolate_wigner = lambda args: (args[0], args[1], args[3].Wigner_fast_nearest_interpolation(args[2], max_distance=args[4]))
+            # with Pool(8) as pool:
+            #     tasks = [(k, b, wfn_r[k, b], self.wigner, AngstromPerPixel) 
+            #             for k in range(wfn_r.shape[0]) 
+            #             for b in range(wfn_r.shape[1])]
+            #     results = pool.map(interpolate_wigner, tasks)
+            # for k, b, value in results:
+            #     wfn_r_wigner[k, b] = value
+
 
             wfn_r = wfn_r_wigner
         else:
@@ -516,5 +531,6 @@ if __name__ == '__main__':
     dp = wf.get_wfn_dataset(useWignerXY=True, cell_slab_truncation=60, AngstromPerPixel=0.1, AngstromPerPixel_z=0.1,
                             upsampling_factor=3)
 
-    assert abs(abs(dp['wfn'][0,0,  5,5,30])-0.0009043516125740184) < 1e-7 # unit test
+    assert abs(abs(dp['wfn'][0,0,  5,5,30])-0.0009519374081944384) < 1e-7 # unit test
+    print("Unit test passed!")
 

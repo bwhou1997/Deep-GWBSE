@@ -4,6 +4,7 @@ import torch.nn.functional as F
 from torch.utils.data import Dataset, DataLoader, TensorDataset
 from interface import wfn
 from model_util import time_watch, memory_watch
+from pathos.multiprocessing import ProcessingPool as Pool
 import os
 from tqdm import tqdm
 from os.path import join as pjoin
@@ -80,7 +81,7 @@ class ManyBodyData(Dataset):
 
     def __init__(self, flows_dir: str, dataset_dir: str, dataset_type: str='WFN',
                  dataset_fname: str='dataset.h5', multiprocessing: bool = False, load_dataset: bool = True, 
-                 **kwargs):
+                 onlySave:bool=False, **kwargs):
         """
         :param **kwargs: all parameters related to specific dataset ['WFN','GW','BSE'], see DataSetInfo
         :param flows_dir: Path to the raw data directory (flows)
@@ -166,6 +167,7 @@ class ManyBodyData(Dataset):
                    dataset_type=info.dataset_type, 
                    load_dataset=True, 
                    dataset_fname=dataset_fname,
+                   multiprocessing=False,
                    **info_dict)
 
     def load_dataset(self):
@@ -199,27 +201,83 @@ class ManyBodyData(Dataset):
         folder_list, self.info.mat_id = self.mat_statistics(self.flows_dir, self.dataset_type)
 
         # initialize dataset h5 file
-        self.init_dataset_h5()
+        self.init_dataset_h5(self.multiprocessing)
 
         #==================Dataset Specific Setting==================#
-        if self.dataset_type == 'WFN':
-            self.data = [self.process_worker_WFN(folder) for folder in tqdm(folder_list, desc='Processing WFN data')]
-        elif self.dataset_type == 'GW':
-            raise NotImplementedError
-        elif self.dataset_type == 'BSE':
-            raise NotImplementedError
+        if not self.multiprocessing:
+
+            if self.dataset_type == 'WFN':
+                self.data = [self.process_worker_WFN(folder) for folder in tqdm(folder_list, desc='Processing WFN data')]
+            elif self.dataset_type == 'GW':
+                raise NotImplementedError
+            elif self.dataset_type == 'BSE':
+                raise NotImplementedError
+        
+        else:
+            if self.dataset_type == 'WFN':
+                with Pool() as pool:
+                    self.data = list(tqdm(pool.imap(self.process_worker_WFN, folder_list), total=len(folder_list), desc='Processing WFN data'))
+            elif self.dataset_type == 'GW':
+                raise NotImplementedError
+            elif self.dataset_type == 'BSE':
+                raise NotImplementedError
+        
+            self.merge_dataset_h5(list(map(lambda x: x.decode('utf-8'), self.info.mat_id)), save_original=False, dataset_fname=self.dataset_fname)
 
 
-    def init_dataset_h5(self):
+    def init_dataset_h5(self, multiprocessing: bool = False):
+        """
+        multiprocessing: 
+            True: create dataset files for each material
+                  h5: mat_id+dataset_fname
+            False: create one dataset file for all materials
+                  h5: dataset_fname
+        """
         os.makedirs(self.dataset_dir, exist_ok=True)    
-        with h5.File(pjoin(self.dataset_dir, self.dataset_fname), 'w') as f:
-            # put info dict into h5 file
-            f.create_group('info')
-            for key, value in self.info.__dict__.items():
-                f['info'].create_dataset(key, data=value)
-            print(f"Creating dataset file: {os.path.abspath(f.filename)}")
+        if not multiprocessing:
+            with h5.File(pjoin(self.dataset_dir, self.dataset_fname), 'w') as f:
+                # put info dict into h5 file
+                f.create_group('info')
+                for key, value in self.info.__dict__.items():
+                    f['info'].create_dataset(key, data=value)
+                print(f"[Series]: creating dataset file: {os.path.abspath(f.filename)}")
 
+        else:
+            print(f"[Pool]: creating dataset files for {len(self.info.mat_id)} material")
+            mat_id_list = list(map(lambda x: x.decode('utf-8'), self.info.mat_id))
+            for mat_id in mat_id_list:
+                with h5.File(pjoin(self.dataset_dir, mat_id+self.dataset_fname), 'w') as f:
+                    # put info dict into h5 file
+                    f.create_group('info')
+                    for key, value in self.info.__dict__.items():
+                        f['info'].create_dataset(key, data=value)
+                    # print(f"Creating dataset file: {os.path.abspath(f.filename)}")
 
+    def merge_dataset_h5(self, mat_id_list: list, save_original: bool = False, dataset_fname: str='dataset.h5'):
+        """
+        Merge dataset h5 files into one
+        """
+        print("Merging dataset h5 files", [mat_id+dataset_fname for mat_id in mat_id_list])
+
+        self.init_dataset_h5(multiprocessing=False)
+
+        for mat_id in mat_id_list:
+            with h5.File(pjoin(self.dataset_dir, mat_id+dataset_fname), 'r') as f:
+                with h5.File(pjoin(self.dataset_dir, dataset_fname), 'a') as f_new:
+                    # make sure info is the same
+                    for key, value in f['info'].items():
+                        if key == 'dataset_type':
+                            assert self.info.dataset_type == value[()].decode('utf-8'), f"Dataset type mismatch: set {self.info.dataset_type}, get {value[()].decode('utf-8')}"
+                            continue
+                        assert (self.info.__dict__[key] == value[()]).all(), f"Info mismatch: set {self.info.__dict__[key]}, get {value[()]}"
+                    if mat_id in f_new:
+                        del f_new[mat_id]
+                    f_new.create_group(mat_id)
+                    for key, val in f[mat_id].items():
+                        f_new[mat_id].create_dataset(key, data=val[()])
+            if not save_original:
+                os.remove(pjoin(self.dataset_dir, mat_id+dataset_fname))
+                
     @classmethod
     def mat_statistics(cls, flows_dir:str, dataset_type:type='WFN')-> tuple[list, np.ndarray]:
         """
@@ -261,11 +319,17 @@ class ManyBodyData(Dataset):
         """
         wfn_dir='02-wfn'
         wfn_fname = pjoin(pjoin(folder, wfn_dir, "wfn.h5"))
-        dateset_h5_fname = pjoin(self.dataset_dir, self.dataset_fname)
         mat_id = os.path.basename(folder)
 
+        # if use multiprocessing, save data to mat_id+dataset_fname
+        # else save data to dataset_fname
+        if not self.multiprocessing:
+            dataset_h5_fname = pjoin(self.dataset_dir, self.dataset_fname)
+        else:
+            dataset_h5_fname = pjoin(self.dataset_dir, mat_id+self.dataset_fname)
+
         assert os.path.exists(wfn_fname), f"{wfn_fname} does not exist"
-        assert os.path.exists(dateset_h5_fname), f"Dataset h5 file does not exist"
+        assert os.path.exists(dataset_h5_fname), f"Dataset h5 file does not exist"
 
         kwargs = copy.deepcopy(self.kwargs)
 
@@ -275,7 +339,7 @@ class ManyBodyData(Dataset):
 
         datapoint =  wf.get_wfn_dataset(nc=nc, nv=nv, **kwargs)
 
-        with h5.File(dateset_h5_fname, 'a') as f:
+        with h5.File(dataset_h5_fname, 'a') as f:
             if mat_id in f:
                 del f[mat_id]
             f.create_group(mat_id)
@@ -283,16 +347,8 @@ class ManyBodyData(Dataset):
                 f[mat_id].create_dataset(key, data=val)
 
         return datapoint
-    
-    @classmethod
-    def merge_dataset(self,):
-        pass
-
-
     def summary(self):
         pass
-
-
 class ToyDataSet(Dataset):
 
     """
@@ -339,7 +395,7 @@ if __name__ == "__main__":
     # 1. Create new dataset
     wfdata = ManyBodyData(flows_dir='../../examples/flows', dataset_dir='./dataset', dataset_type='WFN',
                           load_dataset=False, nc_wfn=4, nv_wfn=2, cell_slab_truncation=30, useWignerXY=True, 
-                        AngstromPerPixel=0.1, AngstromPerPixel_z=0.2, upsampling_factor=2)    
+                        AngstromPerPixel=0.1, AngstromPerPixel_z=0.2, upsampling_factor=2, multiprocessing=True)    
 
     # 2. Load existing dataset
     # Recommend: use classmethod from_existing_dataset() to load existing dataset
@@ -348,3 +404,7 @@ if __name__ == "__main__":
     # 3. (Not recommended) set load_dataset=True
     #   wfdata = ManyBodyData(flows_dir='../../examples/flows', dataset_dir='./dataset', dataset_type='WFN',
     #                       load_dataset=True, nc_wfn=4, nv_wfn=2)    
+
+    # Unit Test
+    assert abs(wfdata[1]['wfn'][0,0,14,13,15] - 2.1230801376011337e-06 < 1e-10), "Unit Test Failed"
+    print("Unit Test Passed")

@@ -126,3 +126,17 @@ ml-train/test
 └── ...
 ```
 
+
+### Benchmark
+
+data.py parallel benchmark
+| | interface  | data   | wall time |
+|:----:|:------------:|:--------:|:-----------:|
+| **8 bands**          | -          | -      | <span style="color:red;">237s</span>      |
+| | pool()     | -      | 232s      |
+| | pool(4)    | -      | 218s      |
+| | pool(8)    | -      | 217s      |
+| | x          | pool() | <span style="color:green;">30s</span>       |
+| **18 bands**| -          | pool() |  72s      |
+| | pool(8)    | -      |     517s      |
+
