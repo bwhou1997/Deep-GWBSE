@@ -24,10 +24,9 @@ class eqp:
         # (4) klist -> (nk,)
 
         # self.write()
-        print('Reading eqp')
+        logging.debug(f'Loading eqp.dat {fname}')
         self.fname = fname
         self.read_eqp()
-
 
     def read_eqp(self):
         f = open(self.fname, 'r')
@@ -37,8 +36,8 @@ class eqp:
         self.nbnd = int(lines[0].split()[-1])
         self.nk = int(len(lines) / (self.nbnd + 1))
 
-        print('number of bands:', self.nbnd)
-        print('number of kpoints:', self.nk)
+        logging.debug(f'number of bands:{self.nbnd}')
+        logging.debug(f'number of kpoints:{self.nk}')
 
         self.data_GW = np.zeros((self.nk, self.nbnd))
         self.data_DFT = np.zeros((self.nk, self.nbnd))
@@ -61,7 +60,6 @@ class eqp:
                 line += 1
         self.data_DFT = np.around(self.data_DFT,9)
 
-
     def write_eqp(self):
         f_new = open('eqp_new.dat','w')
         line = 0
@@ -80,6 +78,29 @@ class eqp:
                 f.write("%s %s %s\n" % (j + 1, self.data_DFT[j, i], self.data_GW[j, i]))
             f.write('\n')
         f.close()
+
+    def get_eqp_dataset(self,)->dict:
+        """
+        Get the dataset of the eqp.dat for ML
+        Input:
+            nc: number of conduction bands
+            nv: number of valence bands
+        Output:
+            {
+                "qp": (nk, nb, 1),
+                "mf": (nk, nb, 1),
+                "corr: (nk, nb, 1), # :qp-mf
+                "band_indices_abs": (nk, nb, 1),
+            }
+        """
+        dataset = {
+            "qp": self.data_GW[:, :, None],
+            "mf": self.data_DFT[:, :, None],
+            "corr": (self.data_GW - self.data_DFT)[:, :, None],
+            "band_indices_abs": self.band_index[:, :, None],
+        }
+        return dataset
+
 
 class vloc:
     """
@@ -386,21 +407,24 @@ class wfn:
                 logging.debug('Using existing wfn in G-grid')
 
         wfn_r = np.zeros_like(self.wfn_nk_ggrid[self.hovb-nv:self.hovb+nc])
-        el_r = np.zeros(wfn_r.shape[:2])[..., None] # (nk, nb, 1)
+        el_r = np.zeros(wfn_r.shape[:2])[..., None] # (nb, nk, 1)
+        occ = np.zeros_like(el_r)
         for ik in range(self.nk):
             wf_qp_g = self.wfn_nk_ggrid[self.hovb-nv:self.hovb+nc, ik] # make the order consistent with the G-grid
             # print(el_r.shape, self.el.shape)
             # print(el_r[:, ik, 0].shape, self.el[ik, self.hovb-nv:self.hovb+nc].shape)
             # print(self.hovb-nv, self.hovb+nc)
             el_r[:, ik, 0] = self.el[ik, self.hovb-nv:self.hovb+nc]
+            occ[:, ik, 0] = self.kpoints['occ'][0, ik, self.hovb-nv:self.hovb+nc]
             wf_qp_r = np.fft.ifftn(wf_qp_g, s=self.FFTgrid, norm='forward', axes=(1,2,3)) / np.sqrt(np.prod(self.FFTgrid))
             wfn_r[:, ik] = wf_qp_r
 
         wfn_r = wfn_r.transpose(1,0,2,3,4)
         el_r = el_r.transpose(1,0,2)
+        occ = occ.transpose(1,0,2)
 
         assert ((abs(wfn_r)**2).sum(axis=(2,3,4)) - 1 < 1e-6).all(), 'Check Norm Failed'
-        return abs(wfn_r)**2, el_r
+        return abs(wfn_r)**2, el_r, occ
 
     @time_watch
     def get_wfn_dataset(self, nc:int=6 ,nv:int=2, cell_slab_truncation:int=40, useWignerXY:bool=False, 
@@ -432,16 +456,20 @@ class wfn:
         Output:
             {
                 "wfn": (nk, nc+nv, FFTgrid[0], FFTgrid[1], FFTgrid[2]),
+                "occ": (nk, nc+nv, 1),
                 "el": (nk, nc+nv, 1),
                 "kpt_weights": (nk, nc+nv, 1),
                 "kpt": (nk, nc+nv, 3),
-                "band_indices: (nk, nc+nv, 1),
+                "band_indices: (nk, nc+nv, 1), # [-2,-1,1,2,3,4] (start with 1 or -1)
+                "band_indices_abs": (nk, nc+nv, 1), #[3,4,5,6,7,8] (start with 1)
             }
         """
         logging.debug(f'Creating dataset for {self.wfn_file_h5}')
 
-        wfn_r, el_r = self.get_wfn_r_in_grid(nc=nc, nv=nv, **kwargs)
+        wfn_r, el_r, occ = self.get_wfn_r_in_grid(nc=nc, nv=nv, **kwargs)
         band_indices = np.array([iv - nv for iv in range(nv)] + [ic + 1 for ic in range(nc)], \
+                                dtype=int)[None,:,None].repeat(self.nk, axis=0)
+        band_indices_abs = np.array([self.hovb-nv+iv+1 for iv in range(nv)] + [self.hovb+ic+1 for ic in range(nc)], \
                                 dtype=int)[None,:,None].repeat(self.nk, axis=0)
 
         kpt = self.kpoints['rk'][:, None, :].repeat(nc + nv, axis=1)
@@ -511,9 +539,11 @@ class wfn:
         dataset = {
             "wfn": wfn_r,
             "el": el_r,
+            "occ": occ,
             "kpt_weights": kpt_weights,
             "kpt": kpt,
-            "band_indices": band_indices,
+            "band_indices": band_indices.astype(int),
+            "band_indices_abs": band_indices_abs.astype(int),
         }
 
         return dataset
@@ -523,14 +553,23 @@ class kernel:
         pass
 
 if __name__ == '__main__':
-    # eqp = eqp('./test_data/eqp_full.dat')
     logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 
+    # VXC
     # vsc = vloc('../../examples/flows/mat-5/02-wfn/VSC')
+
+    # WFN 
     wf = wfn('../../examples/flows/mat-5/02-wfn/wfn.h5')
-    dp = wf.get_wfn_dataset(useWignerXY=True, cell_slab_truncation=60, AngstromPerPixel=0.1, AngstromPerPixel_z=0.1,
+    dp_wfn = wf.get_wfn_dataset(useWignerXY=True, cell_slab_truncation=60, AngstromPerPixel=0.1, AngstromPerPixel_z=0.1,
                             upsampling_factor=3)
 
-    assert abs(abs(dp['wfn'][0,0,  5,5,30])-0.0009519374081944384) < 1e-7 # unit test
-    print("Unit test passed!")
+    assert abs(abs(dp_wfn['wfn'][0,0,  5,5,30])-0.0009519374081944384) < 1e-7 # unit test
+    print("WFN: unit test passed!")
+
+    # eqp
+    eqp = eqp('../../examples/flows/mat-5/13-sigma/eqp1.dat')
+    dp_eqp = eqp.get_eqp_dataset()
+    assert np.allclose(dp_eqp['mf'].sum(), -13.864995302)
+    print("eqp: unit test passed!")
+
 
