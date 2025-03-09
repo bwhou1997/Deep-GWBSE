@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.utils.data import Dataset, DataLoader, TensorDataset
-from interface import wfn
+from interface import wfn, eqp
 from model_util import time_watch, memory_watch
 from pathos.multiprocessing import ProcessingPool as Pool
 import os
@@ -35,7 +35,7 @@ class DataSetInfo:
 
         if dataset_type == 'GW':
             self.dataset_type = 'GW'
-            self.eqp_base_set(**kwargs)
+            self.gw_base_set(**kwargs)
 
             # for src and tgt
             if kwargs.get('from_dft'):
@@ -63,14 +63,14 @@ class DataSetInfo:
         self.AngstromPerPixel_z = kwargs.get('AngstromPerPixel_z', 0.1) # Required for Wigner
         self.upsampling_factor = kwargs.get('upsampling_factor', 1) # Required for Wigner
 
-    def eqp_base_set(self, **kwargs):
+    def gw_base_set(self, **kwargs):
         assert {"nc_sigma","nv_sigma","nc_wfn","nv_wfn"} <= set(kwargs.keys()), f"nc, nv are required kwargs for GW dataset"
-        self.nc_wfn = kwargs.get('nc_sigma')
-        self.nv_wfn = kwargs.get('nv_sigma')      
+        self.nc_sigma = kwargs.get('nc_sigma')
+        self.nv_sigma = kwargs.get('nv_sigma')      
         self.nc_wfn = kwargs.get('nc_wfn')
         self.nv_wfn = kwargs.get('nv_wfn')
         self.from_dft = kwargs.get('from_dft', True)
-        self.prdict_only = kwargs.get('predict_only', False)
+        self.predict_only = kwargs.get('predict_only', False)
     
     def vae_base_set(self, **kwargs):
         pass
@@ -212,13 +212,14 @@ class ManyBodyData(Dataset):
                    load_dataset=True, 
                    dataset_fname=dataset_fname,
                    multiprocessing=False,
+                   onlySave=False,
                    **info_dict)
 
     def load_dataset(self):
         """
         load existing dataset
         """
-        self.data = []
+
         with h5.File(pjoin(self.dataset_dir, self.dataset_fname), 'r') as f:
             print("updating info from existing dataset")
             for key, value in f['info'].items():
@@ -227,12 +228,9 @@ class ManyBodyData(Dataset):
                     self.info.__dict__[key] = value[()].decode('utf-8')
                     continue
                 self.info.__dict__[key] = value[()]
-            print("loading data")
-            for mat_id in self.info.mat_id:
-                datapoint = {}
-                for key, val in f[mat_id].items():
-                    datapoint[key] = val[()]
-                self.data.append(datapoint)
+        
+        print("loading data")
+        self.data = [self.datapoint2h5(pjoin(self.dataset_dir, self.dataset_fname), mat_id, mode='r') for mat_id in self.info.mat_id]
 
         # print(f"Loading existing dataset: {os.path.abspath(self.data.filename)}")
 
@@ -252,7 +250,7 @@ class ManyBodyData(Dataset):
         if self.dataset_type == 'WFN':
             processor = self.process_worker_WFN
         elif self.dataset_type == 'GW':
-            raise NotImplementedError
+            processor = self.process_worker_GW
         elif self.dataset_type == 'BSE':
             raise NotImplementedError
         
@@ -302,23 +300,14 @@ class ManyBodyData(Dataset):
 
         for mat_id in mat_id_list:
             with h5.File(pjoin(self.dataset_dir, mat_id+dataset_fname), 'r') as f:
-                with h5.File(pjoin(self.dataset_dir, dataset_fname), 'a') as f_new:
-                    # make sure info is the same
-                    for key, value in f['info'].items():
-                        if key == 'dataset_type':
-                            assert self.info.dataset_type == value[()].decode('utf-8'), f"Dataset type mismatch: set {self.info.dataset_type}, get {value[()].decode('utf-8')}"
-                            continue
-                        assert (self.info.__dict__[key] == value[()]).all(), f"Info mismatch: set {self.info.__dict__[key]}, get {value[()]}"
-                    if mat_id in f_new:
-                        del f_new[mat_id]
-                    f_new.create_group(mat_id)
-                    for key, val in f[mat_id].items():
-                        f_new[mat_id].create_dataset(key, data=val[()])
+                # This is not a class method, so we don't need further info check
+                self.datapoint2h5(pjoin(self.dataset_dir, dataset_fname), mat_id, f[mat_id], mode='a')
+
             if not save_original:
                 os.remove(pjoin(self.dataset_dir, mat_id+dataset_fname))
-                
-    @classmethod
-    def mat_statistics(cls, flows_dir:str, dataset_type:type='WFN')-> tuple[list, np.ndarray]:
+
+
+    def mat_statistics(self, flows_dir:str, dataset_type:type='WFN')-> tuple[list, np.ndarray]:
         """
         classmethod:
             Get the statistics of the dataset
@@ -339,10 +328,25 @@ class ManyBodyData(Dataset):
                         folder_list.append(root)
 
             elif dataset_type == 'GW':
-                raise NotImplementedError
+                if not self.info.from_dft:
+                    raise NotImplementedError
+                else:
+                    if '02-wfn' in dirs: # scf is foundation for all workflows
+                        if not self.info.predict_only:
+                            if (os.path.exists(pjoin(pjoin(root, "02-wfn/wfn.h5"))) and\
+                                os.path.exists(pjoin(pjoin(root, "13-sigma/eqp1.dat")))):
+                                    folder_list.append(root)
+                        else:
+                            if (os.path.exists(pjoin(pjoin(root, "02-wfn/wfn.h5"))) and\
+                                os.path.exists(pjoin(pjoin(root, "05-band/wfn.h5")))):
+                                    folder_list.append(root)
+
             
             elif dataset_type == 'BSE':
                 raise NotImplementedError
+        
+            else:
+                raise Exception(f"Dataset type {dataset_type} is not supported")
             
         assert len(folder_list) > 0, f"No data found under {flows_dir}"
         print(f"Found {len(folder_list)} materials")
@@ -358,13 +362,12 @@ class ManyBodyData(Dataset):
         folder: flow folder (not flows)
         """
         # get info
+        mat_id = os.path.basename(folder)
         info = copy.deepcopy(dict(self.info.__dict__))
         nc, nv = info.pop('nc_wfn'), info.pop('nv_wfn')
 
         # get wfn file
         wfn_fname = pjoin(pjoin(folder, '02-wfn', "wfn.h5"))
-        assert os.path.exists(wfn_fname), f"{wfn_fname} does not exist"
-        mat_id = os.path.basename(folder)
 
         # create datapoint
         wf = wfn(wfn_fname)
@@ -377,14 +380,82 @@ class ManyBodyData(Dataset):
             dataset_h5_fname = pjoin(self.dataset_dir, self.dataset_fname)
         else:
             dataset_h5_fname = pjoin(self.dataset_dir, mat_id+self.dataset_fname)
-        with h5.File(dataset_h5_fname, 'a') as f:
-            if mat_id in f:
-                del f[mat_id]
-            f.create_group(mat_id)
-            for key, val in datapoint.items():
-                f[mat_id].create_dataset(key, data=val)
+
+        self.datapoint2h5(dataset_h5_fname, mat_id, datapoint, mode='a')
 
         return datapoint
+
+    @classmethod
+    def datapoint2h5(cls, dataset_h5_fname: str, mat_id: str, datapoint=None, mode: str = 'a'):
+        """
+        Save or load a datapoint to/from an HDF5 file.
+        
+        Parameters:
+        - datapoint(two types, only required in "a"): 
+            dict -> Nested dictionary structure containing data
+            h5.Group(dict like structure) -> HDF5 group object
+        - dataset_h5_fname: str -> Path to the HDF5 file.
+        - mat_id: str -> Identifier for the dataset inside HDF5.(first level dict)
+        - mode: str -> 'a' for append/write, 'r' for read.
+        
+        Structure:
+        - Unsupervised: {"xx": np.array, "yy": np.array}
+        - Supervised: {"src": {"xx": np.array, ...}, "tgt": {...}, "label": {...}}
+        
+        HDF5 format:
+        ```
+        dataset.h5
+        ├── info
+        └── mat_id
+            ├── xx
+            ├── yy
+            ├── src
+            │   ├── xx
+            │   ├── ...
+            ├── tgt
+            ├── label
+        ```
+        """
+
+        assert mode in ['a', 'r'], "mode should be 'a' or 'r'"
+
+        if mode == 'a':
+            with h5.File(dataset_h5_fname, mode) as f:
+                if mat_id in f:
+                    del f[mat_id]
+                f.create_group(mat_id)
+
+                def write_data(group, data):
+                    """Recursively writes data to HDF5, handling nested dictionaries."""
+                    for key, val in data.items():
+                        if isinstance(val, dict) or isinstance(val, h5.Group):  # Nested dictionary
+                            subgroup = group.create_group(key)
+                            write_data(subgroup, val)
+                        else:
+                            group.create_dataset(key, data=val)
+
+                write_data(f[mat_id], datapoint)
+            return
+
+        elif mode == 'r':
+            datapoint = {}
+
+            def read_data(group):
+                """Recursively reads HDF5 data into a nested dictionary."""
+                data_dict = {}
+                for key, item in group.items():
+                    if isinstance(item, h5.Group):  # If it's a group, recurse
+                        data_dict[key] = read_data(item)
+                    else:
+                        data_dict[key] = item[()]  # Read dataset
+                return data_dict
+
+            with h5.File(dataset_h5_fname, 'r') as f:
+                if mat_id in f:
+                    datapoint = read_data(f[mat_id])
+
+            return datapoint
+
 
     def process_worker_GW(self, folder:str)-> dict:
         """
@@ -392,17 +463,52 @@ class ManyBodyData(Dataset):
         """
 
         # get kwargs
+        datapoint = {}
+        mat_id = os.path.basename(folder)
         info = copy.deepcopy(self.info.__dict__)
-        nc, nv, nc_sigma, nv_sigma = info.pop('nc_wfn'), info.pop('nv_wfn'), \
+        nc_wfn, nv_wfn, nc_sigma, nv_sigma = info.pop('nc_wfn'), info.pop('nv_wfn'), \
                                      info.pop('nc_sigma'), info.pop('nv_sigma')
 
-        # build src
+        if info.get('from_dft'):
+            # build src
+            wfn_fname = pjoin(pjoin(folder, '02-wfn', "wfn.h5"))
+            wf = wfn(wfn_fname)
+            datapoint_src =  wf.get_wfn_dataset(nc=nc_wfn, nv=nv_wfn, **info)
+            datapoint['src'] = datapoint_src
 
-        # build tgt
+            # build tgt & label
+            if info.get('predict_only'):
+                raise NotImplementedError
+                wfn_fname = pjoin(pjoin(folder, '05-band', "wfn.h5"))
+                wf = wfn(wfn_fname)
+                datapoint_tgt = wf.get_wfn_dataset(nc=nc_sigma, nv=nv_sigma, **info)
 
+            else:
+                datapoint_tgt = wf.get_wfn_dataset(nc=nc_sigma, nv=nv_sigma, **info)
+                eqp1 = eqp(pjoin(pjoin(folder, '13-sigma'), "eqp1.dat"))
+                datapoint_eqp = eqp1.get_eqp_dataset()
 
-        # build label
-        pass
+                _, tgt_idx, label_idx = np.intersect1d(datapoint_tgt['band_indices_abs'][0], datapoint_eqp['band_indices_abs'][0], return_indices=True)
+                assert len(tgt_idx) == len(datapoint_tgt['band_indices_abs'][0]), "selected nc_sigma, nv_sigma are not in the label"
+
+                # select the same band indices for tgt and label
+                for key, val in datapoint_eqp.items():
+                    datapoint_eqp[key] = val[:,label_idx,:]
+                
+                datapoint['tgt'], datapoint['label'] = datapoint_tgt, datapoint_eqp
+
+        else: # read from vae output 
+            raise NotImplementedError
+
+        # save data to h5 file
+        if not self.multiprocessing:
+            dataset_h5_fname = pjoin(self.dataset_dir, self.dataset_fname)
+        else:
+            dataset_h5_fname = pjoin(self.dataset_dir, mat_id+self.dataset_fname)
+        
+        self.datapoint2h5(dataset_h5_fname, mat_id, datapoint, mode='a')
+
+        return datapoint
 
     def summary(self):
         pass
@@ -448,19 +554,34 @@ class ToyDataSet(Dataset):
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
 
-    """Usage"""
+    """WFN Usage"""
     # 1. Create new dataset
-    wfdata = ManyBodyData(flows_dir='../../examples/flows', dataset_dir='./dataset', dataset_type='WFN',
-                          load_dataset=False, nc_wfn=4, nv_wfn=2, cell_slab_truncation=30, useWignerXY=True, 
-                        AngstromPerPixel=0.1, AngstromPerPixel_z=0.2, upsampling_factor=2, multiprocessing=True)    
+    wfdata = ManyBodyData(flows_dir='../../examples/flows', dataset_dir='./dataset', dataset_type='WFN', dataset_fname='dataset_WFN.h5',
+                          load_dataset=False, cell_slab_truncation=30, useWignerXY=True, AngstromPerPixel=0.1,
+                          AngstromPerPixel_z=0.2, upsampling_factor=2, multiprocessing=True,
+                          nc_wfn=4, nv_wfn=2, )   # required line
 
     # 2. Load existing dataset: classmethod (Recommend)
-    wfdata = ManyBodyData.from_existing_dataset('./dataset/dataset.h5')
+    wfdata = ManyBodyData.from_existing_dataset('./dataset/dataset_WFN.h5')
 
     # 3. Load existing dataset: using load_dataset=True (Not recommend)
     # wfdata = ManyBodyData(flows_dir='../../examples/flows', dataset_dir='./dataset', dataset_type='WFN',
     #                       load_dataset=True, nc_wfn=4, nv_wfn=2)    
 
-    """Unit Test"""
+    """WFN Unit Test"""
     assert abs(wfdata[1]['wfn'][0,0,14,13,15] - 2.1230801376011337e-06) < 1e-10, "Unit Test Failed"
-    print("Unit Test Passed")
+    print("WFN: unit test passed")
+
+
+    """GW Usage"""
+    gwdata = ManyBodyData(flows_dir='../../examples/flows', dataset_dir='./dataset', dataset_type='GW', dataset_fname='dataset_GW.h5',
+                          load_dataset=False, cell_slab_truncation=30, useWignerXY=True,  AngstromPerPixel=0.1, 
+                          AngstromPerPixel_z=0.2, upsampling_factor=2, multiprocessing=True,
+                          nc_wfn=4, nv_wfn=2,nc_sigma=1, nv_sigma=1, from_dft=True, predict_only=False,)    
+
+
+    gwdata = ManyBodyData.from_existing_dataset('./dataset/dataset_GW.h5')
+
+    assert abs(gwdata[1]['src']['wfn'][0,0,14,13,15] - 2.1230801376011337e-06) < 1e-10, "Unit Test Failed"
+    assert abs(gwdata[1]['tgt']['wfn'][0,0,14,13,15] - 1.261505271449588e-07) < 1e-10, "Unit Test Failed"
+    print("GW: unit test passed")

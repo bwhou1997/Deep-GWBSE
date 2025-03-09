@@ -12,6 +12,9 @@ from scipy.ndimage import zoom
 import time
 import matplotlib.pyplot as plt
 from pathos.multiprocessing import ProcessingPool as Pool
+
+Ry2eV = 13.605693009
+
 class eqp:
     """
     These object decompose eqp.dat into data_DFT, data_GW, klist and spin_list
@@ -339,7 +342,7 @@ class wfn:
         self.nk = self.kpoints['occ'].shape[1]
         self.nb = self.kpoints['occ'].shape[2]
         self.g_g = self.wfns['gvecs']
-        self.el = self.kpoints['el'][0]
+        self.el = self.kpoints['el'][0] * Ry2eV # eV
         self.k_weights = self.kpoints['w']
         self.FFTgrid = self.gspace['FFTgrid']
         self.lattice = self.crystal['avec'] * self.crystal['alat'] * 0.52917721067 # lattice in Cartesian coordinates, in angstrom
