@@ -12,6 +12,7 @@ import h5py as h5
 import logging
 import numpy as np
 import copy
+from collect_tool import check_flows_status
 """
 Author:  Bowen Hou
 Contact: bowen.hou@yale.edu
@@ -47,6 +48,7 @@ class DataSetInfo:
             self.dataset_type = 'BSE'
         
         # common attributes
+        # TODO: rename it as mat_ids
         self.mat_id = kwargs.get('mat_id', []) # updated after processing
     
     def wfn_base_set(self, **kwargs):
@@ -261,38 +263,28 @@ class ManyBodyData(Dataset):
 
     def mat_statistics(self, flows_dir:str, dataset_type:type='WFN')-> tuple[list, np.ndarray]:
         """
-        classmethod:
-            Get the statistics of the dataset
-            For different task, the required folders are different (see __init__)
-            return: 
-                folder_list: List["flow-mat-1", "flow-mat-2"]
-                self.info.mat_id: np.array(["mat-1", "mat-2"], dtype='S')
+           use collect_tool.py/check_flows_status
         """
         folder_list = []
+        flows_status = check_flows_status(flows_dir, False)
 
-        print(f'Looking for flows data under: {os.path.abspath(flows_dir)}')
-        for root, dirs, files in os.walk(flows_dir):
-            # add rules to filter valid folders
-
+        for flow, status in flows_status.items():
+            finished_tasks = set(status['Yes'].split(','))
             if dataset_type == 'WFN':
-                if '02-wfn' in dirs: # scf is foundation for all workflows
-                    if os.path.exists(pjoin(pjoin(root, "02-wfn/wfn.h5"))):
-                        folder_list.append(root)
+                if {'02-wfn'} <= finished_tasks:
+                    folder_list.append(flow)
 
             elif dataset_type == 'GW':
                 if not self.info.from_dft:
                     raise NotImplementedError
                 else:
-                    if '02-wfn' in dirs: # scf is foundation for all workflows
-                        if not self.info.predict_only:
-                            if (os.path.exists(pjoin(pjoin(root, "02-wfn/wfn.h5"))) and\
-                                os.path.exists(pjoin(pjoin(root, "13-sigma/eqp1.dat")))):
-                                    folder_list.append(root)
-                        else:
-                            if (os.path.exists(pjoin(pjoin(root, "02-wfn/wfn.h5"))) and\
-                                os.path.exists(pjoin(pjoin(root, "05-band/wfn.h5")))):
-                                    folder_list.append(root)
-
+                    if not self.info.predict_only:
+                        if {'02-wfn','13-sigma'} <= finished_tasks:
+                            folder_list.append(flow)
+                    else:
+                        if {'02-wfn','05-band'} <= finished_tasks:
+                            folder_list.append(flow)
+                            
             elif dataset_type == 'BSE':
                 raise NotImplementedError
         
@@ -300,11 +292,11 @@ class ManyBodyData(Dataset):
                 raise Exception(f"Dataset type {dataset_type} is not supported")
             
         assert len(folder_list) > 0, f"No data found under {flows_dir}"
-        print(f"Found {len(folder_list)} materials")
+        print(f"Found {len(folder_list)} out of {len(flows_status)} materials for {dataset_type}")
 
-        mat_id = np.array([os.path.basename(folder) for folder in folder_list], dtype='S')
+        mat_ids = np.array([os.path.basename(folder) for folder in folder_list], dtype='S')
 
-        return folder_list, mat_id
+        return folder_list, mat_ids
 
     def init_dataset_h5(self, multiprocessing: bool = False):
         """
@@ -338,7 +330,7 @@ class ManyBodyData(Dataset):
         """
         Merge dataset h5 files into one
         """
-        print("Merging dataset h5 files", [mat_id+dataset_fname for mat_id in mat_id_list])
+        # print("Merging dataset h5 files", [mat_id+dataset_fname for mat_id in mat_id_list])
 
         self.init_dataset_h5(multiprocessing=False)
 

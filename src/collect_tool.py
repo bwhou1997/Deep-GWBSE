@@ -209,30 +209,67 @@ def jobdone(task_dir: str) -> bool:
     else:
         return 'unknown task'
 
-def check_flows_status(flows: str = './flows-semi'):
+
+def check_flows_status(flows: str = './flows-semi', dump: bool = True):
     print(f"Checking flows status in {flows}...")
     flows_status = {}
-    for root, dirs, files in os.walk(flows):
-        if '01-density' in dirs:
-            flow_status = {"Yes": [], "No": [], "Unknown Job": []}
-            for dir in dirs:
-                if dir == 'pp':
-                    continue
-                if jobdone(os.path.join(root, dir)) == True:
-                    flow_status["Yes"].append(dir)
-                elif jobdone(os.path.join(root, dir)) == False:
-                    flow_status["No"].append(dir)
-                else:
-                    flow_status["Unknown Job"].append(dir)
-            for key in flow_status.keys():
+    
+    for root, dirs, _ in os.walk(flows):
+        if '01-density' not in dirs:
+            continue
+        
+        flow_status = {"Yes": [], "No": [], "Unknown Job": []}
+        for dir in filter(lambda d: d != 'pp', dirs):
+            job_status = jobdone(os.path.join(root, dir))
+            if job_status is True:
+                flow_status["Yes"].append(dir)
+            elif job_status is False:
+                flow_status["No"].append(dir)
+            else:
+                flow_status["Unknown Job"].append(dir)
+        
+        # Sort once at the end for efficiency
+        for key in flow_status:
+            if flow_status[key]:  
                 flow_status[key].sort()
-                flow_status[key] = ",".join(flow_status[key])
+        
+        flows_status[root] = {k: ",".join(v) for k, v in flow_status.items()}
+    
+    if dump:
+        output_file = f"{os.path.basename(flows)}_status.json"
+        print(output_file, flows)
+        with open(output_file, 'w') as f:
+            json.dump(flows_status, f, indent=4, separators=(',', ': '))
+        print(f"Flows status saved to {output_file}")
+    
+    return flows_status
 
-            flows_status[root] = flow_status
-    output_file = os.path.basename(flows)+"_status.json"
-    with open(output_file, 'w') as f:
-        json.dump(flows_status, f, indent=4, separators=(',', ': '))
-    print(f"Flows status saved to {output_file}")
+# def check_flows_status(flows: str = './flows-semi', dump: bool = True):
+#     print(f"Checking flows status in {flows}...")
+#     flows_status = {}
+#     for root, dirs, files in os.walk(flows):
+#         if '01-density' in dirs:
+#             flow_status = {"Yes": [], "No": [], "Unknown Job": []}
+#             for dir in dirs:
+#                 if dir == 'pp':
+#                     continue
+#                 if jobdone(os.path.join(root, dir)) == True:
+#                     flow_status["Yes"].append(dir)
+#                 elif jobdone(os.path.join(root, dir)) == False:
+#                     flow_status["No"].append(dir)
+#                 else:
+#                     flow_status["Unknown Job"].append(dir)
+#             for key in flow_status.keys():
+#                 flow_status[key].sort()
+#                 flow_status[key] = ",".join(flow_status[key])
+
+#             flows_status[root] = flow_status
+#     output_file = os.path.basename(flows)+"_status.json"
+#     if dump:
+#         with open(output_file, 'w') as f:
+#             json.dump(flows_status, f, indent=4, separators=(',', ': '))
+#         print(f"Flows status saved to {output_file}")
+#     return flows_status
 
 # Call the function
 
