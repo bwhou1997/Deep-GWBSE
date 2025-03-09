@@ -13,10 +13,9 @@ import logging
 import numpy as np
 import copy
 """
-Author: Bowen Hou
-Date: 2025-03-03
+Author:  Bowen Hou
+Contact: bowen.hou@yale.edu
 """
-
 class DataSetInfo:
     """
     Basic Info for the dataset
@@ -75,13 +74,11 @@ class DataSetInfo:
     def vae_base_set(self, **kwargs):
         pass
 
-
     def show_info(self,):
         print(f"\n======{str(self.dataset_type)} Dataset Info:=======")
         for key, value in self.__dict__.items():
             print(f"{key}: {value}")
         print("Total number of data: ", len(self.mat_id),'\n\n')
-
 
 class ManyBodyData(Dataset):
     """
@@ -230,7 +227,7 @@ class ManyBodyData(Dataset):
                 self.info.__dict__[key] = value[()]
         
         print("loading data")
-        self.data = [self.datapoint2h5(pjoin(self.dataset_dir, self.dataset_fname), mat_id, mode='r') for mat_id in self.info.mat_id]
+        self.data = [self.datapoint_interface_h5(pjoin(self.dataset_dir, self.dataset_fname), mat_id, mode='r') for mat_id in self.info.mat_id]
 
         # print(f"Loading existing dataset: {os.path.abspath(self.data.filename)}")
 
@@ -261,6 +258,53 @@ class ManyBodyData(Dataset):
                 self.merge_dataset_h5(list(map(lambda x: x.decode('utf-8'), self.info.mat_id)), save_original=False, dataset_fname=self.dataset_fname)
         else:
             self.data = [processor(folder) for folder in tqdm(folder_list, desc='Processing WFN data')]
+
+    def mat_statistics(self, flows_dir:str, dataset_type:type='WFN')-> tuple[list, np.ndarray]:
+        """
+        classmethod:
+            Get the statistics of the dataset
+            For different task, the required folders are different (see __init__)
+            return: 
+                folder_list: List["flow-mat-1", "flow-mat-2"]
+                self.info.mat_id: np.array(["mat-1", "mat-2"], dtype='S')
+        """
+        folder_list = []
+
+        print(f'Looking for flows data under: {os.path.abspath(flows_dir)}')
+        for root, dirs, files in os.walk(flows_dir):
+            # add rules to filter valid folders
+
+            if dataset_type == 'WFN':
+                if '02-wfn' in dirs: # scf is foundation for all workflows
+                    if os.path.exists(pjoin(pjoin(root, "02-wfn/wfn.h5"))):
+                        folder_list.append(root)
+
+            elif dataset_type == 'GW':
+                if not self.info.from_dft:
+                    raise NotImplementedError
+                else:
+                    if '02-wfn' in dirs: # scf is foundation for all workflows
+                        if not self.info.predict_only:
+                            if (os.path.exists(pjoin(pjoin(root, "02-wfn/wfn.h5"))) and\
+                                os.path.exists(pjoin(pjoin(root, "13-sigma/eqp1.dat")))):
+                                    folder_list.append(root)
+                        else:
+                            if (os.path.exists(pjoin(pjoin(root, "02-wfn/wfn.h5"))) and\
+                                os.path.exists(pjoin(pjoin(root, "05-band/wfn.h5")))):
+                                    folder_list.append(root)
+
+            elif dataset_type == 'BSE':
+                raise NotImplementedError
+        
+            else:
+                raise Exception(f"Dataset type {dataset_type} is not supported")
+            
+        assert len(folder_list) > 0, f"No data found under {flows_dir}"
+        print(f"Found {len(folder_list)} materials")
+
+        mat_id = np.array([os.path.basename(folder) for folder in folder_list], dtype='S')
+
+        return folder_list, mat_id
 
     def init_dataset_h5(self, multiprocessing: bool = False):
         """
@@ -301,59 +345,10 @@ class ManyBodyData(Dataset):
         for mat_id in mat_id_list:
             with h5.File(pjoin(self.dataset_dir, mat_id+dataset_fname), 'r') as f:
                 # This is not a class method, so we don't need further info check
-                self.datapoint2h5(pjoin(self.dataset_dir, dataset_fname), mat_id, f[mat_id], mode='a')
+                self.datapoint_interface_h5(pjoin(self.dataset_dir, dataset_fname), mat_id, f[mat_id], mode='a')
 
             if not save_original:
                 os.remove(pjoin(self.dataset_dir, mat_id+dataset_fname))
-
-
-    def mat_statistics(self, flows_dir:str, dataset_type:type='WFN')-> tuple[list, np.ndarray]:
-        """
-        classmethod:
-            Get the statistics of the dataset
-            For different task, the required folders are different (see __init__)
-            return: 
-                folder_list: List["flow-mat-1", "flow-mat-2"]
-                self.info.mat_id: np.array(["mat-1", "mat-2"], dtype='S')
-        """
-        folder_list = []
-
-        print(f'Looking for flows data under: {os.path.abspath(flows_dir)}')
-        for root, dirs, files in os.walk(flows_dir):
-            # add rules to filter valid folders
-
-            if dataset_type == 'WFN':
-                if '02-wfn' in dirs: # scf is foundation for all workflows
-                    if os.path.exists(pjoin(pjoin(root, "02-wfn/wfn.h5"))):
-                        folder_list.append(root)
-
-            elif dataset_type == 'GW':
-                if not self.info.from_dft:
-                    raise NotImplementedError
-                else:
-                    if '02-wfn' in dirs: # scf is foundation for all workflows
-                        if not self.info.predict_only:
-                            if (os.path.exists(pjoin(pjoin(root, "02-wfn/wfn.h5"))) and\
-                                os.path.exists(pjoin(pjoin(root, "13-sigma/eqp1.dat")))):
-                                    folder_list.append(root)
-                        else:
-                            if (os.path.exists(pjoin(pjoin(root, "02-wfn/wfn.h5"))) and\
-                                os.path.exists(pjoin(pjoin(root, "05-band/wfn.h5")))):
-                                    folder_list.append(root)
-
-            
-            elif dataset_type == 'BSE':
-                raise NotImplementedError
-        
-            else:
-                raise Exception(f"Dataset type {dataset_type} is not supported")
-            
-        assert len(folder_list) > 0, f"No data found under {flows_dir}"
-        print(f"Found {len(folder_list)} materials")
-
-        mat_id = np.array([os.path.basename(folder) for folder in folder_list], dtype='S')
-
-        return folder_list, mat_id
 
     def process_worker_WFN(self, folder:str)-> dict:
         """
@@ -381,12 +376,65 @@ class ManyBodyData(Dataset):
         else:
             dataset_h5_fname = pjoin(self.dataset_dir, mat_id+self.dataset_fname)
 
-        self.datapoint2h5(dataset_h5_fname, mat_id, datapoint, mode='a')
+        self.datapoint_interface_h5(dataset_h5_fname, mat_id, datapoint, mode='a')
+
+        return datapoint
+
+    def process_worker_GW(self, folder:str)-> dict:
+        """
+        This function processes the GW data for a single material
+        """
+
+        # get kwargs
+        datapoint = {}
+        mat_id = os.path.basename(folder)
+        info = copy.deepcopy(self.info.__dict__)
+        nc_wfn, nv_wfn, nc_sigma, nv_sigma = info.pop('nc_wfn'), info.pop('nv_wfn'), \
+                                     info.pop('nc_sigma'), info.pop('nv_sigma')
+
+        if info.get('from_dft'):
+            # build src
+            wfn_fname = pjoin(pjoin(folder, '02-wfn', "wfn.h5"))
+            wf = wfn(wfn_fname)
+            datapoint_src =  wf.get_wfn_dataset(nc=nc_wfn, nv=nv_wfn, **info)
+            datapoint['src'] = datapoint_src
+
+            # build tgt & label
+            if info.get('predict_only'):
+                raise NotImplementedError
+                wfn_fname = pjoin(pjoin(folder, '05-band', "wfn.h5"))
+                wf = wfn(wfn_fname)
+                datapoint_tgt = wf.get_wfn_dataset(nc=nc_sigma, nv=nv_sigma, **info)
+
+            else:
+                datapoint_tgt = wf.get_wfn_dataset(nc=nc_sigma, nv=nv_sigma, **info)
+                eqp1 = eqp(pjoin(pjoin(folder, '13-sigma'), "eqp1.dat"))
+                datapoint_eqp = eqp1.get_eqp_dataset()
+
+                _, tgt_idx, label_idx = np.intersect1d(datapoint_tgt['band_indices_abs'][0], datapoint_eqp['band_indices_abs'][0], return_indices=True)
+                assert len(tgt_idx) == len(datapoint_tgt['band_indices_abs'][0]), "selected nc_sigma, nv_sigma are not in the label"
+
+                # select the same band indices for tgt and label
+                for key, val in datapoint_eqp.items():
+                    datapoint_eqp[key] = val[:,label_idx,:]
+                
+                datapoint['tgt'], datapoint['label'] = datapoint_tgt, datapoint_eqp
+
+        else: # read from vae output 
+            raise NotImplementedError
+
+        # save data to h5 file
+        if not self.multiprocessing:
+            dataset_h5_fname = pjoin(self.dataset_dir, self.dataset_fname)
+        else:
+            dataset_h5_fname = pjoin(self.dataset_dir, mat_id+self.dataset_fname)
+        
+        self.datapoint_interface_h5(dataset_h5_fname, mat_id, datapoint, mode='a')
 
         return datapoint
 
     @classmethod
-    def datapoint2h5(cls, dataset_h5_fname: str, mat_id: str, datapoint=None, mode: str = 'a'):
+    def datapoint_interface_h5(cls, dataset_h5_fname: str, mat_id: str, datapoint=None, mode: str = 'a'):
         """
         Save or load a datapoint to/from an HDF5 file.
         
@@ -456,62 +504,9 @@ class ManyBodyData(Dataset):
 
             return datapoint
 
-
-    def process_worker_GW(self, folder:str)-> dict:
-        """
-        This function processes the GW data for a single material
-        """
-
-        # get kwargs
-        datapoint = {}
-        mat_id = os.path.basename(folder)
-        info = copy.deepcopy(self.info.__dict__)
-        nc_wfn, nv_wfn, nc_sigma, nv_sigma = info.pop('nc_wfn'), info.pop('nv_wfn'), \
-                                     info.pop('nc_sigma'), info.pop('nv_sigma')
-
-        if info.get('from_dft'):
-            # build src
-            wfn_fname = pjoin(pjoin(folder, '02-wfn', "wfn.h5"))
-            wf = wfn(wfn_fname)
-            datapoint_src =  wf.get_wfn_dataset(nc=nc_wfn, nv=nv_wfn, **info)
-            datapoint['src'] = datapoint_src
-
-            # build tgt & label
-            if info.get('predict_only'):
-                raise NotImplementedError
-                wfn_fname = pjoin(pjoin(folder, '05-band', "wfn.h5"))
-                wf = wfn(wfn_fname)
-                datapoint_tgt = wf.get_wfn_dataset(nc=nc_sigma, nv=nv_sigma, **info)
-
-            else:
-                datapoint_tgt = wf.get_wfn_dataset(nc=nc_sigma, nv=nv_sigma, **info)
-                eqp1 = eqp(pjoin(pjoin(folder, '13-sigma'), "eqp1.dat"))
-                datapoint_eqp = eqp1.get_eqp_dataset()
-
-                _, tgt_idx, label_idx = np.intersect1d(datapoint_tgt['band_indices_abs'][0], datapoint_eqp['band_indices_abs'][0], return_indices=True)
-                assert len(tgt_idx) == len(datapoint_tgt['band_indices_abs'][0]), "selected nc_sigma, nv_sigma are not in the label"
-
-                # select the same band indices for tgt and label
-                for key, val in datapoint_eqp.items():
-                    datapoint_eqp[key] = val[:,label_idx,:]
-                
-                datapoint['tgt'], datapoint['label'] = datapoint_tgt, datapoint_eqp
-
-        else: # read from vae output 
-            raise NotImplementedError
-
-        # save data to h5 file
-        if not self.multiprocessing:
-            dataset_h5_fname = pjoin(self.dataset_dir, self.dataset_fname)
-        else:
-            dataset_h5_fname = pjoin(self.dataset_dir, mat_id+self.dataset_fname)
-        
-        self.datapoint2h5(dataset_h5_fname, mat_id, datapoint, mode='a')
-
-        return datapoint
-
     def summary(self):
         pass
+
 class ToyDataSet(Dataset):
 
     """
