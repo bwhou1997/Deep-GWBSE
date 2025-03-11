@@ -536,7 +536,7 @@ class wfn:
 
             wfn_r = wfn_r_wigner
         else:
-            print('Raw fractional wavefunction will be saved:', wfn_r.shape)
+            print('wavefunction in XY fractional coor. will be saved:', wfn_r.shape)
             pass
 
         dataset = {
