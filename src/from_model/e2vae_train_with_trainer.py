@@ -37,6 +37,7 @@ class VAETrainer(Trainer):
         
         with torch.no_grad():
             if input is None:
+                #FIXME assert(self.training_dataloader)
                 for x, _ in self.validation_dataloader:
                     input = x
                     break # By default, get only one batch

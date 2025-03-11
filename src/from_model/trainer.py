@@ -15,7 +15,7 @@ class Trainer:
                 best_model=False) -> None:
         """
         `kwargs` includes 
-        - `overwrite`: set to `True` when we do not want to reuse the model stored in previous trainings.
+        - `overwrite`: set to `True` when we do not want to reuse the model stored in previous trainings. This leads the stored model being replaced by the newly trained model after training.
         - `checkpoint`: set to `True` to save the model each time a epoch finishes.
         - `best_model`: set to `True` to save the model with the lowest loss in `model_name_best.pth`.
 
@@ -73,8 +73,12 @@ class Trainer:
             self.logger.warn("The program is running on CPUs. Performance may be bad!")
         self.model = model.to(self.device)    
         
-        self.training_dataloader = training_dataloader
-        self.validation_dataloader = validation_dataloader
+        # Training data
+        # Note that at initialization, by default we do not specify the datasets used in training:
+        # they are to be specified when training actually happens,
+        # and self.training_dataloader and self.validation_dataloader record the datasets used in the last training
+        self.training_dataloader = None
+        self.validation_dataloader = None
         self.optimizer = optimizer
         self.loss = loss
         
@@ -129,6 +133,7 @@ class Trainer:
         The batch size should already be defined in `optimizer`.
         In this method we do not provide hooks for defining the batch size.
         """
+        #self.training_dataset = ...
         
         if self.loaded_from_file and not continued:
             self.logger.warn("Model loaded from file: no training is done. Set continued to True to train on top of existing model.")
@@ -163,6 +168,9 @@ class Trainer:
         This method takes an optional `input` and return the loss of `input`.
         When `input` is not given, its default value is the first batch in the validation dataset.
         Used to calculate e.g. the validation loss.
+        
+        Note that this function is to be used in the training process to moniter the performance of the model on an unbiased validation dataset.
+        For (epsecially small-scale) post-training testing, please use the `evaluate` method.
         """
         self.model.eval()
         # ...
