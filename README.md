@@ -86,4 +86,5 @@ We would like to acknowledge the following open-source projects that have made t
   This also makes the GPU memory occupation much smaller in each stage.
 - Change the API of `get_loss`: make it accept the raw output of each iteration of data loaders. (This makes the `train` method much more generic)
 - Change the default `save_path` to something like `model_name.save`
-- Separate the functions in `data.py` into a library file, and make `data.py` a template 
+- Separate the functions in `data.py` into a library file, and make `data.py` a template
+- Add a `latent` field to the `dataset_WFN.h5`, recording the latent state after compression

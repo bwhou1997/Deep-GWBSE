@@ -20,15 +20,16 @@ class VAETrainer(Trainer):
     """
     For options in `kwargs`, see the `__init__` function of `Trainer`.
     """
-    def __init__(self, model, training_dataloader, validation_dataloader, optimizer, beta: float, 
-                 save_path=os.getcwd(),
+    def __init__(self, model, optimizer, beta: float, 
                  model_name="vae_e2",
                  **kwargs):
         loss = lambda recon_x, x, mu, logvar: vae_loss(recon_x, x, mu, logvar, beta=beta)
-        super().__init__(model, training_dataloader, validation_dataloader, optimizer, loss, save_path=save_path, model_name=model_name, **kwargs)
+        super().__init__(model, optimizer, loss, model_name=model_name, **kwargs)
         self.beta = beta
 
-    def get_loss(self, x: torch.Tensor)->torch.Tensor:
+    def get_loss(self, input)->torch.Tensor:
+        x, _ = input
+        x = x.to(self.device)
         x_recon, mu, logvar = self.model(x)
         return self.loss(x_recon, x, mu, logvar)
         
@@ -37,8 +38,12 @@ class VAETrainer(Trainer):
         
         with torch.no_grad():
             if input is None:
-                #FIXME assert(self.training_dataloader)
+                assert self.validation_dataloader is not None, "Must have a non-empty input"
                 for x, _ in self.validation_dataloader:
+                    input = x
+                    break # By default, get only one batch
+            if isinstance(input, DataLoader):
+                for x, _ in input:
                     input = x
                     break # By default, get only one batch
             
@@ -49,17 +54,7 @@ class VAETrainer(Trainer):
         x_recon = x_recon.cpu().numpy()
         return input, x_recon
     
-    def validate(self, input=None):
-        self.model.eval()
-        
-        with torch.no_grad():
-            if input is None:
-                for x, _ in self.validation_dataloader:
-                    input = x
-                    break # By default, get only one batch
-        
-            input = input.to(self.device)
-            return self.get_loss(input).item()
+
 
 #%%
 
@@ -85,8 +80,8 @@ def test_train():
     test_loader = DataLoader(test_dataset, batch_size=64, shuffle=False)
 
     # Start training!
-    vae_trainer = VAETrainer(vae, train_loader, test_loader, optimizer, beta=beta, model_name="vae_e2_minst", overwrite=True, checkpoint=True, best_model=True)
-    vae_trainer.train(num_epochs)
+    vae_trainer = VAETrainer(vae, optimizer, beta=beta, model_name="vae_e2_minst", overwrite=True, checkpoint=True, best_model=True)
+    vae_trainer.train(num_epochs, train_loader, test_loader)
     
     
 # Mini-testing
@@ -111,9 +106,9 @@ def test_evaluate():
     test_loader = DataLoader(test_dataset, batch_size=64, shuffle=False)
 
     # Read data from file
-    vae_trainer = VAETrainer(vae, train_loader, test_loader, optimizer, beta=beta, model_name="vae_e2_minst", overwrite=False)
+    vae_trainer = VAETrainer(vae, optimizer, beta=beta, model_name="vae_e2_minst", overwrite=False)
 
-    x, x_recon = vae_trainer.evaluate()
+    x, x_recon = vae_trainer.evaluate(test_loader)
     # Plot original vs reconstructed images
     fig, axes = plt.subplots(2, 10, figsize=(10, 3))
     for i in range(10):

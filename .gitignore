@@ -42,8 +42,8 @@ fp-input-AAp-331
 fp-input-AB-661
 fp-input-all
 /src/from_model/unittest/data/
-src/from_model/vae_e2_mnist.pth
-src/from_model/vae_e2_mnist_best.pth
+src/from_model/vae_e2_minst.save/vae_e2_mnist.pth
+src/from_model/vae_e2_minst.save/vae_e2_mnist_best.pth
 
 src/single_mat_config.json
 nc300
