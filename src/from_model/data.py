@@ -605,7 +605,11 @@ class ManyBodyData(Dataset):
 class ToyDataSet(Dataset):
 
     """
-    For testing purposes, we will use a toy dataset
+    This is a toy dataset
+    features:
+        - Toy data for Transformer model
+        - usage of ManyBodyData
+            - WFN, GW, BSE
 
     Note: each material is a "sentenece" in the transformer model
     nk*nb: number of "words" in the "sentence"
@@ -641,42 +645,59 @@ class ToyDataSet(Dataset):
     def get_hole_data_batch(cls):
         return [cls.val_embedding, cls.val_kpt, cls.val_band_index, cls.val_band_energy]
 
+    # The usage of ManyBodyData: [WFN, GW, BSE]
+    # mat-5, mat-6, mat-7 (all of them are hBN)
+    @staticmethod
+    def get_bse_dataset(read=True):
+        if not os.path.exists('./dataset/dataset_BSE.h5') or not read:
+            return ManyBodyData(flows_dir='../../examples/flows', dataset_dir='./dataset', dataset_type='BSE', dataset_fname='dataset_BSE.h5',
+                            load_dataset=False, cell_slab_truncation=30, useWignerXY=True,  AngstromPerPixel=0.1, 
+                            AngstromPerPixel_z=0.2, upsampling_factor=2, multiprocessing=True,
+                            from_dft=True, predict_only=True, nc_wfn=4,nv_wfn=2)   
+        return ManyBodyData.from_existing_dataset('./dataset/dataset_BSE.h5')
+    
+    @staticmethod
+    def get_wfn_dataset(read=True):
+        if not os.path.exists('./dataset/dataset_WFN.h5') or not read:
+            return ManyBodyData(flows_dir='../../examples/flows', dataset_dir='./dataset', dataset_type='WFN', dataset_fname='dataset_WFN.h5',
+                          load_dataset=False, cell_slab_truncation=30, useWignerXY=True, AngstromPerPixel=0.1,
+                          AngstromPerPixel_z=0.2, upsampling_factor=2, multiprocessing=True,
+                          nc_wfn=4, nv_wfn=2)
+        return ManyBodyData.from_existing_dataset('./dataset/dataset_WFN.h5')
+    
+    @staticmethod
+    def get_gw_dataset(read=True):
+        if not os.path.exists('./dataset/dataset_GW.h5') or not read:
+            return ManyBodyData(flows_dir='../../examples/flows', dataset_dir='./dataset', dataset_type='GW', dataset_fname='dataset_GW.h5',
+                          load_dataset=False, cell_slab_truncation=30, useWignerXY=True,  AngstromPerPixel=0.1, 
+                          AngstromPerPixel_z=0.2, upsampling_factor=2, multiprocessing=True,
+                          nc_wfn=4, nv_wfn=2,nc_sigma=1, nv_sigma=1, from_dft=True, predict_only=False,)
+        return ManyBodyData.from_existing_dataset('./dataset/dataset_GW.h5')
+    
+
+
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
 
     """WFN Usage"""
-    # 1. Create new dataset
-    wfdata = ManyBodyData(flows_dir='../../examples/flows', dataset_dir='./dataset', dataset_type='WFN', dataset_fname='dataset_WFN.h5',
-                          load_dataset=False, cell_slab_truncation=30, useWignerXY=True, AngstromPerPixel=0.1,
-                          AngstromPerPixel_z=0.2, upsampling_factor=2, multiprocessing=True,
-                          nc_wfn=4, nv_wfn=2, )   # required line
-
-    # 2. Load existing dataset: classmethod (Recommend)
-    wfdata = ManyBodyData.from_existing_dataset('./dataset/dataset_WFN.h5')
-
-    # 3. Load existing dataset: using load_dataset=True (Not recommend)
-    # wfdata = ManyBodyData(flows_dir='../../examples/flows', dataset_dir='./dataset', dataset_type='WFN',
-    #                       load_dataset=True, nc_wfn=4, nv_wfn=2)    
+    # please see ToyDataSet.get_wfn_dataset() for how to use ManyBodyData (Two ways)
+    wfdata = ToyDataSet.get_wfn_dataset(read=False)
+    wfdata = ToyDataSet.get_wfn_dataset(read=True)
 
     """WFN Unit Test"""
     assert abs(wfdata[1]['wfn'][0,0,14,13,15] - 2.1230801376011337e-06) < 1e-10, "WFN Unit Test Failed"
 
-
-
     """GW Usage"""
-    gwdata = ManyBodyData(flows_dir='../../examples/flows', dataset_dir='./dataset', dataset_type='GW', dataset_fname='dataset_GW.h5',
-                          load_dataset=False, cell_slab_truncation=30, useWignerXY=True,  AngstromPerPixel=0.1, 
-                          AngstromPerPixel_z=0.2, upsampling_factor=2, multiprocessing=True,
-                          nc_wfn=4, nv_wfn=2,nc_sigma=1, nv_sigma=1, from_dft=True, predict_only=False,)    
-
-
-    gwdata = ManyBodyData.from_existing_dataset('./dataset/dataset_GW.h5')
+    # please see ToyDataSet.get_gw_dataset() for how to use ManyBodyData (Two ways)
+    gwdata = ToyDataSet.get_gw_dataset(read=False)
+    gwdata = ToyDataSet.get_gw_dataset(read=True) 
 
     assert abs(gwdata[1]['src']['wfn'][0,0,14,13,15] - 2.1230801376011337e-06) < 1e-10, "GW Unit Test Failed"
     assert abs(gwdata[1]['tgt']['wfn'][0,0,14,13,15] - 1.261505271449588e-07) < 1e-10, "GW Unit Test Failed"
   
 
     """BSE Usage"""
+    # predict only
     bsedata = ManyBodyData(flows_dir='../../examples/flows', dataset_dir='./dataset', dataset_type='BSE', dataset_fname='dataset_BSE.h5',
                             load_dataset=False, cell_slab_truncation=30, useWignerXY=True,  AngstromPerPixel=0.1, 
                             AngstromPerPixel_z=0.2, upsampling_factor=2, multiprocessing=True,
@@ -684,12 +705,9 @@ if __name__ == "__main__":
 
     assert abs(bsedata[1]['src']['wfn'][0,0,14,13,15] - 2.1230801376011337e-06) < 1e-10, "BSE Unit Test Failed"
 
-    bsedata = ManyBodyData(flows_dir='../../examples/flows', dataset_dir='./dataset', dataset_type='BSE', dataset_fname='dataset_BSE.h5',
-                          load_dataset=False, cell_slab_truncation=30, useWignerXY=True,  AngstromPerPixel=0.1, 
-                          AngstromPerPixel_z=0.2, upsampling_factor=2, multiprocessing=True,
-                          from_dft=True, predict_only=False,)    
-
-    bsedata = ManyBodyData.from_existing_dataset('./dataset/dataset_BSE.h5')
+    # please see ToyDataSet.get_bse_dataset() for how to use ManyBodyData (Two ways)
+    bsedata = ToyDataSet.get_bse_dataset(read=False)
+    bsedata = ToyDataSet.get_bse_dataset(read=True)
 
     print("WFN: unit test passed")    
     print("GW: unit test passed")
