@@ -12,10 +12,24 @@ from scipy.ndimage import zoom
 import time
 import matplotlib.pyplot as plt
 from pathos.multiprocessing import ProcessingPool as Pool
-
+from abc import ABC, abstractmethod
 Ry2eV = 13.605693009
 
-class eqp:
+
+# Define ABC Interface
+class BGWIO(ABC):
+    """
+    Abstract base class for BGWIO
+    """
+    @abstractmethod
+    def __init__(self, *args, **kwargs):
+        pass
+
+    @abstractmethod
+    def get_dataset(self):
+        pass
+
+class eqp(BGWIO):
     """
     These object decompose eqp.dat into data_DFT, data_GW, klist and spin_list
     """
@@ -82,7 +96,7 @@ class eqp:
             f.write('\n')
         f.close()
 
-    def get_eqp_dataset(self,)->dict:
+    def get_dataset(self,)->dict:
         """
         Get the dataset of the eqp.dat for ML
         Input:
@@ -294,7 +308,7 @@ class vloc:
             print('resetting: vscg is different')
         self._set_vcsg = True
 
-class wfn:
+class wfn(BGWIO):
     def __init__(self, wfn_file_h5: str):
         """
         wfn_file_h5: path of BGW wfn.h5 file
@@ -430,7 +444,7 @@ class wfn:
         return abs(wfn_r)**2, el_r, occ
 
     @time_watch
-    def get_wfn_dataset(self, nc:int=6 ,nv:int=2, cell_slab_truncation:int=40, useWignerXY:bool=False, 
+    def get_dataset(self, nc:int=6 ,nv:int=2, cell_slab_truncation:int=40, useWignerXY:bool=False, 
                         AngstromPerPixel:float=0.1, **kwargs)->dict:
         """
         Get the dataset of the wavefunction for ML
@@ -536,7 +550,7 @@ class wfn:
 
             wfn_r = wfn_r_wigner
         else:
-            print('Raw fractional wavefunction will be saved:', wfn_r.shape)
+            print('wavefunction in XY fractional coor. will be saved:', wfn_r.shape)
             pass
 
         dataset = {
@@ -551,9 +565,78 @@ class wfn:
 
         return dataset
 
-class kernel:
-    def __init__(self):
-        pass
+class AScvk(BGWIO):
+    def __init__(self,fname):
+        # self.write()
+        logging.debug(f'Loading eigenvectors {fname}')
+
+        self.eigenvech5_file = fname
+        self.eigenvech5 = h5.File(fname, 'r')
+
+        # Get the names of the datasets
+        h5ls = H5ls()
+        self.eigenvech5.visititems(h5ls)   
+        self.names = h5ls.names
+
+        # Get the header information
+        self.crystal = {}
+        self.gspace = {}
+        self.kpoints = {}
+        self.kpoints_exciton = {}
+        self.symmetry = {}
+        self.params = {}
+        self.read_header()
+
+        self.eigenvech5.close()
+
+        self.eigenvectors = None
+        self.eigenvalues = None
+
+    def read_header(self):
+        for name in self.names:
+            if 'crystal' in name.split('/'):
+                self.crystal[name.split('/')[-1]] = self.eigenvech5[name][()]
+            elif 'gspace' in name.split('/'):
+                self.gspace[name.split('/')[-1]] = self.eigenvech5[name][()]
+            elif 'kpoints' in name.split('/'):
+                if 'exciton_header' in name.split('/'):
+                    self.kpoints_exciton[name.split('/')[-1]] = self.eigenvech5[name][()]
+                else:
+                    self.kpoints[name.split('/')[-1]] = self.eigenvech5[name][()]
+            elif 'symmetry' in name.split('/'):
+                self.symmetry[name.split('/')[-1]] = self.eigenvech5[name][()]
+            elif 'params' in name.split('/'):
+                self.params[name.split('/')[-1]] = self.eigenvech5[name][()]
+            else:
+                pass
+
+
+    def get_acvkS(self):
+        with h5.File(self.eigenvech5_file, 'r') as f:
+            self.eigenvectors = f['exciton_data/eigenvectors'][0,:,:,:,:,0,:] # (S,k,c,v,2)
+            self.eigenvalues = f['exciton_data/eigenvalues'][()]
+            self.eigenvectors = self.eigenvectors[...,0] + 1j * self.eigenvectors[...,1]
+
+            assert self.eigenvectors.shape == (self.params['nevecs'], self.kpoints_exciton['nk'], self.params['nc'], self.params['nv']), \
+                f"Shape mismatch: {self.eigenvectors.shape} != {(self.params['nevecs'], self.kpoints_exciton['nk'], self.params['nc'], self.params['nv'])}"
+            assert self.eigenvalues.shape == self.params['nevecs'], "Shape mismatch: {self.eigenvalues.shape} != {self.params['nevecs']}"
+
+        return self.eigenvectors, self.eigenvalues
+
+    def get_dataset(self):
+        """
+        Since exciton nS is a mixed up of all nc, nv and nk, it is not reasonbale to specify nc, nv, nk then extract nS=nc*nv*nk
+        So, here we just return all the eigenvectors and eigenvalues in the bse eigenvector.h5
+        """
+        if not self.eigenvectors or not self.eigenvalues:
+            self.get_acvkS()
+
+        dataset = {
+            "eigenvectors": abs(self.eigenvectors),
+            "eigenvalues": self.eigenvalues[:, None],
+        }
+
+        return dataset  
 
 if __name__ == '__main__':
     logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -563,16 +646,19 @@ if __name__ == '__main__':
 
     # WFN 
     wf = wfn('../../examples/flows/mat-5/02-wfn/wfn.h5')
-    dp_wfn = wf.get_wfn_dataset(useWignerXY=True, cell_slab_truncation=60, AngstromPerPixel=0.1, AngstromPerPixel_z=0.1,
-                            upsampling_factor=3)
-
+    dp_wfn = wf.get_dataset(useWignerXY=True, cell_slab_truncation=60, AngstromPerPixel=0.1, AngstromPerPixel_z=0.1,
+                                upsampling_factor=3)
     assert abs(abs(dp_wfn['wfn'][0,0,  5,5,30])-0.0009519374081944384) < 1e-7 # unit test
     print("WFN: unit test passed!")
 
-    # eqp
+    # EQP
     eqp = eqp('../../examples/flows/mat-5/13-sigma/eqp1.dat')
-    dp_eqp = eqp.get_eqp_dataset()
+    dp_eqp = eqp.get_dataset()
     assert np.allclose(dp_eqp['mf'].sum(), -13.864995302)
     print("eqp: unit test passed!")
 
-
+    # AcvkS
+    acv = AScvk('../../examples/flows/mat-5/19-absorption/eigenvectors.h5')
+    d_acv = acv.get_dataset()
+    assert abs(d_acv['eigenvalues'][15,0] - 13.61646274) < 1e-7
+    assert abs(abs(acv.eigenvectors[0,1,0,0]) - 0.5710135222476936) < 1e-7
