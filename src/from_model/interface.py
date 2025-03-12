@@ -565,7 +565,7 @@ class wfn(BGWIO):
 
         return dataset
 
-class AcvkS(BGWIO):
+class AScvk(BGWIO):
     def __init__(self,fname):
         # self.write()
         logging.debug(f'Loading eigenvectors {fname}')
@@ -589,6 +589,8 @@ class AcvkS(BGWIO):
 
         self.eigenvech5.close()
 
+        self.eigenvectors = None
+        self.eigenvalues = None
 
     def read_header(self):
         for name in self.names:
@@ -622,6 +624,13 @@ class AcvkS(BGWIO):
         return self.eigenvectors, self.eigenvalues
 
     def get_dataset(self):
+        """
+        Since exciton nS is a mixed up of all nc, nv and nk, it is not reasonbale to specify nc, nv, nk then extract nS=nc*nv*nk
+        So, here we just return all the eigenvectors and eigenvalues in the bse eigenvector.h5
+        """
+        if not self.eigenvectors or not self.eigenvalues:
+            self.get_acvkS()
+
         dataset = {
             "eigenvectors": abs(self.eigenvectors),
             "eigenvalues": self.eigenvalues[:, None],
@@ -642,12 +651,14 @@ if __name__ == '__main__':
     assert abs(abs(dp_wfn['wfn'][0,0,  5,5,30])-0.0009519374081944384) < 1e-7 # unit test
     print("WFN: unit test passed!")
 
-    # eqp
+    # EQP
     eqp = eqp('../../examples/flows/mat-5/13-sigma/eqp1.dat')
     dp_eqp = eqp.get_dataset()
     assert np.allclose(dp_eqp['mf'].sum(), -13.864995302)
     print("eqp: unit test passed!")
 
     # AcvkS
-    acv = AcvkS('../../examples/flows/mat-5/19-absorption/eigenvectors.h5')
-
+    acv = AScvk('../../examples/flows/mat-5/19-absorption/eigenvectors.h5')
+    d_acv = acv.get_dataset()
+    assert abs(d_acv['eigenvalues'][15,0] - 13.61646274) < 1e-7
+    assert abs(abs(acv.eigenvectors[0,1,0,0]) - 0.5710135222476936) < 1e-7
