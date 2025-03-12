@@ -55,3 +55,4 @@ src/from_model/log.txt
 nc300
 src/from_model/test.py
 dataset
+vae_e2_minst.save

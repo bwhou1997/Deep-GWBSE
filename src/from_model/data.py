@@ -1,4 +1,3 @@
-#%%
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -47,6 +46,18 @@ class DataSetInfo:
      
         if dataset_type == 'BSE':
             self.dataset_type = 'BSE'
+            self.bse_base_set(**kwargs)
+
+            if kwargs.get('from_dft'):
+                """
+                for BSE src (not onlyPredict), nc_wfn and nv_wfn are determined by nS
+                """
+                kwargs['nc_wfn'] = kwargs.get('nc_wfn', None)
+                kwargs['nv_wfn'] = kwargs.get('nv_wfn', None)
+                self.wfn_base_set(**kwargs)
+            else:
+                raise NotImplementedError("BSE dataset from non-DFT is not implemented yet")
+                self.vae_base_set(**kwargs)
         
         # common attributes
         # TODO: rename it as mat_ids
@@ -54,7 +65,7 @@ class DataSetInfo:
     
     def wfn_base_set(self, **kwargs):
         """
-        see interface.py/wfn.get_wfn_dataset()
+        see interface.py/wfn.get_dataset()
         """
         assert {"nc_wfn","nv_wfn"} <= set(kwargs.keys()), f"nc_wfn and nv_wfn are required kwargs for WFN dataset"
         self.nc_wfn = kwargs.get('nc_wfn')
@@ -74,6 +85,13 @@ class DataSetInfo:
         self.from_dft = kwargs.get('from_dft', True)
         self.predict_only = kwargs.get('predict_only', False)
     
+    def bse_base_set(self, **kwargs):
+        # assert {"nc_wfn","nv_wfn"} <= set(kwargs.keys()), f"nc, nv are required kwargs for BSE dataset"
+        # self.nc_wfn = kwargs.get('nc_wfn')
+        # self.nv_wfn = kwargs.get('nv_wfn')
+        self.from_dft = kwargs.get('from_dft', True)
+        self.predict_only = kwargs.get('predict_only', False)
+
     def vae_base_set(self, **kwargs):
         pass
 
@@ -117,17 +135,23 @@ class ManyBodyData(Dataset):
 
             'WFN': used to train VAE model (unsupervised)
                 -  required dir: '02-wfn'
+                -  [optional] dir: 
                 -  required kwargs: nc_wfn, nv_wfn
                 -  [optional] kwargs : useWignerXY, cell_slab_truncation, AngstromPerPixel, AngstromPerPixel_z
                                      upsample_factor (This is highly recommened for fast_cK)
-                -  datapoint (also see interface.py/wfn.get_wfn_dataset()):
-                            {'wfn': (nk, nc_wfn+nv_wfn, Rx, Ry, Rz(cutoff)), 'kpt': (nk,nc_wfn+nv_wfn, 3), 'occ': (nk, nc_wfn_nv_wfn, 1),
-                             'el': (nk, nc_wfn+nv_wfn 1), 'kpt_weights': (nk, nc_wfn+nv_wfn, 1), 'kpt': (nk, nc_wfn+nv_wfn, 3),
-                             'band_indices': (nk, nc_wfn+nv_wfn, 1), 'band_indices_abs':(nk, nc_wfn+nv_wfn, 1)}
+                -  datapoint (also see interface.py/wfn.get_dataset()):
+                            {'wfn': (nk, nc_wfn+nv_wfn, nx, ny, nz), 
+                             'kpt': (nk, nc_wfn+nv_wfn, 3), 
+                             'occ': (nk, nc_wfn_nv_wfn, 1),
+                             'el':  (nk, nc_wfn+nv_wfn, 1), 
+                             'kpt_weights': (nk, nc_wfn+nv_wfn, 1), 
+                             'kpt': (nk, nc_wfn+nv_wfn, 3),
+                             'band_indices': (nk, nc_wfn+nv_wfn, 1), 
+                             'band_indices_abs':(nk, nc_wfn+nv_wfn, 1)}
 
             'GW': used to train GW-Transformer (supervised)
                 -  required dir: '02-wfn', 
-                -  [optional] dir: '05-band', '13-sigma'[optional: predict_only]
+                -  [optional] dir: '13-sigma', '05-band'[optional: predict_only]
                 -  required kwargs: nc_wfn, nv_wfn, nc_sigma, nv_sigma 
                 -  [optional] kwargs: from_dft: bool=True, # save wfn instead of VAE latent space
                                       predict_only:bool=False, 
@@ -145,9 +169,19 @@ class ManyBodyData(Dataset):
                     - label: same as from_dft
                     
             'BSE': used to train BSE-Transformer (supervised)
-                -  required dir: '01-density','17-wfn_fi', '18-kernel', '19-absorption'
+                -  required dir: '17-wfn_fi',
+                -  [optional] dir: '19-absorption'
                 -  required kwargs: 
-                -  [optional] kwargs: 
+                -  [optional] kwargs: nc_wfn, nv_wfn # only used if predict_only is True
+                                      from_dft: bool=True, # save wfn instead of VAE latent space
+                                      predict_only:bool=False, 
+                                      other parameters are same as WFN
+                - datapoint:
+                   from_dft:
+                   - {'src':dict, 'label':dict[optional: not created if predict_only]}
+                   - src: same as "WFN" datapoint
+                   - label: {'eigenvalue':(nS, 1), 'eigenvalues':(nS, nk, nc, nv)}
+                            assert nS == nk * nc * nv
 
         :param dataset_name: name of the dataset
         :param multiprocessing: Whether to use multiprocessing to process data
@@ -252,7 +286,7 @@ class ManyBodyData(Dataset):
         elif self.dataset_type == 'GW':
             processor = self.process_worker_GW
         elif self.dataset_type == 'BSE':
-            raise NotImplementedError
+            processor = self.process_worker_BSE
         
         #===Process data===
         if self.multiprocessing:
@@ -287,7 +321,15 @@ class ManyBodyData(Dataset):
                             folder_list.append(flow)
                             
             elif dataset_type == 'BSE':
-                raise NotImplementedError
+                if not self.info.from_dft:
+                    raise NotImplementedError
+                else:
+                    if not self.info.predict_only:
+                        if {'17-wfn_fi','19-absorption'} <= finished_tasks:
+                            folder_list.append(flow)
+                    else:
+                        if {'17-wfn_fi'} <= finished_tasks:
+                            folder_list.append(flow)
         
             else:
                 raise Exception(f"Dataset type {dataset_type} is not supported")
@@ -346,7 +388,7 @@ class ManyBodyData(Dataset):
     def process_worker_WFN(self, folder:str)-> dict:
         """
         This function processes the WFN data for a single material
-        this func: get kwargs -> get wfn file (diff dir should be considered in future) -> create datapoint -> save data to h5 file
+        this func: get kwargs -> get wfn file -> create datapoint -> save data to h5 file
         folder: flow folder (not flows)
         """
         # get info
@@ -359,7 +401,7 @@ class ManyBodyData(Dataset):
 
         # create datapoint
         wf = wfn(wfn_fname)
-        datapoint =  wf.get_wfn_dataset(nc=nc, nv=nv, **info)
+        datapoint =  wf.get_dataset(nc=nc, nv=nv, **info)
 
         # save data to h5 file
         # if use multiprocessing, save data to mat_id+dataset_fname
@@ -389,7 +431,7 @@ class ManyBodyData(Dataset):
             # build src
             wfn_fname = pjoin(pjoin(folder, '02-wfn', "wfn.h5"))
             wf = wfn(wfn_fname)
-            datapoint_src =  wf.get_wfn_dataset(nc=nc_wfn, nv=nv_wfn, **info)
+            datapoint_src =  wf.get_dataset(nc=nc_wfn, nv=nv_wfn, **info)
             datapoint['src'] = datapoint_src
 
             # build tgt & label
@@ -397,17 +439,17 @@ class ManyBodyData(Dataset):
                 raise NotImplementedError
                 wfn_fname = pjoin(pjoin(folder, '05-band', "wfn.h5"))
                 wf = wfn(wfn_fname)
-                datapoint_tgt = wf.get_wfn_dataset(nc=nc_sigma, nv=nv_sigma, **info)
+                datapoint_tgt = wf.get_dataset(nc=nc_sigma, nv=nv_sigma, **info)
 
             else:
-                datapoint_tgt = wf.get_wfn_dataset(nc=nc_sigma, nv=nv_sigma, **info)
+                datapoint_tgt = wf.get_dataset(nc=nc_sigma, nv=nv_sigma, **info)
                 eqp1 = eqp(pjoin(pjoin(folder, '13-sigma'), "eqp1.dat"))
-                datapoint_eqp = eqp1.get_eqp_dataset()
+                datapoint_eqp = eqp1.get_dataset()
 
                 _, tgt_idx, label_idx = np.intersect1d(datapoint_tgt['band_indices_abs'][0], datapoint_eqp['band_indices_abs'][0], return_indices=True)
                 assert len(tgt_idx) == len(datapoint_tgt['band_indices_abs'][0]), "selected nc_sigma, nv_sigma are not in the label"
 
-                # select the same band indices for tgt and label
+                # ensure the same band indices for tgt and label
                 for key, val in datapoint_eqp.items():
                     datapoint_eqp[key] = val[:,label_idx,:]
                 
@@ -425,6 +467,42 @@ class ManyBodyData(Dataset):
         self.datapoint_interface_h5(dataset_h5_fname, mat_id, datapoint, mode='a')
 
         return datapoint
+
+    def process_worker_BSE(self, folder:str)-> dict:
+        """
+        This function processes the BSE data for a single material
+        """
+        pass
+
+        # datapoint = {}
+        # mat_id = os.path.basename(folder)
+        # info = copy.deepcopy(self.info.__dict__)
+        # nc_wfn, nv_wfn = info.pop('nc_wfn'), info.pop('nv_wfn')
+
+        # if info.get('from_dft'):
+        #     # build src
+        #     wfn_fname = pjoin(pjoin(folder, '02-wfn', "wfn.h5"))
+        #     wf = wfn(wfn_fname)
+        #     datapoint_src =  wf.get_dataset(nc=nc_wfn, nv=nv_wfn, **info)
+        #     datapoint['src'] = datapoint_src
+
+        #     if not info.get('predict_only'):
+        #         # build label
+        #         raise NotImplementedError
+        
+        # else:
+        #     raise NotImplementedError
+
+
+        # save data to h5 file
+        # if not self.multiprocessing:
+        #     dataset_h5_fname = pjoin(self.dataset_dir, self.dataset_fname)
+        # else:
+        #     dataset_h5_fname = pjoin(self.dataset_dir, mat_id+self.dataset_fname)
+        
+        # self.datapoint_interface_h5(dataset_h5_fname, mat_id, datapoint, mode='a')
+
+        # return datapoint
 
     @classmethod
     def datapoint_interface_h5(cls, dataset_h5_fname: str, mat_id: str, datapoint=None, mode: str = 'a'):
@@ -557,8 +635,8 @@ if __name__ == "__main__":
     #                       load_dataset=True, nc_wfn=4, nv_wfn=2)    
 
     """WFN Unit Test"""
-    assert abs(wfdata[1]['wfn'][0,0,14,13,15] - 2.1230801376011337e-06) < 1e-10, "Unit Test Failed"
-    print("WFN: unit test passed")
+    assert abs(wfdata[1]['wfn'][0,0,14,13,15] - 2.1230801376011337e-06) < 1e-10, "WFN Unit Test Failed"
+
 
 
     """GW Usage"""
@@ -570,7 +648,22 @@ if __name__ == "__main__":
 
     gwdata = ManyBodyData.from_existing_dataset('./dataset/dataset_GW.h5')
 
-    assert abs(gwdata[1]['src']['wfn'][0,0,14,13,15] - 2.1230801376011337e-06) < 1e-10, "Unit Test Failed"
-    assert abs(gwdata[1]['tgt']['wfn'][0,0,14,13,15] - 1.261505271449588e-07) < 1e-10, "Unit Test Failed"
-    print("GW: unit test passed")
-# %%
+    assert abs(gwdata[1]['src']['wfn'][0,0,14,13,15] - 2.1230801376011337e-06) < 1e-10, "GW Unit Test Failed"
+    assert abs(gwdata[1]['tgt']['wfn'][0,0,14,13,15] - 1.261505271449588e-07) < 1e-10, "GW Unit Test Failed"
+  
+
+    """BSE Usage"""
+    # bsedata = ManyBodyData
+
+    # bsedata = ManyBodyData(flows_dir='../../examples/flows', dataset_dir='./dataset', dataset_type='BSE', dataset_fname='dataset_BSE.h5',
+    #                       load_dataset=False, cell_slab_truncation=30, useWignerXY=True,  AngstromPerPixel=0.1, 
+    #                       AngstromPerPixel_z=0.2, upsampling_factor=2, multiprocessing=True,
+    #                       nc_wfn=2, nv_wfn=2,from_dft=True, predict_only=True,)    
+
+    # bsedata = ManyBodyData.from_existing_dataset('./dataset/dataset_BSE.h5')
+
+    # assert abs(bsedata[1]['src']['wfn'][0,0,14,13,15] - 2.1230801376011337e-06) < 1e-10, "BSE Unit Test Failed"
+    
+    # print("WFN: unit test passed")    
+    # print("GW: unit test passed")
+    # print("BSE: unit test passed")
