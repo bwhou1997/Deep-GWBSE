@@ -5,8 +5,9 @@ import torch
 from tqdm import tqdm
 import math
 from torch.utils.tensorboard import SummaryWriter 
+from abc import ABC, abstractmethod
 
-class Trainer:
+class Trainer(ABC):
     def __init__(self, model, optimizer, loss, 
                 model_name="model",
                 save_path=None,
@@ -124,6 +125,7 @@ class Trainer:
                     validation_loss=validation_loss,
                     elapsed_time=end_time-start_time)
     
+    @abstractmethod
     def get_loss(self, x):
         """
         This method uses `self.loss` to calculate the actual loss of one batch.
@@ -182,7 +184,8 @@ class Trainer:
         self.validation_dataloader = validation_dataloader
         self.verbose_logger.info("The final model saved. Training ends.")
 
-    def evaluate(self, input=None):
+    @abstractmethod
+    def evaluate(self, input=None, **kwargs):
         """
         To be overwritten by subclasses; you decide what output to return.
         This method takes an optional `input` and return the predication of the model based on `input`.
@@ -191,7 +194,7 @@ class Trainer:
         instead of tensors or tensors on GPUs:
         when the latter is needed, you can always directly call `self.model(...)`.
         """
-        self.model.eval()
+        #self.model.eval()
         # ...
         pass
 
