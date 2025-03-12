@@ -33,7 +33,7 @@ class WFNVAETrainer(Trainer):
     def get_loss(self, input)->torch.Tensor:
         x, mask = input
         x = x.to(self.device)
-        mask = mask.to(self.device)
+        mask = ~mask.to(self.device)
         x_recon, mu, logvar = self.model(x)
         return self.loss(x_recon*mask, x*mask, mu, logvar)
         
