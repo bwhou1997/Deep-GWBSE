@@ -680,18 +680,6 @@ if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
 
     """WFN Usage"""
-    # 1. Create new dataset
-    wfdata = ManyBodyData(flows_dir='../../examples/nc300/semiconductor/flows-nc300', dataset_dir='./dataset', dataset_type='WFN', dataset_fname='dataset_WFN.h5',
-                          load_dataset=False, cell_slab_truncation=30, useWignerXY=True, AngstromPerPixel=0.1,
-                          AngstromPerPixel_z=0.2, upsampling_factor=2, multiprocessing=True,
-                          nc_wfn=4, nv_wfn=2, )   # required line
-
-    # 2. Load existing dataset: classmethod (Recommend)
-    wfdata = ManyBodyData.from_existing_dataset('./dataset/dataset_WFN.h5')
-
-    # 3. Load existing dataset: using load_dataset=True (Not recommend)
-    # wfdata = ManyBodyData(flows_dir='../../examples/flows', dataset_dir='./dataset', dataset_type='WFN',
-    #                       load_dataset=True, nc_wfn=4, nv_wfn=2)    
     # please see ToyDataSet.get_wfn_dataset() for how to use ManyBodyData (Two ways)
     wfdata = ToyDataSet.get_wfn_dataset(read=False)
     wfdata = ToyDataSet.get_wfn_dataset(read=True)
