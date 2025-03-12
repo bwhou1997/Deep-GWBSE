@@ -115,6 +115,9 @@ class QeBgwFlow(WfnBgwFlow):
             **kwargs)
         self.wfnbgwntask.runscript.fname = 'pw2bgw.run.sh'
 
+        if kwargs.get('wfnhdf5',False):
+            self.wfnbgwntask.runscript.append(kwargs.get('mpirun', 'mpirun')+' '+kwargs.get('nproc_flag', ' -n ')+' 1 '+'wfn2hdf.x BIN wfn.cplx wfn.h5 &> wfn2hdf.out')
+
         self.add_task(self.wfnbgwntask, merge=False)
 
     @property

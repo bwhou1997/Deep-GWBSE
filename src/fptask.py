@@ -374,6 +374,8 @@ class QeBgwFlow_band(WfnBgwFlow):
         super(QeBgwFlow_band, self).__init__(**kwargs)
 
         kwargs.pop('dirname', None)
+        mpirun_flag = kwargs.get('mpirun', 'mpirun')
+        nproc_flag = kwargs.get('nproc_flag', ' -n ')
 
         self.charge_density_fname = kwargs['charge_density_fname']
         self.data_file_fname = kwargs['data_file_fname']
@@ -404,6 +406,7 @@ class QeBgwFlow_band(WfnBgwFlow):
         self.wfnbgwntask.runscript.fname = 'pw2bgw.run.sh'
         self.wfnbgwntask.runscript.append(f"\nBANDS='{kwargs['BANDS']}'")
         self.wfnbgwntask.runscript.append(' '.join(['$MPIRUN','$BANDS','$PWFLAGS','-in','bands.in','&>','bands.out']))
+        self.wfnbgwntask.runscript.append(mpirun_flag+' '+nproc_flag+' 1 '+'wfn2hdf.x BIN wfn.cplx wfn.h5 &> wfn2hdf.out')
         self.add_task(self.wfnbgwntask, merge=False)
 
 
@@ -478,6 +481,12 @@ class QeBgwFlow_band(WfnBgwFlow):
     def vxc_dat_fname(self):
         """The xc potential file name for BerkeleyGW."""
         return self.wfnbgwntask.vxc_dat_fname
+
+
+# class QeBgwFlow_hdf5(QeBgwFlow):
+#     def __init__(self, **kwargs):
+#         super().__init__(**kwargs)
+
 
 
 

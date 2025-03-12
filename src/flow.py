@@ -484,6 +484,7 @@ class DFT_GW_HPRO_Flow(Workflow):
             kshift = self.kshift,
             nbnd = self.n_z_valence+kwargs.get('nbnd_cond')+self.nbnd,
             rhog_flag = False,
+            wfnhdf5 = True,
             **kwargs)  
         self.add_tasks(self.wfn_fi_task_sh, merge=False)
 
