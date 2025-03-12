@@ -7,15 +7,15 @@ import math
 from torch.utils.tensorboard import SummaryWriter 
 
 class Trainer:
-    def __init__(self, model, training_dataloader, validation_dataloader, optimizer, loss, 
-                save_path=os.getcwd(),
+    def __init__(self, model, optimizer, loss, 
                 model_name="model",
+                save_path=None,
                 overwrite=False,
                 checkpoint=False,
                 best_model=False) -> None:
         """
         `kwargs` includes 
-        - `overwrite`: set to `True` when we do not want to reuse the model stored in previous trainings.
+        - `overwrite`: set to `True` when we do not want to reuse the model stored in previous trainings. This leads the stored model being replaced by the newly trained model after training.
         - `checkpoint`: set to `True` to save the model each time a epoch finishes.
         - `best_model`: set to `True` to save the model with the lowest loss in `model_name_best.pth`.
 
@@ -27,7 +27,17 @@ class Trainer:
         
         # Temporary files
         # Saving models
+        if save_path == None:
+            save_path = os.path.join(os.getcwd(), model_name + ".save")
         self.save_path = save_path
+        try:
+            os.mkdir(self.save_path)
+        except FileNotFoundError:
+            print("Parent directory not found.")
+        except FileExistsError:
+            print("Save path already exists. Working with the existing directory.")
+        except Exception as e:
+            print(e)
         self.model_name = model_name
         self.current_model_path = os.path.join(self.save_path, f"{self.model_name}.pth")
         self.best_model_path = os.path.join(self.save_path, f"{self.model_name}_best.pth")
@@ -73,8 +83,12 @@ class Trainer:
             self.logger.warn("The program is running on CPUs. Performance may be bad!")
         self.model = model.to(self.device)    
         
-        self.training_dataloader = training_dataloader
-        self.validation_dataloader = validation_dataloader
+        # Training data
+        # Note that at initialization, by default we do not specify the datasets used in training:
+        # they are to be specified when training actually happens,
+        # and self.training_dataloader and self.validation_dataloader record the datasets used in the last training
+        self.training_dataloader = None
+        self.validation_dataloader = None
         self.optimizer = optimizer
         self.loss = loss
         
@@ -84,7 +98,7 @@ class Trainer:
         pass
     
     #region The real training part
-    def train_each_epoch(self, epoch_idx: int):
+    def train_each_epoch(self, epoch_idx: int, training_dataloader, validation_dataloader):
         """
         What is presented here is a generic training procedure.
         The method can be overriden by another procedure in subclasses.
@@ -94,28 +108,28 @@ class Trainer:
         total_loss = 0.0
 
         start_time = time.process_time()
-        for x, _ in tqdm(self.training_dataloader, f"Epoch {epoch_idx+1}"):
-            x = x.to(self.device)
+        for x in tqdm(training_dataloader, f"Epoch {epoch_idx+1}"):
             self.optimizer.zero_grad()
+            # We directly feed the output of the dataloader to get_loss:
+            # self.get_loss has the responsibility to properly handle the structure of x!
             this_loss = self.get_loss(x)
             this_loss.backward()
             self.optimizer.step()
             total_loss += this_loss.item()
         
-        validation_loss = self.validate()
+        validation_loss = self.validate(validation_dataloader)
         end_time = time.process_time()
         self.record(epoch_idx, 
-                    training_loss=total_loss / len(self.training_dataloader),
+                    training_loss=total_loss / len(training_dataloader),
                     validation_loss=validation_loss,
                     elapsed_time=end_time-start_time)
     
-    def get_loss(self, **kwargs):
+    def get_loss(self, x):
         """
         This method uses `self.loss` to calculate the actual loss of one batch.
-        The function signature is intentional left behind,
-        as different models have different inputs and outputs.
-        Subclasses should override the definition of this method,
-        including its function signature.
+        Subclasses should override the definition of this method.
+        We note that `x` is expected to be the output of a PyTorch dataloader:
+        this means (a) it is a tuple containing two or more (or sometimes just one) tensor, and is not itself a tensor, and (b) it is likely stored in the host, not on the GPUs.
         """
         #X_batch = X_batch.to(self.device)
         #Y_batch = Y_batch.to(self.device)
@@ -124,11 +138,34 @@ class Trainer:
         #return loss
         pass
 
-    def train(self, epoches: int, continued=False):
+    def validate(self, validation_dataloader=None):
+        """
+        This function is to be used in the training process to moniter the performance of the model on an unbiased validation dataset.
+        For (epsecially small-scale) post-training testing, please use the `evaluate` method.
+        
+        The current implementation is to
+        calculate the loss of the current model on a validation dataset.
+        This function can be overwritten by subclasses to use a different metric.
+        """
+        self.model.eval()
+        
+        with torch.no_grad():
+            if validation_dataloader is None:
+                assert self.validation_dataloader is not None, "A validation dataloader has to be passed"
+                validation_dataloader = self.validation_dataloader
+            for x in validation_dataloader:
+                input = x
+                break # By default, get only one batch
+        
+            # input is still stored at the host, but get_loss will move it to GPUs anyway, so no problem here.
+            return self.get_loss(input).item()
+
+    def train(self, epoches: int, training_dataloader, validation_dataloader, continued=False):
         """
         The batch size should already be defined in `optimizer`.
         In this method we do not provide hooks for defining the batch size.
         """
+        #self.training_dataset = ...
         
         if self.loaded_from_file and not continued:
             self.logger.warn("Model loaded from file: no training is done. Set continued to True to train on top of existing model.")
@@ -136,17 +173,18 @@ class Trainer:
  
         for epoch in range(epoches):
             self.model.train()
-            self.train_each_epoch(epoch)
+            self.train_each_epoch(epoch, training_dataloader, validation_dataloader)
             if self.checkpoint:
                 torch.save(self.model.state_dict(), self.current_model_path)
         
         torch.save(self.model.state_dict(), self.current_model_path)
+        self.training_dataloader = training_dataloader
+        self.validation_dataloader = validation_dataloader
         self.verbose_logger.info("The final model saved. Training ends.")
-
 
     def evaluate(self, input=None):
         """
-        To be overwritten by subclasses.
+        To be overwritten by subclasses; you decide what output to return.
         This method takes an optional `input` and return the predication of the model based on `input`.
         When `input` is not given, its default value is the first batch in the validation dataset.
         The return values should better be NumPy arrays,
@@ -156,17 +194,7 @@ class Trainer:
         self.model.eval()
         # ...
         pass
-    
-    def validate(self, input=None):
-        """
-        To be overwritten by subclasses.
-        This method takes an optional `input` and return the loss of `input`.
-        When `input` is not given, its default value is the first batch in the validation dataset.
-        Used to calculate e.g. the validation loss.
-        """
-        self.model.eval()
-        # ...
-        pass
+
     #endregion 
 
     #region Logging

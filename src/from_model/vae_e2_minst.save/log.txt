@@ -1,0 +1,124 @@
+2025-03-11 14:04:34,803 - INFO - Saved model not loaded because it is to be overwritten.
+2025-03-11 14:05:15,538 - INFO - Eopch 1 finishes in 42.1s | Training loss 2507.51 | validation loss 1532.15 | Best model
+2025-03-11 14:05:57,096 - INFO - Eopch 2 finishes in 44.1s | Training loss 1436.69 | validation loss 1248.34 | Best model
+2025-03-11 14:06:23,550 - INFO - Eopch 3 finishes in 29.0s | Training loss 1296.37 | validation loss 1149.40 | Best model
+2025-03-11 14:06:49,978 - INFO - Eopch 4 finishes in 28.5s | Training loss 1225.14 | validation loss 1132.91 | Best model
+2025-03-11 14:07:16,641 - INFO - Eopch 5 finishes in 29.2s | Training loss 1181.24 | validation loss 1107.39 | Best model
+2025-03-11 14:07:54,711 - INFO - Eopch 6 finishes in 40.6s | Training loss 1150.31 | validation loss 1076.11 | Best model
+2025-03-11 14:08:28,173 - INFO - Eopch 7 finishes in 36.6s | Training loss 1129.65 | validation loss 1071.37 | Best model
+2025-03-11 14:08:54,466 - INFO - Eopch 8 finishes in 28.8s | Training loss 1114.62 | validation loss 1040.24 | Best model
+2025-03-11 14:09:21,054 - INFO - Eopch 9 finishes in 28.5s | Training loss 1101.11 | validation loss 1051.04
+2025-03-11 14:09:47,703 - INFO - Eopch 10 finishes in 29.1s | Training loss 1089.84 | validation loss 1019.22 | Best model
+2025-03-11 14:09:47,741 - INFO - The final model saved. Training ends.
+2025-03-11 14:09:48,191 - INFO - Saved model loaded.
+2025-03-11 14:09:48,191 - INFO - Saved model loaded.
+2025-03-11 14:10:54,682 - INFO - Saved model not loaded because it is to be overwritten.
+2025-03-11 14:10:54,682 - INFO - Saved model not loaded because it is to be overwritten.
+2025-03-11 14:10:54,682 - INFO - Saved model not loaded because it is to be overwritten.
+2025-03-11 14:11:21,823 - INFO - Eopch 1 finishes in 29.8s | Training loss 2481.05 | validation loss 1444.97 | Best model
+2025-03-11 14:11:21,823 - INFO - Eopch 1 finishes in 29.8s | Training loss 2481.05 | validation loss 1444.97 | Best model
+2025-03-11 14:11:21,823 - INFO - Eopch 1 finishes in 29.8s | Training loss 2481.05 | validation loss 1444.97 | Best model
+2025-03-11 14:12:01,628 - INFO - Eopch 2 finishes in 41.9s | Training loss 1434.59 | validation loss 1266.47 | Best model
+2025-03-11 14:12:01,628 - INFO - Eopch 2 finishes in 41.9s | Training loss 1434.59 | validation loss 1266.47 | Best model
+2025-03-11 14:12:01,628 - INFO - Eopch 2 finishes in 41.9s | Training loss 1434.59 | validation loss 1266.47 | Best model
+2025-03-11 14:12:27,379 - INFO - Eopch 3 finishes in 28.2s | Training loss 1307.58 | validation loss 1171.51 | Best model
+2025-03-11 14:12:27,379 - INFO - Eopch 3 finishes in 28.2s | Training loss 1307.58 | validation loss 1171.51 | Best model
+2025-03-11 14:12:27,379 - INFO - Eopch 3 finishes in 28.2s | Training loss 1307.58 | validation loss 1171.51 | Best model
+2025-03-11 14:12:53,308 - INFO - Eopch 4 finishes in 28.4s | Training loss 1251.49 | validation loss 1139.37 | Best model
+2025-03-11 14:12:53,308 - INFO - Eopch 4 finishes in 28.4s | Training loss 1251.49 | validation loss 1139.37 | Best model
+2025-03-11 14:12:53,308 - INFO - Eopch 4 finishes in 28.4s | Training loss 1251.49 | validation loss 1139.37 | Best model
+2025-03-11 14:13:23,780 - INFO - Eopch 5 finishes in 33.0s | Training loss 1209.20 | validation loss 1127.13 | Best model
+2025-03-11 14:13:23,780 - INFO - Eopch 5 finishes in 33.0s | Training loss 1209.20 | validation loss 1127.13 | Best model
+2025-03-11 14:13:23,780 - INFO - Eopch 5 finishes in 33.0s | Training loss 1209.20 | validation loss 1127.13 | Best model
+2025-03-11 14:14:03,319 - INFO - Eopch 6 finishes in 41.3s | Training loss 1174.37 | validation loss 1098.64 | Best model
+2025-03-11 14:14:03,319 - INFO - Eopch 6 finishes in 41.3s | Training loss 1174.37 | validation loss 1098.64 | Best model
+2025-03-11 14:14:03,319 - INFO - Eopch 6 finishes in 41.3s | Training loss 1174.37 | validation loss 1098.64 | Best model
+2025-03-11 14:14:31,782 - INFO - Eopch 7 finishes in 31.0s | Training loss 1145.78 | validation loss 1041.95 | Best model
+2025-03-11 14:14:31,782 - INFO - Eopch 7 finishes in 31.0s | Training loss 1145.78 | validation loss 1041.95 | Best model
+2025-03-11 14:14:31,782 - INFO - Eopch 7 finishes in 31.0s | Training loss 1145.78 | validation loss 1041.95 | Best model
+2025-03-11 14:15:10,803 - INFO - Eopch 8 finishes in 41.2s | Training loss 1118.89 | validation loss 1019.77 | Best model
+2025-03-11 14:15:10,803 - INFO - Eopch 8 finishes in 41.2s | Training loss 1118.89 | validation loss 1019.77 | Best model
+2025-03-11 14:15:10,803 - INFO - Eopch 8 finishes in 41.2s | Training loss 1118.89 | validation loss 1019.77 | Best model
+2025-03-11 14:15:36,462 - INFO - Eopch 9 finishes in 29.0s | Training loss 1099.26 | validation loss 1010.85 | Best model
+2025-03-11 14:15:36,462 - INFO - Eopch 9 finishes in 29.0s | Training loss 1099.26 | validation loss 1010.85 | Best model
+2025-03-11 14:15:36,462 - INFO - Eopch 9 finishes in 29.0s | Training loss 1099.26 | validation loss 1010.85 | Best model
+2025-03-11 14:16:01,833 - INFO - Eopch 10 finishes in 27.8s | Training loss 1082.68 | validation loss 993.02 | Best model
+2025-03-11 14:16:01,833 - INFO - Eopch 10 finishes in 27.8s | Training loss 1082.68 | validation loss 993.02 | Best model
+2025-03-11 14:16:01,833 - INFO - Eopch 10 finishes in 27.8s | Training loss 1082.68 | validation loss 993.02 | Best model
+2025-03-11 14:16:01,870 - INFO - The final model saved. Training ends.
+2025-03-11 14:16:01,870 - INFO - The final model saved. Training ends.
+2025-03-11 14:16:01,870 - INFO - The final model saved. Training ends.
+2025-03-11 14:16:02,237 - INFO - Saved model loaded.
+2025-03-11 14:16:02,237 - INFO - Saved model loaded.
+2025-03-11 14:16:02,237 - INFO - Saved model loaded.
+2025-03-11 14:16:02,237 - INFO - Saved model loaded.
+2025-03-11 14:24:57,200 - INFO - Saved model not loaded because it is to be overwritten.
+2025-03-11 14:25:28,898 - INFO - Eopch 1 finishes in 32.9s | Training loss 2731.38 | validation loss 1429.04 | Best model
+2025-03-11 14:25:55,900 - INFO - Eopch 2 finishes in 28.8s | Training loss 1419.50 | validation loss 1272.19 | Best model
+2025-03-11 14:26:22,870 - INFO - Eopch 3 finishes in 29.5s | Training loss 1305.09 | validation loss 1169.82 | Best model
+2025-03-11 14:26:49,989 - INFO - Eopch 4 finishes in 29.4s | Training loss 1236.20 | validation loss 1123.99 | Best model
+2025-03-11 14:27:16,851 - INFO - Eopch 5 finishes in 29.9s | Training loss 1188.34 | validation loss 1048.70 | Best model
+2025-03-11 14:27:44,363 - INFO - Eopch 6 finishes in 30.5s | Training loss 1152.99 | validation loss 1071.43
+2025-03-11 14:28:10,951 - INFO - Eopch 7 finishes in 29.3s | Training loss 1124.58 | validation loss 1059.09
+2025-03-11 14:28:48,761 - INFO - Eopch 8 finishes in 40.1s | Training loss 1105.30 | validation loss 989.79 | Best model
+2025-03-11 14:29:26,183 - INFO - Eopch 9 finishes in 39.4s | Training loss 1091.92 | validation loss 1022.40
+2025-03-11 14:30:10,087 - INFO - Eopch 10 finishes in 45.9s | Training loss 1078.49 | validation loss 972.04 | Best model
+2025-03-11 14:30:10,131 - INFO - The final model saved. Training ends.
+2025-03-11 14:30:10,580 - INFO - Saved model loaded.
+2025-03-11 14:30:10,580 - INFO - Saved model loaded.
+2025-03-11 14:31:15,162 - INFO - Saved model loaded.
+2025-03-11 14:31:15,162 - INFO - Saved model loaded.
+2025-03-11 14:31:15,162 - INFO - Saved model loaded.
+2025-03-11 14:31:27,591 - INFO - Saved model not loaded because it is to be overwritten.
+2025-03-11 14:31:27,591 - INFO - Saved model not loaded because it is to be overwritten.
+2025-03-11 14:31:27,591 - INFO - Saved model not loaded because it is to be overwritten.
+2025-03-11 14:31:27,591 - INFO - Saved model not loaded because it is to be overwritten.
+2025-03-11 14:32:08,764 - INFO - Eopch 1 finishes in 43.0s | Training loss 2269.84 | validation loss 1381.82 | Best model
+2025-03-11 14:32:08,764 - INFO - Eopch 1 finishes in 43.0s | Training loss 2269.84 | validation loss 1381.82 | Best model
+2025-03-11 14:32:08,764 - INFO - Eopch 1 finishes in 43.0s | Training loss 2269.84 | validation loss 1381.82 | Best model
+2025-03-11 14:32:08,764 - INFO - Eopch 1 finishes in 43.0s | Training loss 2269.84 | validation loss 1381.82 | Best model
+2025-03-11 14:32:41,137 - INFO - Eopch 2 finishes in 34.8s | Training loss 1373.29 | validation loss 1185.76 | Best model
+2025-03-11 14:32:41,137 - INFO - Eopch 2 finishes in 34.8s | Training loss 1373.29 | validation loss 1185.76 | Best model
+2025-03-11 14:32:41,137 - INFO - Eopch 2 finishes in 34.8s | Training loss 1373.29 | validation loss 1185.76 | Best model
+2025-03-11 14:32:41,137 - INFO - Eopch 2 finishes in 34.8s | Training loss 1373.29 | validation loss 1185.76 | Best model
+2025-03-11 14:33:08,225 - INFO - Eopch 3 finishes in 29.8s | Training loss 1245.88 | validation loss 1138.36 | Best model
+2025-03-11 14:33:08,225 - INFO - Eopch 3 finishes in 29.8s | Training loss 1245.88 | validation loss 1138.36 | Best model
+2025-03-11 14:33:08,225 - INFO - Eopch 3 finishes in 29.8s | Training loss 1245.88 | validation loss 1138.36 | Best model
+2025-03-11 14:33:08,225 - INFO - Eopch 3 finishes in 29.8s | Training loss 1245.88 | validation loss 1138.36 | Best model
+2025-03-11 14:33:55,493 - INFO - Eopch 4 finishes in 50.3s | Training loss 1189.16 | validation loss 1102.95 | Best model
+2025-03-11 14:33:55,493 - INFO - Eopch 4 finishes in 50.3s | Training loss 1189.16 | validation loss 1102.95 | Best model
+2025-03-11 14:33:55,493 - INFO - Eopch 4 finishes in 50.3s | Training loss 1189.16 | validation loss 1102.95 | Best model
+2025-03-11 14:33:55,493 - INFO - Eopch 4 finishes in 50.3s | Training loss 1189.16 | validation loss 1102.95 | Best model
+2025-03-11 14:34:35,725 - INFO - Eopch 5 finishes in 42.7s | Training loss 1155.49 | validation loss 1025.58 | Best model
+2025-03-11 14:34:35,725 - INFO - Eopch 5 finishes in 42.7s | Training loss 1155.49 | validation loss 1025.58 | Best model
+2025-03-11 14:34:35,725 - INFO - Eopch 5 finishes in 42.7s | Training loss 1155.49 | validation loss 1025.58 | Best model
+2025-03-11 14:34:35,725 - INFO - Eopch 5 finishes in 42.7s | Training loss 1155.49 | validation loss 1025.58 | Best model
+2025-03-11 14:35:02,635 - INFO - Eopch 6 finishes in 29.7s | Training loss 1129.15 | validation loss 996.10 | Best model
+2025-03-11 14:35:02,635 - INFO - Eopch 6 finishes in 29.7s | Training loss 1129.15 | validation loss 996.10 | Best model
+2025-03-11 14:35:02,635 - INFO - Eopch 6 finishes in 29.7s | Training loss 1129.15 | validation loss 996.10 | Best model
+2025-03-11 14:35:02,635 - INFO - Eopch 6 finishes in 29.7s | Training loss 1129.15 | validation loss 996.10 | Best model
+2025-03-11 14:35:29,639 - INFO - Eopch 7 finishes in 28.9s | Training loss 1110.39 | validation loss 1004.98
+2025-03-11 14:35:29,639 - INFO - Eopch 7 finishes in 28.9s | Training loss 1110.39 | validation loss 1004.98
+2025-03-11 14:35:29,639 - INFO - Eopch 7 finishes in 28.9s | Training loss 1110.39 | validation loss 1004.98
+2025-03-11 14:35:29,639 - INFO - Eopch 7 finishes in 28.9s | Training loss 1110.39 | validation loss 1004.98
+2025-03-11 14:35:57,260 - INFO - Eopch 8 finishes in 30.5s | Training loss 1094.13 | validation loss 1020.58
+2025-03-11 14:35:57,260 - INFO - Eopch 8 finishes in 30.5s | Training loss 1094.13 | validation loss 1020.58
+2025-03-11 14:35:57,260 - INFO - Eopch 8 finishes in 30.5s | Training loss 1094.13 | validation loss 1020.58
+2025-03-11 14:35:57,260 - INFO - Eopch 8 finishes in 30.5s | Training loss 1094.13 | validation loss 1020.58
+2025-03-11 14:36:24,333 - INFO - Eopch 9 finishes in 28.9s | Training loss 1079.68 | validation loss 1045.68
+2025-03-11 14:36:24,333 - INFO - Eopch 9 finishes in 28.9s | Training loss 1079.68 | validation loss 1045.68
+2025-03-11 14:36:24,333 - INFO - Eopch 9 finishes in 28.9s | Training loss 1079.68 | validation loss 1045.68
+2025-03-11 14:36:24,333 - INFO - Eopch 9 finishes in 28.9s | Training loss 1079.68 | validation loss 1045.68
+2025-03-11 14:36:51,084 - INFO - Eopch 10 finishes in 29.9s | Training loss 1068.27 | validation loss 1006.85
+2025-03-11 14:36:51,084 - INFO - Eopch 10 finishes in 29.9s | Training loss 1068.27 | validation loss 1006.85
+2025-03-11 14:36:51,084 - INFO - Eopch 10 finishes in 29.9s | Training loss 1068.27 | validation loss 1006.85
+2025-03-11 14:36:51,084 - INFO - Eopch 10 finishes in 29.9s | Training loss 1068.27 | validation loss 1006.85
+2025-03-11 14:36:51,126 - INFO - The final model saved. Training ends.
+2025-03-11 14:36:51,126 - INFO - The final model saved. Training ends.
+2025-03-11 14:36:51,126 - INFO - The final model saved. Training ends.
+2025-03-11 14:36:51,126 - INFO - The final model saved. Training ends.
+2025-03-11 14:36:51,548 - INFO - Saved model loaded.
+2025-03-11 14:36:51,548 - INFO - Saved model loaded.
+2025-03-11 14:36:51,548 - INFO - Saved model loaded.
+2025-03-11 14:36:51,548 - INFO - Saved model loaded.
+2025-03-11 14:36:51,548 - INFO - Saved model loaded.

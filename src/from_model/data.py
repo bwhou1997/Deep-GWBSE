@@ -1,3 +1,4 @@
+#%%
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -572,3 +573,4 @@ if __name__ == "__main__":
     assert abs(gwdata[1]['src']['wfn'][0,0,14,13,15] - 2.1230801376011337e-06) < 1e-10, "Unit Test Failed"
     assert abs(gwdata[1]['tgt']['wfn'][0,0,14,13,15] - 1.261505271449588e-07) < 1e-10, "Unit Test Failed"
     print("GW: unit test passed")
+# %%
