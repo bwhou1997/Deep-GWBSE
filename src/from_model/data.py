@@ -119,14 +119,14 @@ class ManyBodyData(Dataset):
                 -  required kwargs: nc_wfn, nv_wfn
                 -  [optional] kwargs : useWignerXY, cell_slab_truncation, AngstromPerPixel, AngstromPerPixel_z
                                      upsample_factor (This is highly recommened for fast_cK)
-                -  datapoint (see interface.py/wfn.get_wfn_dataset()):
+                -  datapoint (also see interface.py/wfn.get_wfn_dataset()):
                             {'wfn': (nk, nc_wfn+nv_wfn, Rx, Ry, Rz(cutoff)), 'kpt': (nk,nc_wfn+nv_wfn, 3), 'occ': (nk, nc_wfn_nv_wfn, 1),
                              'el': (nk, nc_wfn+nv_wfn 1), 'kpt_weights': (nk, nc_wfn+nv_wfn, 1), 'kpt': (nk, nc_wfn+nv_wfn, 3),
                              'band_indices': (nk, nc_wfn+nv_wfn, 1), 'band_indices_abs':(nk, nc_wfn+nv_wfn, 1)}
 
             'GW': used to train GW-Transformer (supervised)
-                -  required dir: '02-wfn', '13-sigma', 
-                -  [optional] dir: '05-band'[optional: predict_only]
+                -  required dir: '02-wfn', 
+                -  [optional] dir: '05-band', '13-sigma'[optional: predict_only]
                 -  required kwargs: nc_wfn, nv_wfn, nc_sigma, nv_sigma 
                 -  [optional] kwargs: from_dft: bool=True, # save wfn instead of VAE latent space
                                       predict_only:bool=False, 
