@@ -340,11 +340,76 @@ class EquivariantVAE(nn.Module):
         x_recon = self.decoder(z)
         return x_recon, mu, logvar
 
+
+
+
+class VAE(nn.Module):
+    def __init__(self, latent_dim=60, input_channels=30):
+        super(VAE, self).__init__()
+        self.encoder = nn.Sequential(
+            nn.Conv2d(input_channels, 480, kernel_size=3, padding=1, padding_mode='circular'), # Adjust parameters as needed
+            # Comment: the performance of VAE will increase obviously when increasing kernel_size, try using 3, 5, 7,...
+            nn.ReLU(),
+            nn.MaxPool2d(2, 2),
+            nn.Conv2d(480, 480, kernel_size=3, padding=1, padding_mode='circular'),
+            nn.ReLU(),
+            # nn.MaxPool2d(2, 2),
+            nn.AdaptiveAvgPool2d((1,1)),
+            nn.Flatten(),
+            # nn.Linear(392*4, latent_dim*2),
+            nn.Linear(480, latent_dim*2),
+            # nn.ReLU()
+        )
+
+        self.decoder = nn.Sequential(
+            nn.Linear(latent_dim, 392*4),
+            nn.ReLU(),
+            nn.Unflatten(1, (32, 7, 7)),
+            nn.ConvTranspose2d(32, 60, kernel_size=3, stride=2),
+            nn.ReLU(),
+            nn.ConvTranspose2d(60,input_channels, kernel_size=2, stride=2),
+            nn.Sigmoid()  # Sigmoid for values between 0 and 1
+        )
+
+    def reparameterize(self, mu, logvar):
+        std = torch.exp(0.5 * logvar)
+        eps = torch.randn_like(std)
+        z = mu + eps * std
+        return z
+
+    def forward(self, x):
+        # 0. Input size (preprocess)
+        N, C, H, W = x.size()
+        x = self.encoder(x)
+        mu, logvar = x.chunk(2, dim=1)
+        z = self.reparameterize(mu, logvar)
+        x = self.decoder(z)
+        upsampling = nn.Upsample(size=(H, W))
+        x = upsampling(x)
+        return x, mu, logvar
+
+    def get_latent_space(self, x):
+        x = self.encoder(x)
+        mu, logvar = x.chunk(2, dim=1)
+        z = self.reparameterize(mu, logvar)
+        return z, mu, logvar
+
+    def no_grad(self):
+        for param in self.parameters():
+            param.requires_grad = False
+        return self
+
+
 # Loss function
+mse_loss = nn.MSELoss(reduction="sum")  # Matches F.mse_loss with sum
 def vae_loss(recon_x, x, mu, logvar, beta=0.02):
-    recon_loss = F.mse_loss(recon_x, x, reduction="sum")
+    recon_loss = mse_loss(recon_x, x)
     kl_loss = -beta * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())
     return recon_loss + kl_loss
+
+
+
+
 
 def unit_test():
     #random seed

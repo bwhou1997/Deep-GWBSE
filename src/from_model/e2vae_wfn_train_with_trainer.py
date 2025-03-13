@@ -18,6 +18,7 @@ import matplotlib.pyplot as plt
 from e2vae import EquivariantVAE, vae_loss
 from torch.utils.data import DataLoader
 from data import ManyBodyData
+from sklearn.metrics import r2_score
 
 class WFNVAETrainer(Trainer):
     """
@@ -35,7 +36,10 @@ class WFNVAETrainer(Trainer):
         x = x.to(self.device)
         mask = ~mask.to(self.device)
         x_recon, mu, logvar = self.model(x)
-        return self.loss(x_recon*mask, x*mask, mu, logvar)
+
+        # print(r2_score(x[100][mask[0]], x_recon[100][mask[0]]))
+
+        return self.loss(x_recon[:, mask.squeeze()], x[:, mask.squeeze()], mu, logvar)
         
     def evaluate(self, input=None, mask=None, **kwargs):
         self.model.eval()
@@ -65,8 +69,8 @@ class WFNVAETrainer(Trainer):
         x_recon = x_recon.cpu().numpy()
         return input, x_recon
 
-wfdata = ManyBodyData.from_existing_dataset('./dataset/dataset_WFN.h5')
-
+wfdata = ManyBodyData.from_existing_dataset('./dataset/dataset_semi.h5')
+# wfdata = ManyBodyData.from_existing_dataset('./dataset/dataset_WFN.h5')
 def wfn_collate_fn(batch):
     assert len(batch)==1, "Batch size should be 1 for WFN data"
     wfn = batch[0]["wfn"]
@@ -91,6 +95,10 @@ def wfn_collate_fn(batch):
     # The only reason we keep nans in WFN is to demarcate the boundary of one primitive unit cell;
     # after the mask is obtained, all nans can be set to zero.
     wfn = torch.nan_to_num(wfn, nan=0.0)
+
+    max_image = wfn.max(dim=1)[0].max(dim=1)[0].max(dim=1)[0]  # Extract max along each axis
+    wfn = wfn / max_image[:, None, None, None]
+
     return wfn, mask
 
 # Here batch_size is set to one, so one material in wfdata corresponds to one batch.
@@ -101,8 +109,8 @@ def wfn_collate_fn(batch):
 # like the channel dimension being the second dimension.
 dataloader = DataLoader(wfdata, batch_size=1, collate_fn=wfn_collate_fn)
 
-num_epoches = 500
-beta = 0.02
+num_epoches = 600
+beta = 0.0
 vae = EquivariantVAE(input_channels=wfdata.info.cell_slab_truncation,
                         hidden_cnn_channels=[60,60,48,48,4],
                         hidden_pooling=[-1,0.66,-1,-1,0.66],
@@ -110,7 +118,7 @@ vae = EquivariantVAE(input_channels=wfdata.info.cell_slab_truncation,
 optimizer = torch.optim.Adam(vae.parameters(), lr=1e-3)
 
 
-vae_trainer = WFNVAETrainer(vae, optimizer, beta=beta, model_name="vae_e2_wfn", overwrite=True, checkpoint=True, best_model=True)
+vae_trainer = WFNVAETrainer(vae, optimizer, beta=beta, model_name="vae_e2_wfn", overwrite=False, checkpoint=True, best_model=True)
 vae_trainer.train(num_epoches, dataloader, dataloader)
 
 #%%
@@ -120,9 +128,9 @@ n_batch_sampling = 12
 i_channel = 3
 fig, axes = plt.subplots(2, n_batch_sampling, figsize=(n_batch_sampling, 3))
 for i in range(n_batch_sampling):
-    axes[0, i].imshow(x[i, i_channel, :, :])
+    axes[0, i].imshow(x[i,  :, :].sum(axis=0))
     axes[0, i].axis("off")
-    axes[1, i].imshow(x_recon[i, i_channel, :, :])
+    axes[1, i].imshow(x_recon[i,  :, :].sum(axis=0))
     axes[1, i].axis("off")
 
 axes[0, 0].set_ylabel("Original")
