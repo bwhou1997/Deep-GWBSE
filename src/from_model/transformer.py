@@ -94,8 +94,8 @@ class MBformerEncoder(nn.Module):
 
         """
         Input:
-            src_datas: [data1. data2, ...], len(datas) = number of basis (1 or 2)
-            data: [vae_raw_emb, kpt, band, energy]
+            src_datas: [basis_data1, basis_data2, ...], len(datas) = number of basis (1 or 2)
+            basis_data: [vae_raw_emb, kpt, band, energy]
                 vae_raw_emb: (batch, nk, nb, d_input), nk is the number of k-points, nb is the number of bands.
                 kpt: (batch, nk, nb, 3), 3 is the dimension of k-point.
                 band: (batch, nk, nb, 1), nb is the number of bands.
@@ -160,8 +160,8 @@ class MBformerDecoder(MBformerEncoder):
         """
         Input:
             memory: Tensor, the output of the encoder.
-            tgt_datas: [data1. data2, ...], len(datas) = number of basis (1 or 2)
-                data: [vae_raw_emb, kpt, band, energy]
+            tgt_datas: [basis_data1, basis_data2, ...], len(datas) = number of basis (1 or 2) (currently)
+                basis_data: [vae_raw_emb, kpt, band, energy]
         Output:
             y(default): (batch, nk, (nb1, nb2...), d_output)
             attention(default): (batch, (nk, nb1, nb2...), (nk, nb1, nb2...)) 
@@ -248,9 +248,9 @@ class MBformer(nn.Module):
     def forward(self, tgt_datas:list[list[Tensor, Tensor, Tensor, Tensor]], src_datas:list[list[Tensor, Tensor, Tensor, Tensor]]):
         """
         Input:
-            tgt_datas: [data1. data2, ...], len(datas) = number of basis (1 or 2)
+            tgt_datas: [basis_data1, basis_data2, ...], len(tgt_datas) = number of basis (1 or 2) (currently)
                 data: [vae_raw_emb, kpt, band, energy]
-            src_datas: [data1. data2, ...], len(datas) = number of basis (1 or 2)
+            src_datas: [basis_data1, basis_data2, ...], len(datas) = number of basis (1 or 2) (currently)
                 data: [vae_raw_emb, kpt, band, energy]
         Output:
             y(default): (batch, nk, (nb1, nb2...), d_output)
