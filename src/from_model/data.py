@@ -493,11 +493,11 @@ class ManyBodyData(Dataset):
 
                 assert datapoint['label']['eigenvalues'].shape[0] == datapoint['label']['eigenvectors'].shape[0] 
 
-                nS, nc, nv, nk = datapoint['label']['eigenvectors'].shape
+                nS, nk, nc, nv, = datapoint['label']['eigenvectors'].shape
 
                 assert nS == nk * nc * nv, f"nS = {nS}, nk = {nk}, nc = {nc}, nv = {nv} are not consistent"
 
-                wfn_fname = pjoin(pjoin(folder, '02-wfn', "wfn.h5"))
+                wfn_fname = pjoin(pjoin(folder, '17-wfn_fi', "wfn.h5"))
                 wf = wfn(wfn_fname)
                 datapoint_src =  wf.get_dataset(nc=nc, nv=nv, **info)
                 datapoint['src'] = datapoint_src
@@ -508,7 +508,7 @@ class ManyBodyData(Dataset):
             nc_wfn, nv_wfn = info.pop('nc_wfn'), info.pop('nv_wfn')
             if info.get('from_dft'):
                 # build src
-                wfn_fname = pjoin(pjoin(folder, '02-wfn', "wfn.h5"))
+                wfn_fname = pjoin(pjoin(folder, '17-wfn_fi', "wfn.h5"))
                 wf = wfn(wfn_fname)
                 datapoint_src =  wf.get_dataset(nc=nc_wfn, nv=nv_wfn, **info)
                 datapoint['src'] = datapoint_src
@@ -702,7 +702,7 @@ if __name__ == "__main__":
                             AngstromPerPixel_z=0.2, upsampling_factor=2, multiprocessing=True,
                             from_dft=True, predict_only=True, nc_wfn=4,nv_wfn=2)   
 
-    assert abs(bsedata[1]['src']['wfn'][0,0,14,13,15] - 2.1230801376011337e-06) < 1e-10, "BSE Unit Test Failed"
+    assert abs(bsedata[1]['src']['wfn'][0,0,14,13,15] - 5.971020835603282e-07) < 1e-10, "BSE Unit Test Failed"
 
     # please see ToyDataSet.get_bse_dataset() for how to use ManyBodyData (Two ways)
     bsedata = ToyDataSet.get_bse_dataset(read=False)
