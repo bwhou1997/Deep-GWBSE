@@ -648,15 +648,6 @@ class ToyDataSet(Dataset):
     # The usage of ManyBodyData: [WFN, GW, BSE]
     # mat-5, mat-6, mat-7 (all of them are hBN)
     @staticmethod
-    def get_bse_dataset(read=True):
-        if not os.path.exists('./dataset/dataset_BSE.h5') or not read:
-            return ManyBodyData(flows_dir='../../examples/flows', dataset_dir='./dataset', dataset_type='BSE', dataset_fname='dataset_BSE.h5',
-                            load_dataset=False, cell_slab_truncation=30, useWignerXY=True,  AngstromPerPixel=0.1, 
-                            AngstromPerPixel_z=0.2, upsampling_factor=2, multiprocessing=True,
-                            from_dft=True, predict_only=True, nc_wfn=4,nv_wfn=2)   
-        return ManyBodyData.from_existing_dataset('./dataset/dataset_BSE.h5')
-    
-    @staticmethod
     def get_wfn_dataset(read=True):
         if not os.path.exists('./dataset/dataset_WFN.h5') or not read:
             return ManyBodyData(flows_dir='../../examples/flows', dataset_dir='./dataset', dataset_type='WFN', dataset_fname='dataset_WFN.h5',
@@ -674,6 +665,14 @@ class ToyDataSet(Dataset):
                           nc_wfn=4, nv_wfn=2,nc_sigma=1, nv_sigma=1, from_dft=True, predict_only=False,)
         return ManyBodyData.from_existing_dataset('./dataset/dataset_GW.h5')
     
+    @staticmethod
+    def get_bse_dataset(read=True):
+        if not os.path.exists('./dataset/dataset_BSE.h5') or not read:
+            return ManyBodyData(flows_dir='../../examples/flows', dataset_dir='./dataset', dataset_type='BSE', dataset_fname='dataset_BSE.h5',
+                            load_dataset=False, cell_slab_truncation=30, useWignerXY=True,  AngstromPerPixel=0.1, 
+                            AngstromPerPixel_z=0.2, upsampling_factor=2, multiprocessing=True,
+                            from_dft=True, predict_only=False, nc_wfn=4,nv_wfn=2)   
+        return ManyBodyData.from_existing_dataset('./dataset/dataset_BSE.h5')
 
 
 if __name__ == "__main__":
