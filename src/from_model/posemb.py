@@ -47,6 +47,10 @@ class PositionalEncoding(nn.Module):
         """
         batch_size, nk, nb, dim = pos.shape
         assert dim == self.dim, f"dim should be {self.dim}, but got {dim}"
+
+        self.inv_freq_cos = self.inv_freq_cos.to(pos.device)
+        self.inv_freq_sin = self.inv_freq_sin.to(pos.device)
+
         if self.dim == 1:
             pos = pos[:,:,:,0]*2*np.pi
             sin_inp = torch.einsum("ijl,k->ijlk", pos, self.inv_freq_sin)

@@ -60,7 +60,7 @@ class VAETrainer(Trainer):
 
 def test_train():
     # Model and training strategies
-    num_epochs = 10
+    num_epochs = 1
     beta = 0.02
     vae = EquivariantVAE(input_channels=1,
                         hidden_cnn_channels=[60,60,48,48,4],
@@ -80,8 +80,8 @@ def test_train():
     test_loader = DataLoader(test_dataset, batch_size=64, shuffle=False)
 
     # Start training!
-    vae_trainer = VAETrainer(vae, optimizer, beta=beta, model_name="vae_e2_minst", overwrite=True, checkpoint=True, best_model=True)
-    vae_trainer.train(num_epochs, train_loader, test_loader)
+    vae_trainer = VAETrainer(vae, optimizer, beta=beta, model_name="vae_e2_minst")
+    vae_trainer.train(num_epochs, train_loader, test_loader, continued=False)
     
     
 # Mini-testing
@@ -168,8 +168,8 @@ def model_consistency():
                         hidden_cnn_channels=[60,60,48,48,4],
                         hidden_pooling=[-1,0.66,-1,-1,0.66],
                         kernel_size=[7,5,5,3,3])
-    vae_last.load_state_dict(torch.load("./vae_e2_minst.pth"), strict=False)
-    vae_best.load_state_dict(torch.load("./vae_e2_minst_best.pth"), strict=False)
+    vae_last.load_state_dict(torch.load("./vae_e2_minst.save/vae_e2_minst.pth"), strict=False)
+    vae_best.load_state_dict(torch.load("./vae_e2_minst.save/vae_e2_minst_best.pth"), strict=False)
     for p1, p2 in zip(vae_last.parameters(), vae_best.parameters()):
         if p1.data.ne(p2.data).sum() > 0:
             print("The last model is not the best model.")

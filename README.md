@@ -5,13 +5,11 @@ Deep-GWBSE is a deep learning model designed for DFT-GW-BSE calculations.
 Author: Bowen Hou (bowen.hou@yale.edu)
 Contributors: Jinyuan Wu (jinyuan.wu@yale.edu), Xian Xu (xian.xu@yale.edu)
 
-## TODO List:
-- Checkpoint Systems 
-- CSI for BSE
+## Flowchart:
+Please carefully read [**Workflow**](./src/note.md)
 
 ## Table of Contents
 - [Deep-GWBSE](#deep-gwbse)
-  - [TODO List:](#todo-list)
   - [Table of Contents](#table-of-contents)
   - [Features](#features)
   - [Installation](#installation)
@@ -22,7 +20,7 @@ Contributors: Jinyuan Wu (jinyuan.wu@yale.edu), Xian Xu (xian.xu@yale.edu)
 
 ## Features
 This package provides multiple deep learning models for DFT-GW-BSE calculations from crystal structures, including the following:
-- Fully-automatic GW+BSE workflow ([high-throughput workflow](./src/note.md))
+- Fully-automatic GW+BSE workflow
 - Equivariant graph neural networks for DFT Hamiltonian
 
 - VAE+MBFormer: attention-based many-body transformer for GW-BSE  
@@ -75,16 +73,8 @@ We would like to acknowledge the following open-source projects that have made t
 [Quantum ESPRESSO](https://www.quantum-espresso.org/), [BerkeleyGW](https://berkeleygw.org/), [SIESTA](https://docs.siesta-project.org/projects/siesta/en/stable/index.html), [DeepH-E3](https://github.com/Xiaoxun-Gong/DeepH-E3), [HPRO](https://github.com/Xiaoxun-Gong/HPRO), bgwpy
 
 
-# TODO list 
+## TODO list 
 
-- Replacing `self.training_dataloader` etc by function arguments in `train`, `validate`, etc.
-  Expected API: `VAETrainer(model, optimizer, beta=beta, ...)`
-
-  Motivation: suppose we want a two-phase training process.
-  The two stages use different dataloaders.
-
-  This also makes the GPU memory occupation much smaller in each stage.
-- Change the API of `get_loss`: make it accept the raw output of each iteration of data loaders. (This makes the `train` method much more generic)
-- Change the default `save_path` to something like `model_name.save`
-- Separate the functions in `data.py` into a library file, and make `data.py` a template
-- Add a `latent` field to the `dataset_WFN.h5`, recording the latent state after compression
+- wfnembedder.py
+- gwtrainer.py
+- bsetrainer.py
