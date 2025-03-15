@@ -48,6 +48,8 @@ class BSETransformerTrainer(Trainer):
 
         value, atten = self.model([ele, hole])
 
+        # return value, atten
+
         print("get value and atten")
 
         if self.task == BSEPredictTask.eigenvalues:
@@ -58,6 +60,7 @@ class BSETransformerTrainer(Trainer):
             pass
         else:
             raise NotImplementedError("Task not implemented")
+        
 
     def evaluate(self, input, **kwargs):
         self.model.eval()
@@ -89,7 +92,6 @@ def bse_collate_fn(batch):
     ele_partition = np.where(src['band_indices']>0, True, False).squeeze()
     hole_partition = np.where(src['band_indices']<0, True, False).squeeze()
 
-    #TODO: think about the order of ele-hole pair
 
     ele = [torch.from_numpy(src['latent'][ele_partition].reshape(1,nk, nc, -1)).float(),
            torch.from_numpy(src['kpt'][ele_partition].reshape(1,nk, nc, -1)).float(), 
@@ -102,7 +104,14 @@ def bse_collate_fn(batch):
 
     eigenvalues = (torch.from_numpy(label['eigenvalues']).float())[None,...]
     eigenvectors = (torch.from_numpy(label['eigenvectors']).float())[None,...]
-    #TODO: assert the input and output shape
+
+    assert ele[0].shape[1] == nk, f"ele[0].shape[1]: {ele[0].shape[1]}, nk: {nk}"
+    assert ele[0].shape[2] == nc, f"ele[0].shape[2]: {ele[0].shape[2]}, nc: {nc}"
+    assert hole[0].shape[1] == nk, f"hole[0].shape[1]: {hole[0].shape[1]}, nk: {nk}"
+    assert hole[0].shape[2] == nv, f"hole[0].shape[2]: {hole[0].shape[2]}, nv: {nv}"
+    assert eigenvectors.shape[2] == nk, f"eigenvectors.shape[2]: {eigenvectors.shape[2]}, nk: {nk}"
+    assert eigenvectors.shape[3] == nc, f"eigenvectors.shape[3]: {eigenvectors.shape[3]}, nc: {nc}"
+    assert eigenvectors.shape[4] == nv, f"eigenvectors.shape[4]: {eigenvectors.shape[4]}, nv: {nv}"
 
     return ele, hole, eigenvalues, eigenvectors
 
@@ -130,4 +139,4 @@ if __name__ == "__main__":
                                                 task=BSEPredictTask.eigenvalues,
                                                 overwrite=True)
 
-    assert False, "Figure out the order of ele-hole pair (line 92, 105) and uncomment the following line"
+    assert False, "Figure out the order of ele-hole pair (basisassembly.py, how to order state?) and uncomment the following line"
