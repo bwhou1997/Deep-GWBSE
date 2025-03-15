@@ -69,8 +69,8 @@ class WFNVAETrainer(Trainer):
         x_recon = x_recon.cpu().numpy()
         return input, x_recon
 
-wfdata = ManyBodyData.from_existing_dataset('./dataset/dataset_semi.h5')
-# wfdata = ManyBodyData.from_existing_dataset('./dataset/dataset_WFN.h5')
+# wfdata = ManyBodyData.from_existing_dataset('./dataset/dataset_semi.h5')
+wfdata = ManyBodyData.from_existing_dataset('./dataset/dataset_WFN.h5')
 def wfn_collate_fn(batch):
     assert len(batch)==1, "Batch size should be 1 for WFN data"
     wfn = batch[0]["wfn"]
@@ -106,10 +106,10 @@ def wfn_collate_fn(batch):
 # it is a dict containing keys like "wfn".
 # In wfn_collate_fn, the wave functions are extracted from the material,
 # and reorganized to conform to the standards of torchvision,
-# like the channel dimension being the second dimension.
+# like the channel dimension being the second dimension.Palm Springs, California
 dataloader = DataLoader(wfdata, batch_size=1, collate_fn=wfn_collate_fn)
 
-num_epoches = 600
+num_epoches = 1000
 beta = 0.0
 vae = EquivariantVAE(input_channels=wfdata.info.cell_slab_truncation,
                         hidden_cnn_channels=[60,60,48,48,4],
@@ -118,11 +118,12 @@ vae = EquivariantVAE(input_channels=wfdata.info.cell_slab_truncation,
 optimizer = torch.optim.Adam(vae.parameters(), lr=1e-3)
 
 
-vae_trainer = WFNVAETrainer(vae, optimizer, beta=beta, model_name="vae_e2_wfn", overwrite=False, checkpoint=True, best_model=True)
-vae_trainer.train(num_epoches, dataloader, dataloader)
+vae_trainer = WFNVAETrainer(vae, optimizer, beta=beta, model_name="vae_e2_wfn")
+vae_trainer.load_model()
+vae_trainer.train(num_epoches, dataloader, dataloader, continued=False)
 
 #%%
-
+vae_trainer.load_model(load_best=True)
 x, x_recon = vae_trainer.evaluate(dataloader)
 n_batch_sampling = 12
 i_channel = 3

@@ -60,11 +60,7 @@ nc300
 src/from_model/test.py
 dataset
 vae_e2_minst.save
-src/from_model/vae_e2_wfn.save/log.txt
-src/from_model/vae_e2_wfn.save/log.txt
 src/from_model/unittest/dataset_WFN.h5
 src/from_model/unittest/test.py
-src/from_model/vae_e2_wfn.save/log.txt
-src/from_model/vae_e2_wfn.save/log.txt
 log.txt
-src/from_model/vae_e2_wfn.save/log.txt
+*save

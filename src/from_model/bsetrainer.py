@@ -139,4 +139,5 @@ if __name__ == "__main__":
                                                 task=BSEPredictTask.eigenvalues,
                                                 overwrite=True)
 
+    # TODO: sort eigenvalue and eigenvector based on basisassembly order.
     assert False, "Figure out the order of ele-hole pair (basisassembly.py, how to order state?) and uncomment the following line"

@@ -6,25 +6,26 @@ from tqdm import tqdm
 import math
 from torch.utils.tensorboard import SummaryWriter 
 from abc import ABC, abstractmethod
-
+import copy 
 class Trainer(ABC):
+    """
+    Here we define a generic trainer for Sup- and Unsupervised learning.
+        - `CHECKPOINT`: set to `True` to save the model each time a epoch finishes.
+        - `BEST_MODEL`: set to `True` to save the model with the lowest loss in `model_name_best.pth`.
+    """
+    CHECKPOINT = True
+    BEST_MODEL = True
+
     def __init__(self, model, optimizer, loss, 
-                model_name="model",
-                save_path=None,
-                overwrite=False,
-                checkpoint=False,
-                best_model=False) -> None:
+                model_name="model", save_path=None) -> None:
         """
         `kwargs` includes 
         - `overwrite`: set to `True` when we do not want to reuse the model stored in previous trainings. This leads the stored model being replaced by the newly trained model after training.
-        - `checkpoint`: set to `True` to save the model each time a epoch finishes.
-        - `best_model`: set to `True` to save the model with the lowest loss in `model_name_best.pth`.
 
         Note that different subclasses are expected to put different requirements how `loss` is called.
         We do not impose hard constraints on the function signature of `loss`. 
         See :func:`get_loss`.
         """
-        
         
         # Temporary files
         # Saving models
@@ -42,14 +43,16 @@ class Trainer(ABC):
         self.model_name = model_name
         self.current_model_path = os.path.join(self.save_path, f"{self.model_name}.pth")
         self.best_model_path = os.path.join(self.save_path, f"{self.model_name}_best.pth")
-        self.best_model = best_model
-        self.checkpoint = checkpoint
+        self.best_model = Trainer.BEST_MODEL
+        self.checkpoint = Trainer.CHECKPOINT
         self.minimum_validation_loss = math.inf
         
         # Logging
         self.logger = logging.getLogger(f"logger of model {model_name}")
+        self.logger.handlers.clear() # clear all existing handlers
         self.logger.setLevel(logging.DEBUG)
         self.verbose_logger = logging.getLogger(f"logger about everything of model {model_name}")
+        self.verbose_logger.handlers.clear() # clear all existing handlers
         self.verbose_logger.setLevel(logging.DEBUG)
         # The log file
         self.train_log_path = os.path.join(self.save_path, "log.txt")
@@ -66,23 +69,13 @@ class Trainer(ABC):
         console_handler.setFormatter(logging.Formatter("%(message)s"))
         self.logger.addHandler(console_handler)
        
-        # Load the existing model, if it's there
-        if os.path.exists(self.current_model_path) and not overwrite:
-            self.logger.info("Saved model loaded.")
-            model.load_state_dict(torch.load(self.current_model_path), strict=False)
-            self.loaded_from_file = True
-        else:
-            if overwrite:
-                self.logger.info("Saved model not loaded because it is to be overwritten.")
-            else:
-                self.logger.info("Saved model does not exist.")
-            self.loaded_from_file = False
-        
         # Move the model to GPU, if any
+        self.loaded_from_file = False
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
         if self.device == "cpu":
             self.logger.warn("The program is running on CPUs. Performance may be bad!")
         self.model = model.to(self.device)    
+        self.initial_state = copy.deepcopy(self.model.state_dict()) # save the initial state of the model for training from scratch
         
         # Training data
         # Note that at initialization, by default we do not specify the datasets used in training:
@@ -98,6 +91,43 @@ class Trainer(ABC):
 
         pass
     
+    @classmethod
+    # @abstractmethod
+    def load_all_from_exisiting_dir(cls, model_save:str):
+        """
+        Load the model, loss, and other info from an existing directory.
+        You don't need to specify anything but the model name/path
+        motivation: we won't remember specify parameter of the model for existing models and loss.
+        """
+        # TODO: make this a abstract method
+        return cls
+
+    def load_model(self, load_best=False):
+        """
+        load the model from the file.
+        load_best:
+            True: load the best model for evaluation
+            False: load the current model for continued training
+        """
+        if load_best:
+            if os.path.exists(self.best_model_path):
+                self.logger.info("Best model loaded.")
+                self.model.load_state_dict(torch.load(self.best_model_path, map_location=self.device), strict=False)
+                self.loaded_from_file = True
+            else:
+                self.logger.info("Best model does not exist.")
+                self.loaded_from_file = False
+        
+        else:
+            if os.path.exists(self.current_model_path):
+                self.logger.info("Current model loaded.")
+                self.model.load_state_dict(torch.load(self.current_model_path, map_location=self.device), strict=False)
+                self.loaded_from_file = True
+            else:
+                self.logger.info("Current model does not exist.")
+                self.loaded_from_file = False
+
+
     #region The real training part
     def train_each_epoch(self, epoch_idx: int, training_dataloader, validation_dataloader):
         """
@@ -168,14 +198,26 @@ class Trainer(ABC):
         In this method we do not provide hooks for defining the batch size.
         """
         #self.training_dataset = ...
-        
+        print("Continued training:", continued, "\nLoaded from file:", self.loaded_from_file)
         if self.loaded_from_file and not continued:
-            self.logger.warn("Model loaded from file: no training is done. Set continued to True to train on top of existing model.")
-            return
+            # self.logger.warn("Model loaded from file: no training is done. Set continued to True to train on top of existing model.")
+            self.logger.warn("Loaded model is detected! But continued is False => Training from scratch.")
+            self.model.load_state_dict(self.initial_state)
+            # return
+        elif not self.loaded_from_file and continued:
+            self.logger.warn("Loaded model is not detected! => Training from scratch.")
+        
+        elif self.loaded_from_file and continued:
+            self.logger.info("Training from the loaded model.")
+
+        elif not self.loaded_from_file and not continued:
+            self.logger.info("Training from scratch.")
+            self.model.load_state_dict(self.initial_state)
  
         for epoch in range(epoches):
             self.model.train()
             self.train_each_epoch(epoch, training_dataloader, validation_dataloader)
+            self.loaded_from_file = True
             if self.checkpoint:
                 torch.save(self.model.state_dict(), self.current_model_path)
         
@@ -227,4 +269,36 @@ class Trainer(ABC):
         
 
     #endregion
-        
+
+if __name__ == "__main__":
+    """
+    Four scenarios:
+    1. Training from scratch
+    2. Training from a checkpoint (last saved or best model)
+    3. Training from scratch, pause and evaluate the model, then continue training
+    4. Training from scratch, pause and evaluate the model, training from scratch again
+    """
+
+    # Scenario 1: Training from scratch
+    trainer = Trainer(...)
+    trainer.train(...)
+
+    # Scenario 2: Training from a checkpoint
+    trainer = Trainer(...)
+    trainer.load_model(load_best=False)
+    trainer.train(continued=True) 
+
+    # Scenario 3: Training from scratch, pause and evaluate the model, then continue training
+    trainer = Trainer(...)
+    trainer.train(...)
+    trainer.load_model(load_best=True)
+    trainer.evaluate(...)
+    trainer.load_model(load_best=False)
+    trainer.train(continued=True) 
+
+    # Scenario 4: Training from scratch, pause and evaluate the model, training from scratch again
+    trainer = Trainer(...)
+    trainer.train(...)
+    trainer.load_model(load_best=True)
+    trainer.evaluate(...)
+    trainer.train(continued=False)
