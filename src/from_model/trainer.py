@@ -12,13 +12,13 @@ class Trainer(ABC):
                 model_name="model",
                 save_path=None,
                 overwrite=False,
-                checkpoint=False,
-                best_model=False) -> None:
+                ) -> None:
         """
+        The model will be saved each time a epoch finishes.
+        In addition, the model with the lowest loss is saved in `model_name_best.pth`.
+
         `kwargs` includes 
         - `overwrite`: set to `True` when we do not want to reuse the model stored in previous trainings. This leads the stored model being replaced by the newly trained model after training.
-        - `checkpoint`: set to `True` to save the model each time a epoch finishes.
-        - `best_model`: set to `True` to save the model with the lowest loss in `model_name_best.pth`.
 
         Note that different subclasses are expected to put different requirements how `loss` is called.
         We do not impose hard constraints on the function signature of `loss`. 
@@ -42,8 +42,6 @@ class Trainer(ABC):
         self.model_name = model_name
         self.current_model_path = os.path.join(self.save_path, f"{self.model_name}.pth")
         self.best_model_path = os.path.join(self.save_path, f"{self.model_name}_best.pth")
-        self.best_model = best_model
-        self.checkpoint = checkpoint
         self.minimum_validation_loss = math.inf
         
         # Logging
@@ -176,8 +174,7 @@ class Trainer(ABC):
         for epoch in range(epoches):
             self.model.train()
             self.train_each_epoch(epoch, training_dataloader, validation_dataloader)
-            if self.checkpoint:
-                torch.save(self.model.state_dict(), self.current_model_path)
+            torch.save(self.model.state_dict(), self.current_model_path)
         
         torch.save(self.model.state_dict(), self.current_model_path)
         self.training_dataloader = training_dataloader
@@ -218,7 +215,7 @@ class Trainer(ABC):
         self.tb_writer.add_scalar("Training loss", training_loss, global_step=epoch)
         self.tb_writer.add_scalar("Validation loss", validation_loss, global_step=epoch)
 
-        if self.minimum_validation_loss > validation_loss and self.best_model:
+        if self.minimum_validation_loss > validation_loss:
             torch.save(self.model.state_dict(), self.best_model_path)
             self.minimum_validation_loss = validation_loss
             self.verbose_logger.info(f"Eopch {epoch+1} finishes in {elapsed_time:.1f}s | Training loss {training_loss:.2f} | validation loss {validation_loss:.2f} | Best model")
