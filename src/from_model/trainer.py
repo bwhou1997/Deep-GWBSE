@@ -22,9 +22,6 @@ class Trainer(ABC):
         The model will be saved each time a epoch finishes.
         In addition, the model with the lowest loss is saved in `model_name_best.pth`.
 
-        `kwargs` includes 
-        - `overwrite`: set to `True` when we do not want to reuse the model stored in previous trainings. This leads the stored model being replaced by the newly trained model after training.
-
         Note that different subclasses are expected to put different requirements how `loss` is called.
         We do not impose hard constraints on the function signature of `loss`. 
         See :func:`get_loss`.
