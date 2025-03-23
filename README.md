@@ -3,21 +3,24 @@
 Deep-GWBSE is a deep learning model designed for DFT-GW-BSE calculations. 
 
 Author: Bowen Hou (bowen.hou@yale.edu)
+Contributors: Jinyuan Wu (jinyuan.wu@yale.edu), Xian Xu (xian.xu@yale.edu)
 
-## TODO List:
-- Checkpoint systems 
-- eqp.dat -> HPRO (working)
-- CSI for BSE
+## Flowchart:
+Please carefully read [**Workflow**](./src/note.md)
 
 ## Table of Contents
-- [Features](#features)
-- [Installation](#installation)
-- [Usage](#usage)
-- [License](#license)
+- [Deep-GWBSE](#deep-gwbse)
+  - [Table of Contents](#table-of-contents)
+  - [Features](#features)
+  - [Installation](#installation)
+  - [Usage](#usage)
+  - [License](#license)
+  - [Acknowledgements](#acknowledgements)
+- [TODO list](#todo-list-1)
 
 ## Features
 This package provides multiple deep learning models for DFT-GW-BSE calculations from crystal structures, including the following:
-- Fully-automatic GW+BSE workflow ([high-throughput workflow](./src/note.md))
+- Fully-automatic GW+BSE workflow
 - Equivariant graph neural networks for DFT Hamiltonian
 
 - VAE+MBFormer: attention-based many-body transformer for GW-BSE  
@@ -31,7 +34,7 @@ This package provides multiple deep learning models for DFT-GW-BSE calculations 
     </p>
   - BSE scheme:  
     <p align="center">
-      <img src="src/from_model/fig/03-BSE.png" width="40%">
+      <img src="src/from_model/fig/03-BSE.png" width="50%">
     </p>
 
 ## Installation
@@ -70,3 +73,8 @@ We would like to acknowledge the following open-source projects that have made t
 [Quantum ESPRESSO](https://www.quantum-espresso.org/), [BerkeleyGW](https://berkeleygw.org/), [SIESTA](https://docs.siesta-project.org/projects/siesta/en/stable/index.html), [DeepH-E3](https://github.com/Xiaoxun-Gong/DeepH-E3), [HPRO](https://github.com/Xiaoxun-Gong/HPRO), bgwpy
 
 
+## TODO list 
+
+- wfnembedder.py
+- gwtrainer.py
+- bsetrainer.py

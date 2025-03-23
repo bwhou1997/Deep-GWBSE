@@ -47,6 +47,10 @@ class PositionalEncoding(nn.Module):
         """
         batch_size, nk, nb, dim = pos.shape
         assert dim == self.dim, f"dim should be {self.dim}, but got {dim}"
+
+        self.inv_freq_cos = self.inv_freq_cos.to(pos.device)
+        self.inv_freq_sin = self.inv_freq_sin.to(pos.device)
+
         if self.dim == 1:
             pos = pos[:,:,:,0]*2*np.pi
             sin_inp = torch.einsum("ijl,k->ijlk", pos, self.inv_freq_sin)
@@ -154,8 +158,11 @@ class PositionalEmbeddings_band_energy_kpt(nn.Module):
         band_emb = self.band_pos_emb(band_pos)
         return torch.cat((kpt_emb, energy_emb + band_emb), dim=-1)
 
-
-
+class KWeightSampling(nn.Module):
+    """
+    KWeightSampling is used to sample k-points based on the weights
+    """
+    # TODO
 
 
 if __name__ == "__main__":

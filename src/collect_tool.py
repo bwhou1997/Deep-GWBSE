@@ -16,11 +16,6 @@ import os
 import subprocess
 from tqdm import tqdm
 
-suffix = 'AB-661'
-md_input_fname = './flow-hBN-md/flow-hBN-AB-661/01-density/scf.in'
-md_output_fname = './flow-hBN-md/flow-hBN-AB-661/01-density/md.out'
-stru_dir = './fp-input-AB-661/'
-
 
 def collect_from_md(md_input_fname = './flow-hBN-md/flow-hBN-AB-661/01-density/scf.in',
                     md_output_fname = './flow-hBN-md/flow-hBN-AB-661/01-density/md.out',
@@ -89,6 +84,11 @@ def metal_seek(flows='./flows-bwhou'):
         scf_in = pjoin(root, "01-density",'scf.in')
         bands_dat = pjoin(root, "05-band",'bands.dat.gnu')
 
+        if not os.path.exists(scf_out) or not os.path.exists(scf_in) or not os.path.exists(bands_dat):
+            print(f"Missing files in {root}, skipping...")
+            summary['unknown'].append(mat_id)
+            continue
+
         # grep "Fermi" of scf_out
         print(f"Material: {mat_id}")
         result = subprocess.run(f"grep 'Fermi' {scf_out}", capture_output=True, shell=True)
@@ -145,8 +145,6 @@ def metal_seek(flows='./flows-bwhou'):
             print(f"  {mat_id} is a metal")
             summary['metal'].append(mat_id)
 
-        # break
-
     print("Summary:")
     print("  Metals:", len(summary['metal']))
     print("  Semiconductors:", len(summary['semiconductor']))
@@ -155,6 +153,125 @@ def metal_seek(flows='./flows-bwhou'):
     with open("metal_seek.json", "w") as f:
         json.dump(summary, f, indent=4)
 
+import os 
+import json
+import subprocess
+
+def jobdone(task_dir: str) -> bool:
+    task = os.path.basename(task_dir)
+    if task == '01-density':
+        result = subprocess.run(['grep', 'DONE', os.path.join(task_dir, 'scf.out')], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        return result.returncode == 0
+    elif task == "02-wfn":
+        res1 = subprocess.run(['grep', 'DONE', os.path.join(task_dir, 'wfn.out')], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        res2 = subprocess.run(['grep', 'TOTAL', os.path.join(task_dir, 'parabands.out')], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        res3 = subprocess.run(['grep', 'DONE', os.path.join(task_dir, 'wfn.pp.out')], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        return res1.returncode == 0 and res2.returncode == 0 and res3.returncode == 0
+    elif task == "03-wfnq":
+        res1 = subprocess.run(['grep', 'DONE', os.path.join(task_dir, 'wfn.out')], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        res2 = subprocess.run(['grep', 'DONE', os.path.join(task_dir, 'wfn.pp.out')], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        res3 = subprocess.run(['grep', 'alpha', os.path.join(task_dir, 'pseudo.out')], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        return res1.returncode == 0 and res2.returncode == 0 and res3.returncode == 0
+    elif task == '05-band':
+        res1 = subprocess.run(['grep', 'DONE', os.path.join(task_dir, 'wfn.out')], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        res2 = subprocess.run(['grep', 'DONE', os.path.join(task_dir, 'wfn.pp.out')], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        res3 = subprocess.run(['grep', 'DONE', os.path.join(task_dir, 'bands.out')], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        return res1.returncode == 0 and res2.returncode == 0 and res3.returncode == 0
+    elif task == '06-wfnq-nns':
+        res1 = subprocess.run(['grep', 'DONE', os.path.join(task_dir, 'wfn.out')], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        res2 = subprocess.run(['grep', 'DONE', os.path.join(task_dir, 'wfn.pp.out')], stdout=subprocess.PIPE, stderr=subprocess.PIPE)     
+        return res1.returncode == 0 and res2.returncode == 0   
+    elif task == "11-epsilon":
+        result = subprocess.run(['grep', 'Job Done', os.path.join(task_dir, 'epsilon.out')], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        return result.returncode == 0
+    elif task == "12-epsilon-nns":
+        result = subprocess.run(['grep', 'Job Done', os.path.join(task_dir, 'epsilon.out')], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        return result.returncode == 0        
+    elif task == "13-sigma":
+        result = subprocess.run(['grep', 'Job Done', os.path.join(task_dir, 'sigma.out')], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        return result.returncode == 0
+    elif task == "14-inteqp":
+        # grep 'Job Done' inteqp.log
+        result = subprocess.run(['grep', 'Job Done', os.path.join(task_dir, 'inteqp.log')], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        return result.returncode == 0
+    elif task == "17-wfn_fi":
+        res1 = subprocess.run(['grep', 'DONE', os.path.join(task_dir, 'wfn.out')], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        res2 = subprocess.run(['grep', 'DONE', os.path.join(task_dir, 'wfn.pp.out')], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        return res1.returncode == 0 and res2.returncode == 0
+    elif task == "18-kernel":
+        # grep 'TOTAL' kernel.out
+        result = subprocess.run(['grep', 'TOTAL', os.path.join(task_dir, 'kernel.out')], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        return result.returncode == 0
+    elif task == '19-absorption':
+        # grep 'TOTAL' absorption.out
+        result = subprocess.run(['grep', 'TOTAL', os.path.join(task_dir, 'absorption.out')], stdout=subprocess.PIPE, stderr=subprocess.PIPE)    
+        return result.returncode == 0
+    else:
+        return 'unknown task'
+
+
+def check_flows_status(flows: str = './flows-semi', dump: bool = True):
+    print(f"Checking flows status in {flows}...")
+    flows_status = {}
+    
+    for root, dirs, _ in os.walk(flows):
+        if '01-density' not in dirs:
+            continue
+        
+        flow_status = {"Yes": [], "No": [], "Unknown Job": []}
+        for dir in filter(lambda d: d != 'pp', dirs):
+            job_status = jobdone(os.path.join(root, dir))
+            if job_status is True:
+                flow_status["Yes"].append(dir)
+            elif job_status is False:
+                flow_status["No"].append(dir)
+            else:
+                flow_status["Unknown Job"].append(dir)
+        
+        # Sort once at the end for efficiency
+        for key in flow_status:
+            if flow_status[key]:  
+                flow_status[key].sort()
+        
+        flows_status[root] = {k: ",".join(v) for k, v in flow_status.items()}
+    
+    if dump:
+        output_file = f"{os.path.basename(flows)}_status.json"
+        print(output_file, flows)
+        with open(output_file, 'w') as f:
+            json.dump(flows_status, f, indent=4, separators=(',', ': '))
+        print(f"Flows status saved to {output_file}")
+    
+    return flows_status
+
+# def check_flows_status(flows: str = './flows-semi', dump: bool = True):
+#     print(f"Checking flows status in {flows}...")
+#     flows_status = {}
+#     for root, dirs, files in os.walk(flows):
+#         if '01-density' in dirs:
+#             flow_status = {"Yes": [], "No": [], "Unknown Job": []}
+#             for dir in dirs:
+#                 if dir == 'pp':
+#                     continue
+#                 if jobdone(os.path.join(root, dir)) == True:
+#                     flow_status["Yes"].append(dir)
+#                 elif jobdone(os.path.join(root, dir)) == False:
+#                     flow_status["No"].append(dir)
+#                 else:
+#                     flow_status["Unknown Job"].append(dir)
+#             for key in flow_status.keys():
+#                 flow_status[key].sort()
+#                 flow_status[key] = ",".join(flow_status[key])
+
+#             flows_status[root] = flow_status
+#     output_file = os.path.basename(flows)+"_status.json"
+#     if dump:
+#         with open(output_file, 'w') as f:
+#             json.dump(flows_status, f, indent=4, separators=(',', ': '))
+#         print(f"Flows status saved to {output_file}")
+#     return flows_status
+
+# Call the function
 
 if __name__ == '__main__':
     import argparse
@@ -168,16 +285,17 @@ if __name__ == '__main__':
         formatter_class=argparse.RawTextHelpFormatter
     )
 
-    parser.add_argument('mode', choices=['md', 'deeph', 'metalseek'], help="""\
+    parser.add_argument('mode', choices=['md', 'deeph', 'metalseek','st'], help="""\
     md: collect structures from MD output.
     deeph: collect DFT-Ham from DFT/SIESTA/HPRO flows.
     metalseek: determine metallicity from DFT flows
+    st: check the status of the flows
     """)
     # parser.add_argument('mode', choices=['md', 'deeph', 'metal'], help='md: collect structures from MD output. \ndeeph: collect DFT-Ham from DFT/SIESTA/HPRO flows. \nmetal:')
-    parser.add_argument('--md_input', type=str, help='md: input file name')
-    parser.add_argument('--md_output', type=str, help='md: output file name')
-    parser.add_argument('--md_suffix', type=str, default='', help='md: suffix for MD files')
-    parser.add_argument('--flows', type=str, default='./flows', help='deeph/metalseek: directory containing DFT/SIESTA/HPRO flows')
+    parser.add_argument('-md_input', type=str, help='md: input file name')
+    parser.add_argument('-md_output', type=str, help='md: output file name')
+    parser.add_argument('-md_suffix', type=str, default='', help='md: suffix for MD files')
+    parser.add_argument('-flows', type=str, default='./flows', help='deeph/metalseek: directory containing DFT/SIESTA/HPRO flows')
 
     args = parser.parse_args()
 
@@ -187,6 +305,7 @@ if __name__ == '__main__':
         if not args.md_suffix:
             args.md_suffix = ''
         collect_from_md(args.md_input, args.md_output, args.md_suffix)
+        
     elif args.mode == 'deeph':
         collect_from_flows_2_deep(args.deeph_flows)
     
@@ -194,3 +313,8 @@ if __name__ == '__main__':
         if not args.flows:
             parser.error('--flows is required in "metalseek" mode')
         metal_seek(args.flows)
+    
+    elif args.mode == 'st':
+        if not args.flows:
+            parser.error('--flows is required in "st" mode')
+        check_flows_status(args.flows)

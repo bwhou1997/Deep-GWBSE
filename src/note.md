@@ -1,19 +1,18 @@
-## Folder Structure
-General workflow
+## General workflow
 ```
 
 Molecule Dynamncse─┐
       external src───(Collect)─>fp-input ──(QE/SIESTA/BGW + HPRO)─>─┌── ml-train-set──(ML)─> model
-               ...─┘                                               └── ml-test-set
+               ...─┘                                                └── ml-test-set
 ```
-**Path 1** Tweisted-angle study of hBN
+**Path 1** Tweisted-angle study of hBN (**not working well**)
 ```
 
 1. Train:
 supercell.cif─(flow.py)─> MD─(md.py)─>fp-input─(flows.py)─> ml_dataset ──(deep-collect.py, deephe3-train.py)─> model
 
 2. Use:
-twist.cif───(deephe3-xx.py, diag_plot.py)─> band.png 
+twist.cif─┌──(deephe3-xx.py, diag_plot.py)─> band.png 
     model─┘
 ```
 
@@ -21,26 +20,13 @@ twist.cif───(deephe3-xx.py, diag_plot.py)─> band.png
 ```
 --Path 2--:
 1. Train:
-external database─(collect.py)─>fp-input─(flows.py)─> ml_dataset ─(MBformer)─> model
+external database──>fp-input─(flows.py, data.py)─> ml_dataset.h5 ─(xx_trainer.py)─> model
 
 Features: G0W0, BSE (binding energy, |<cvk|S>|)
 ```
 
-<!-- model scheme:
-![model](from_model/fig/01-model.png)
+## Folder Structure
 
-GW scheme:
-![GW](from_model/fig/02-GW.png)
-
-BSE scheme:
-![BSE](from_model/fig/03-BSE.png) -->
-
-### TODO
-
-- Xian: data.py (WFN task, Train VAE)
-- Bowen: Transformer
-- Jinyuan: 
-                                           
 ### 1. **stru-input** folder
 The stru-input folder contains the crystal structures
 ```bash
@@ -52,7 +38,15 @@ stru-input
 |   └── stru.cif
 └── ...
 ```
-### 1. **pp** folder
+Related files on top of the folder:
+- `flow.py` (**unit-test**): simple material flow.
+- `flows.py` (**unit-test**): multiple material flows.
+- `fptask.py`: customized task for the `flow.py` script.
+- `collect_tool.py`: `md` collect molecular dynamics data to build stru-input 
+- `config/single_mat_config.json`: The configuration file for the `flow.py`(single material flow).
+- `config/fpconfig.json`: The configuration file for the `flows.py` script(multiple material flows).
+
+### 2. **pp** folder
 The pp folder contains all .upf and .psml for QE and SIESTA
 ```
 pseudo_src/ # (built-in)
@@ -112,8 +106,39 @@ flows/
 └── ...
 ```
 
+Related files on top of the folder:
+- `QE, BGW, HPRO, SIESTA`: First-principle calculator
+- `collect_tool.py`: `deeph`, `metalseek`, `st`, see `-h` for more details.
+- `from_model/data.py` (**unit-test**): create for WFN, GW, BSE datatype
+    - `from_model/wigner.py` (**unit-test**): create wigner cell for WFN
+    - `from_model/interface.py` (**unit-test**): interface for `data.py`, including eqp, vloc, wfn, and AScvk classes
 
-### 4. **DeepH-E3** input folder
+
+
+### 4. **ManyBodyData.h5** file
+```
+dataset.h5 (see data.py)
+├── info/dict{}
+├── mat-1/dict{}
+├── mat-2/dict{}
+├── mat-3/dict{}
+```
+
+Related files on top of the file:
+- `from_model/data.py` (**unit-test**): load from h5 file
+- `from_model/trainer.py`: train the model on the dataset
+- `from_model/bsetrainer.py` (**unit-test**)
+- `from_model/gwtrainer.py`
+- `from_model/e2vaetrainer.py` (todo)
+- `from_mode/wfnembedder.py` (todo, used before transformer)
+
+- models:
+    - `from_model/transformer.py` (**unit-test**)
+        - `from_model/basisassembly.py` (**unit-test**)
+        - `from_model/posemb.py` (**unit-test**)
+    - `from_model/e2vae.py` (**unit-test**)
+
+### 5. **DeepH-E3** input folder
 
 ```
 ml-train/test
@@ -131,4 +156,19 @@ ml-train/test
 |   └──  ...
 └── ...
 ```
+Related files on top of the folder:
+see deeph3-train.py for more details.
+
+### Benchmark
+
+#### 1. data.py parallelization
+| | interface.py  | data.py   | wall time |
+|:----:|:------------:|:--------:|:-----------|
+| **8 bands**          | -          | -      | <span style="color:red;">237s</span> (base line)    |
+| | pool()     | -      | 232s      |
+| | pool(4)    | -      | 218s      |
+| | pool(8)    | -      | 217s      |
+| | -          | pool() | <span style="color:green;">**30s**</span> (fast)      |
+| **18 bands**| -          | pool() |  72s      |
+| | pool(8)    | -      |     517s      |
 
