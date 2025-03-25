@@ -39,6 +39,13 @@ class WFNVAETrainer(Trainer):
 
         # print(r2_score(x[100][mask[0]], x_recon[100][mask[0]]))
 
+        # Here we *do not* multiply the the mask to x or x_recon directly,
+        # because of normalization: if we multiply mask to x,
+        # the size of the resulting tensor doesn't change.
+        # If this is true, in the extreme case that the model does a poor job in reproducing the 
+        # wave function intensity in the primitive unit cell,
+        # but there are a lot of NaN pixels in x,
+        # the loss function will still think that the model does a good job.
         return self.loss(x_recon[:, mask.squeeze()], x[:, mask.squeeze()], mu, logvar)
         
     def evaluate(self, input=None, mask=None, **kwargs):
@@ -96,6 +103,7 @@ def wfn_collate_fn(batch):
     # after the mask is obtained, all nans can be set to zero.
     wfn = torch.nan_to_num(wfn, nan=0.0)
 
+    # Normalization: make sure that each sample in the batch is rescaled to 0-1.
     max_image = wfn.max(dim=1)[0].max(dim=1)[0].max(dim=1)[0]  # Extract max along each axis
     wfn = wfn / max_image[:, None, None, None]
 
@@ -125,14 +133,14 @@ vae_trainer.train(num_epoches, dataloader, dataloader, continued=False)
 #%%
 vae_trainer.load_model(load_best=True)
 x, x_recon = vae_trainer.evaluate(dataloader)
-n_batch_sampling = 12
+sample_idxs = range(10, 20)
 i_channel = 3
-fig, axes = plt.subplots(2, n_batch_sampling, figsize=(n_batch_sampling, 3))
-for i in range(n_batch_sampling):
-    axes[0, i].imshow(x[i,  :, :].sum(axis=0))
-    axes[0, i].axis("off")
-    axes[1, i].imshow(x_recon[i,  :, :].sum(axis=0))
-    axes[1, i].axis("off")
+fig, axes = plt.subplots(2, len(sample_idxs), figsize=(len(sample_idxs), 3))
+for i_fig, i_sample in enumerate(sample_idxs):
+    axes[0, i_fig].imshow(x[i_sample,  :, :].sum(axis=0))
+    axes[0, i_fig].axis("off")
+    axes[1, i_fig].imshow(x_recon[i_sample,  :, :].sum(axis=0))
+    axes[1, i_fig].axis("off")
 
 axes[0, 0].set_ylabel("Original")
 axes[1, 0].set_ylabel("Reconstructed")
