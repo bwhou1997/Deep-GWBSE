@@ -66,3 +66,5 @@ log.txt
 *save
 src/from_model/e2vae_wfn_train_with_trainer_xian.py
 src/from_model/xian.py
+
+src/from_model/wfn_dataset_generate.py

@@ -19,8 +19,8 @@ class Trainer(ABC):
     def __init__(self, model, optimizer, loss, 
                 model_name="model", save_path=None) -> None:
         """
-        `kwargs` includes 
-        - `overwrite`: set to `True` when we do not want to reuse the model stored in previous trainings. This leads the stored model being replaced by the newly trained model after training.
+        The model will be saved each time a epoch finishes.
+        In addition, the model with the lowest loss is saved in `model_name_best.pth`.
 
         Note that different subclasses are expected to put different requirements how `loss` is called.
         We do not impose hard constraints on the function signature of `loss`. 
@@ -260,7 +260,7 @@ class Trainer(ABC):
         self.tb_writer.add_scalar("Training loss", training_loss, global_step=epoch)
         self.tb_writer.add_scalar("Validation loss", validation_loss, global_step=epoch)
 
-        if self.minimum_validation_loss > validation_loss and self.best_model:
+        if self.minimum_validation_loss > validation_loss:
             torch.save(self.model.state_dict(), self.best_model_path)
             self.minimum_validation_loss = validation_loss
             self.verbose_logger.info(f"Eopch {epoch+1} finishes in {elapsed_time:.1f}s | Training loss {training_loss:.2f} | validation loss {validation_loss:.2f} | Best model")
