@@ -146,6 +146,16 @@ def bse_collate_fn(batch):
     return ele, hole, eigenvalues, eigenvectors
 
 
+class bse_training_flow:
+    """
+    1) create and read dataset: ManyBodyData
+    2) get wfn embedding
+    3) create model
+    4) create trainer
+    5) train model
+    6) evaluate model
+    """
+
 if __name__ == "__main__":  
     
     d_model = 24
