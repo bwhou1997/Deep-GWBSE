@@ -15,6 +15,7 @@ from trainer import Trainer
 from transformer import MBformerEncoder
 from basisassembly import ElectronHoleBasisAssembly_Concatenate, sort_exciton_eigenvalues_by_eh_pair_energy, b1b2_grid
 from enum import Enum
+from sklearn.metrics import mean_absolute_error
 
 
 class BSEPredictTask(Enum):
@@ -36,7 +37,11 @@ class BSETransformerTrainer(Trainer):
         self.task = task
         print(f"Trainer Task: {task}")
 
-    def get_loss(self, input)->torch.Tensor:
+    def get_loss(self, input:list)->torch.Tensor:
+        """
+        input: [ele, hole, eigenvalues, eigenvectors]
+               see bse_collate_fn for details
+        """
         
         ele, hole, eigenvalues, eigenvectors = input
         ele = [x.to(self.device) for x in ele]
@@ -45,11 +50,6 @@ class BSETransformerTrainer(Trainer):
         eigenvectors = eigenvectors.to(self.device)
 
         value, atten = self.model([ele, hole])
-
-        print('value.shape', value.shape)
-        print('atten.shape', atten.shape)
-
-        print("get value and atten")
 
         if self.task == BSEPredictTask.eigenvalues:
             # eigenvalues has shape of (batch, nS, 1), here we reorder the eigenvalues based on electron-hole pair energy
@@ -64,13 +64,40 @@ class BSETransformerTrainer(Trainer):
         else:
             raise NotImplementedError("Task not implemented")
         
-
-    def evaluate(self, input, **kwargs):
+    @torch.no_grad()
+    def evaluate(self, input=None, **kwargs):
+        """
+        input:
+        - None: use the validation dataloader
+        - data_labled: [ele, hole, eigenvalues, eigenvectors]
+        - data_unlabled: [ele, hole]
+        """
         self.model.eval()
-        pass
 
-    def evaluate_input_parser(self, input):
-        pass
+        if input is None:
+            assert self.validation_dataloader is not None, "Must have a non-empty input"
+            for data in self.validation_dataloader:
+                ele, hole, _, _ = data
+                break  # By default, get only one batch
+        elif isinstance(input,list) or isinstance(input, tuple):
+            assert len(input)==2 or len(input)==4, f"Input should be of length 2 or 4, but got {len(input)}"
+            ele, hole = input[:2]
+
+        else:
+            raise NotImplementedError("Input type not implemented")
+    
+        ele = [x.to(self.device) for x in ele]
+        hole = [x.to(self.device) for x in hole]
+
+        value, atten = self.model([ele, hole])
+
+        if self.task == BSEPredictTask.eigenvalues:
+            return value.cpu().numpy()
+        elif self.task == BSEPredictTask.eigenvectors:
+            return atten.cpu().numpy()
+        else:
+            raise NotImplementedError("Task not implemented")
+
 
 def bse_collate_fn(batch):
     """
@@ -120,8 +147,9 @@ def bse_collate_fn(batch):
 
 
 if __name__ == "__main__":  
+    
     d_model = 24
-    num_epoches = 10
+    num_epoches = 1000
     bsedata = ToyDataSet.get_bse_dataset()
     bsedata = toy_wfn_embedder(bsedata, 
                                wfn_latent_dim=d_model)
@@ -140,11 +168,25 @@ if __name__ == "__main__":
     bse_trainer_eigval = BSETransformerTrainer(enc2, loss, optimizer,  
                                                 model_name="bse_transformer_eval", 
                                                 task=BSEPredictTask.eigenvalues)
-    
+    bse_trainer_eigval.load_model(load_best=True)
+    bse_trainer_eigval.train(num_epoches, dataloader, dataloader, continued=True)
+
+
+
     bse_trainer_eigvec = BSETransformerTrainer(enc2, loss, optimizer,
                                                model_name="bse_transformer_evec",
                                                task=BSEPredictTask.eigenvectors)
+    bse_trainer_eigvec.load_model(load_best=True)
+    bse_trainer_eigvec.train(num_epoches, dataloader, dataloader, continued=True)
+
+
     for d in dataloader:
         ele, hole, eigenvalues, eigenvectors = d
+        eigval_sort, eigvec_sort = sort_exciton_eigenvalues_by_eh_pair_energy(ele, hole, eigenvalues, eigenvectors) 
+        break
 
-    
+    bse_trainer_eigval.load_model(load_best=True)
+    print("eigenval:", mean_absolute_error(bse_trainer_eigval.evaluate(d).ravel(), eigval_sort.ravel()), 'eV')
+
+    bse_trainer_eigvec.load_model(load_best=True)
+    print('eigenvec:', mean_absolute_error(bse_trainer_eigvec.evaluate(d).ravel(), eigvec_sort.ravel()))

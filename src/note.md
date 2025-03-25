@@ -39,8 +39,8 @@ stru-input
 └── ...
 ```
 Related files on top of the folder:
-- `flow.py` (**unit-test**): simple material flow.
-- `flows.py` (**unit-test**): multiple material flows.
+- `flow.py` (**unit-test**): `-c` reads .json file, create simple material flow.
+- `flows.py` (**unit-test**): `-c` reads .json file, create multiple material flows.
 - `fptask.py`: customized task for the `flow.py` script.
 - `collect_tool.py`: `md` collect molecular dynamics data to build stru-input 
 - `config/single_mat_config.json`: The configuration file for the `flow.py`(single material flow).
