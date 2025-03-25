@@ -3,6 +3,7 @@
 Deep-GWBSE is a deep learning model designed for DFT-GW-BSE calculations. 
 
 Author: Bowen Hou (bowen.hou@yale.edu)
+
 Contributors: Jinyuan Wu (jinyuan.wu@yale.edu), Xian Xu (xian.xu@yale.edu)
 
 ## Flowchart:

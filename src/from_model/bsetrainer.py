@@ -13,13 +13,14 @@ from torch.utils.data import DataLoader
 from collect_tool import check_flows_status
 from trainer import Trainer
 from transformer import MBformerEncoder
-from basisassembly import ElectronHoleBasisAssembly_Concatenate
+from basisassembly import ElectronHoleBasisAssembly_Concatenate, sort_exciton_eigenvalues_by_eh_pair_energy, b1b2_grid
 from enum import Enum
+
 
 class BSEPredictTask(Enum):
     eigenvalues = 1
     eigenvectors = 2
-    all_bse = 3
+    # all_bse = 3
 
 def toy_wfn_embedder(dataset, wfn_latent_dim=24):
     nk, nb = dataset[0]['src']['wfn'].shape[:2]
@@ -34,9 +35,6 @@ class BSETransformerTrainer(Trainer):
 
         self.task = task
         print(f"Trainer Task: {task}")
-        if self.task == BSEPredictTask.all_bse:
-            print('Not recommended to use all_bse task, use eigenvalues or eigenvectors instead')
-
 
     def get_loss(self, input)->torch.Tensor:
         
@@ -48,16 +46,21 @@ class BSETransformerTrainer(Trainer):
 
         value, atten = self.model([ele, hole])
 
-        # return value, atten
+        print('value.shape', value.shape)
+        print('atten.shape', atten.shape)
 
         print("get value and atten")
 
         if self.task == BSEPredictTask.eigenvalues:
-            return self.loss(value, eigenvalues)
+            # eigenvalues has shape of (batch, nS, 1), here we reorder the eigenvalues based on electron-hole pair energy
+            eigenvalues_sorted_by_eh_pair_energy, _ = sort_exciton_eigenvalues_by_eh_pair_energy(ele, hole, eigenvalues)
+            assert value.shape == eigenvalues_sorted_by_eh_pair_energy.shape, f"value.shape: {value.shape}, eigenvalues_sorted_by_eh_pair_energy.shape: {eigenvalues_sorted_by_eh_pair_energy.shape}. Make sure [ele, hole] order right"
+            return self.loss(value, eigenvalues_sorted_by_eh_pair_energy)
+        
         elif self.task == BSEPredictTask.eigenvectors:
-            raise NotImplementedError("Not implemented")
-        elif self.task == BSEPredictTask.all_bse:
-            pass
+            _, eigenvectors_sorted_by_eh_pair_energy = sort_exciton_eigenvalues_by_eh_pair_energy(ele, hole, eigenvalues, eigenvectors) 
+            assert atten.shape == eigenvectors_sorted_by_eh_pair_energy.shape, f"atten.shape: {atten.shape}, eigenvectors_sorted_by_eh_pair_energy.shape: {eigenvectors_sorted_by_eh_pair_energy.shape}. Make sure [ele, hole] order right"
+            return self.loss(atten, eigenvectors_sorted_by_eh_pair_energy)
         else:
             raise NotImplementedError("Task not implemented")
         
@@ -135,9 +138,13 @@ if __name__ == "__main__":
     loss = torch.nn.MSELoss()
 
     bse_trainer_eigval = BSETransformerTrainer(enc2, loss, optimizer,  
-                                                model_name="bse_transformer", 
-                                                task=BSEPredictTask.eigenvalues,
-                                                overwrite=True)
+                                                model_name="bse_transformer_eval", 
+                                                task=BSEPredictTask.eigenvalues)
+    
+    bse_trainer_eigvec = BSETransformerTrainer(enc2, loss, optimizer,
+                                               model_name="bse_transformer_evec",
+                                               task=BSEPredictTask.eigenvectors)
+    for d in dataloader:
+        ele, hole, eigenvalues, eigenvectors = d
 
-    # TODO: sort eigenvalue and eigenvector based on basisassembly order.
-    assert False, "Figure out the order of ele-hole pair (basisassembly.py, how to order state?) and uncomment the following line"
+    
