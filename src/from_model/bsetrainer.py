@@ -14,6 +14,7 @@ from collect_tool import check_flows_status
 from trainer import Trainer
 from transformer import MBformerEncoder
 from basisassembly import ElectronHoleBasisAssembly_Concatenate, sort_exciton_eigenvalues_by_eh_pair_energy, b1b2_grid
+from wfnembedder import ManyBodyData_WFN_Embedder_pretrained, SimpleSumXYEmbedder
 from enum import Enum
 from sklearn.metrics import mean_absolute_error
 
@@ -23,11 +24,11 @@ class BSEPredictTask(Enum):
     eigenvectors = 2
     # all_bse = 3
 
-def toy_wfn_embedder(dataset, wfn_latent_dim=24):
-    nk, nb = dataset[0]['src']['wfn'].shape[:2]
-    for i in range(len(dataset)):
-        dataset[i]['src']['latent'] = np.random.random((nk, nb, wfn_latent_dim))
-    return dataset
+# def toy_wfn_embedder(dataset, wfn_latent_dim=24):
+#     nk, nb = dataset[0]['src']['wfn'].shape[:2]
+#     for i in range(len(dataset)):
+#         dataset[i]['src']['latent'] = np.random.random((nk, nb, wfn_latent_dim))
+#     return dataset
 
 class BSETransformerTrainer(Trainer):
     def __init__(self, model, loss ,optimizer, model_name="bse_transformer", 
@@ -161,8 +162,10 @@ if __name__ == "__main__":
     d_model = 24
     num_epoches = 1000
     bsedata = ToyDataSet.get_bse_dataset()
-    bsedata = toy_wfn_embedder(bsedata, 
-                               wfn_latent_dim=d_model)
+    # bsedata = toy_wfn_embedder(bsedata, 
+    #                            wfn_latent_dim=d_model)
+    eb = ManyBodyData_WFN_Embedder_pretrained(d_model, SimpleSumXYEmbedder)
+    bsedata = eb.create_latent_for_ManyBodyData(bsedata, del_wfn_original=True)
 
     dataloader = DataLoader(bsedata, 
                             batch_size=1, 
