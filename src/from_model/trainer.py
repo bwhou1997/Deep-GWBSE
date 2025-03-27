@@ -128,17 +128,19 @@ class Trainer(ABC):
                 self.loaded_from_file = False
 
 
-    #region The real training part
+
     def train_each_epoch(self, epoch_idx: int, training_dataloader, validation_dataloader):
         """
         What is presented here is a generic training procedure.
         The method can be overriden by another procedure in subclasses.
         In this case, do not forget to call `self.record` at the end of each epoch.
         """
+        start = torch.cuda.Event(enable_timing=True)
+        end = torch.cuda.Event(enable_timing=True)
 
         total_loss = 0.0
-
-        start_time = time.process_time()
+        
+        start.record()
         for x in tqdm(training_dataloader, f"Epoch {epoch_idx+1}"):
             self.optimizer.zero_grad()
             # We directly feed the output of the dataloader to get_loss:
@@ -149,11 +151,12 @@ class Trainer(ABC):
             total_loss += this_loss.item()
         
         validation_loss = self.validate(validation_dataloader)
-        end_time = time.process_time()
+        torch.cuda.synchronize()  # Ensure all kernels are finished
+        end.record()
         self.record(epoch_idx, 
                     training_loss=total_loss / len(training_dataloader),
                     validation_loss=validation_loss,
-                    elapsed_time=end_time-start_time)
+                    elapsed_time=start.elapsed_time(end)*0.001)
     
     @abstractmethod
     def get_loss(self, x):
@@ -240,9 +243,6 @@ class Trainer(ABC):
         # ...
         pass
 
-    #endregion 
-
-    #region Logging
 
 
     def record(self, epoch: int, **kwargs):
@@ -263,12 +263,11 @@ class Trainer(ABC):
         if self.minimum_validation_loss > validation_loss:
             torch.save(self.model.state_dict(), self.best_model_path)
             self.minimum_validation_loss = validation_loss
-            self.verbose_logger.info(f"Eopch {epoch+1} finishes in {elapsed_time:.1f}s | Training loss {training_loss:.2f} | validation loss {validation_loss:.2f} | Best model")
+            self.verbose_logger.info(f"Eopch {epoch+1} ({elapsed_time:.1f}s) | Training loss {training_loss:.2f} | validation loss {validation_loss:.2f} | Best model")
         else:
-            self.verbose_logger.info(f"Eopch {epoch+1} finishes in {elapsed_time:.1f}s | Training loss {training_loss:.2f} | validation loss {validation_loss:.2f}")
+            self.verbose_logger.info(f"Eopch {epoch+1} ({elapsed_time:.1f}s) | Training loss {training_loss:.2f} | validation loss {validation_loss:.2f}")
         
 
-    #endregion
 
 if __name__ == "__main__":
     """

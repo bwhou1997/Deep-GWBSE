@@ -100,13 +100,19 @@ def wfn_collate_fn(batch):
     return wfn, mask
 
 if __name__ == "__main__":
-    wfdata = ManyBodyData.from_existing_dataset('./dataset/dataset_WFN.h5')
-    # Each batch contains one material, with wave functions extracted and 
-    # reshaped in wfn_collate_fn to match the expected input format for the model.
-    dataloader = DataLoader(wfdata, batch_size=1, collate_fn=wfn_collate_fn)
 
-    num_epoches = 1000
+    num_epoches = 200
     beta = 0.0
+    train_val_split = 0.8 # 
+
+    wfdata = ManyBodyData.from_existing_dataset('./dataset/dataset_semi.h5')
+
+    wfdata_train = wfdata[:int(len(wfdata)*train_val_split)]
+    wfdata_val = wfdata[int(len(wfdata)*train_val_split):]
+    dataloader_train = DataLoader(wfdata_train, batch_size=1, collate_fn=wfn_collate_fn)
+    dataloader_val = DataLoader(wfdata_val, batch_size=1, collate_fn=wfn_collate_fn)
+
+
     vae = EquivariantVAE(input_channels=wfdata.info.cell_slab_truncation,
                             hidden_cnn_channels=[60,60,48,48,4],
                             hidden_pooling=[-1,0.66,-1,-1,0.66],
@@ -116,12 +122,12 @@ if __name__ == "__main__":
 
     vae_trainer = WFNVAETrainer(vae, optimizer, beta=beta, model_name="vae_e2_wfn")
     vae_trainer.load_model()
-    vae_trainer.train(num_epoches, dataloader, dataloader, continued=False)
+    vae_trainer.train(num_epoches, dataloader_train, dataloader_val, continued=False)
 
     #%%
     vae_trainer.load_model(load_best=True)
-    x, x_recon = vae_trainer.evaluate(dataloader)
-    sample_idxs = range(10, 20)
+    x, x_recon = vae_trainer.evaluate(dataloader_val)
+    sample_idxs = range(10)
     i_channel = 3
     fig, axes = plt.subplots(2, len(sample_idxs), figsize=(len(sample_idxs), 3))
     for i_fig, i_sample in enumerate(sample_idxs):
