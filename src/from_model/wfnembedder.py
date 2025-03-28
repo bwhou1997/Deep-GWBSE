@@ -116,12 +116,18 @@ class SimpleSumXYEmbedder(LatentEmbedderBASE):
         wfn_data = np.copy(wfn_data) # don't change the original data
         assert len(wfn_data.shape) == 5, f"len(wfn_data.shape): {len(wfn_data.shape)}"
         nk, nc_nv, nx, ny, nz = wfn_data.shape
-        mid = np.argmax(np.nan_to_num(wfn_data,0).sum(axis=(0,1,2,3)))
+        # mid = np.argmax(np.nan_to_num(wfn_data,0).sum(axis=(0,1,2,3)))
+        mid = nz //2
         left, right = mid - self.latent_dim//2, mid + self.latent_dim//2
         right = right if self.latent_dim%2 == 0 else right + 1
-        assert left >= 0, f"left: {left}"
-        assert right <= nz, f"right: {right}"
-        return wfn_data[..., left:right].sum(axis=(2,3))
+        assert left >= 0, f"left: {left}, nz: {nz}"
+        assert right <= nz, f"right: {right}, nz: {nz}"
+        # return wfn_data[..., left:right].sum(axis=(2,3))
+        wfn_data = np.nan_to_num(wfn_data, 0)
+        extracted = wfn_data[..., left:right].sum(axis=(2, 3))
+        # norm_factor = np.sum(wfn_data) / np.sum(extracted) if np.sum(extracted) != 0 else 1
+        # return np.ones((nk, nc_nv, self.latent_dim))
+        return extracted / extracted.sum(axis=2, keepdims=True)
 
 class OtherEmbedder(LatentEmbedderBASE):
     def __init__(self, latent_dim, **kwargs):
