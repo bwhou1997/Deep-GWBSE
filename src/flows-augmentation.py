@@ -1,3 +1,5 @@
+#!/usr/bin/env python
+
 from flow import DFT_GW_HPRO_Flow
 from from_bgwpy.core import Workflow
 import os

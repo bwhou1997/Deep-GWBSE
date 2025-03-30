@@ -186,6 +186,7 @@ class Trainer(ABC):
             - run get_loss() to get self.prediction and self.target.
             - use self.additional_metrics(self.prediction, self.target) to get the additional loss.
             - return the additional loss.
+            - get_additional_loss will only be called after get_loss() is called for validation: see self.validate()
             see bsetrainer.py for more details.
         """
         pass
