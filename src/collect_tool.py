@@ -216,7 +216,11 @@ def check_flows_status(flows: str = './flows-semi', dump: bool = True):
     
     for root, dirs, _ in os.walk(flows):
         if '01-density' not in dirs:
-            continue
+            if "02-wfn" not in dirs:
+                # gw augmentation
+                if "17-wfn_fi" not in dirs:
+                    # bse augmentation
+                    continue
         
         flow_status = {"Yes": [], "No": [], "Unknown Job": []}
         for dir in filter(lambda d: d != 'pp', dirs):

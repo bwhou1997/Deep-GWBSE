@@ -368,7 +368,7 @@ class VAE(nn.Module):
             nn.ConvTranspose2d(32, 60, kernel_size=3, stride=2),
             nn.ReLU(),
             nn.ConvTranspose2d(60,input_channels, kernel_size=2, stride=2),
-            nn.Sigmoid()  # Sigmoid for values between 0 and 1
+            # nn.Sigmoid()  # Sigmoid for values between 0 and 1
         )
 
     def reparameterize(self, mu, logvar):

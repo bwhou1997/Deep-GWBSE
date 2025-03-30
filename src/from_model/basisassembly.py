@@ -12,11 +12,80 @@ import numpy as np
 def b1b2_grid(nb1, nb2):
     """
     Generate a grid of indices for basis 1 and basis 2
+    example:
+        we consider two conduction bands (nc=2) and three valence bands (nv=3):
+        c_basis = np.array([[1,1],[2,2]])
+        v_basis = np.array([[-1,-1],[-2,-2],[-3,-3]])
+
+        # |cv> = |c> x |v>
+        bb1, bb2 = b1b2_grid(2, 3)
+        bb1 = np.array([[0,1],[0,1],[0,1]])
+        bb2 = np.array([[0,0],[1,1],[2,2]])
+        
+        c_basis[bb1,:].shape 
+        => (3,2,2) # 
+        c_basis[bb1,:][0] == c_basis[bb1,:][1] == c_basis[bb1,:][2] # axis=0 is repeated
+        => True
+
+        v_basis[bb2,:].shape
+        => (3,2,2)
+        v_basis[bb2,:][:,0] == v_basis[bb2,:][:,1] # axis=1 is repeated
+        => True
+
+        assemble = np.einsum('vci, vcj -> vcij', c_basis[bb1,:], v_basis[bb2,:]).reshape(*bb1.shape,-1) # shape=(3,2,4)
+
+        assert assemble[2,0] == c_basis[0] tensor_product v_basis[2]
+
+        # The above example shows how to generate the new basis by tensor product
+        # (nk1, d) tensor_product (nk2, d) = (nk2, nk1, ...)
+        # see ElectronHoleBasisAssembly for einsum
     """
     b1 = np.arange(nb1)
     b2 = np.arange(nb2)
     bb1, bb2 = np.meshgrid(b1, b2)
     return bb1, bb2
+
+
+def sort_exciton_eigenvalues_by_eh_pair_energy(ele:list, hole:list, eigenvalues:torch.Tensor, eigenvectors:torch.Tensor=None):
+    """
+    Sort eigenvalues by eh pair energy
+    make sure the shape and energy order of transformer output matches with the exciton eigenvalues
+    Input:
+        assert batch == 1
+        ele[2]: [batch, kpt, nc, 1] # ele energy (ele[2]>0)
+        hole[2]: [batch, kpt, nv, 1] # hole energy (hole[2]<0)
+        eigenvalues: [batch, nS, 1]
+        eigenvectors: [batch, nS, nk, nc, nv] # This is optional, if None, we only sort eigenvalues
+    Output:
+        eigenvalues_sorted_by_eh_pair_energy: [batch, (kpt, nv, nc), 1], # (kpt, nv, nc) is 'nS' sorted by eh pair energy
+        eigenvectors_sorted_by_eh_pair_energy: [batch, (kpt, nv, nc), nk, nv, nc] # (kpt, nv, nc) is 'nS' sorted by eh pair energy
+    """
+    assert ele[0].shape[0] == 1, f"ele[0].shape[0]: {ele[0].shape[0]}, only support batch size 1"
+    assert hole[0].shape[0] == 1, f"hole[0].shape[0]: {hole[0].shape[0]}, only support batch size 1"
+    nk = ele[1].shape[-3]
+    nc = ele[1].shape[-2]
+    nv = hole[1].shape[-2]
+    b1, b2 = b1b2_grid(nc, nv) # [ele, hole]
+    ele_energy = ele[3][...,b1,:]
+    hole_energy = hole[3][...,b2,:]
+    eh_pair_energy = ele_energy - hole_energy 
+    assert (eh_pair_energy > 0).all(), "eh_pair_energy should be positive, input order: ele, hole"  
+    eh_pair_energy_shape = eh_pair_energy.shape
+    eh_pair_energy_indices = torch.argsort(eh_pair_energy.flatten())
+    eigenvalues_sorted_by_eh_pair_energy = torch.zeros_like(eigenvalues.flatten())
+    eigenvalues_sorted_by_eh_pair_energy[eh_pair_energy_indices] = eigenvalues.flatten()
+    eigenvalues_sorted_by_eh_pair_energy = eigenvalues_sorted_by_eh_pair_energy.reshape(eh_pair_energy_shape)
+
+    if eigenvectors is None:
+        return eigenvalues_sorted_by_eh_pair_energy, None
+    
+    kcv_shape = eigenvectors.shape[-3:]
+    eigenvectors_sorted_by_eh_pair_energy = torch.zeros((nk*nc*nv, *kcv_shape), device=eigenvectors.device)
+    eigenvectors_sorted_by_eh_pair_energy[eh_pair_energy_indices,:] = eigenvectors.squeeze()
+    eigenvectors_sorted_by_eh_pair_energy = eigenvectors_sorted_by_eh_pair_energy.reshape(*eh_pair_energy_shape[:4], *kcv_shape)
+    eigenvectors_sorted_by_eh_pair_energy = eigenvectors_sorted_by_eh_pair_energy.permute(0,1,2,3,4,6,5)
+
+    return eigenvalues_sorted_by_eh_pair_energy, eigenvectors_sorted_by_eh_pair_energy
 
 class PassBasisAssembly(nn.Module):
     nbasis = 1

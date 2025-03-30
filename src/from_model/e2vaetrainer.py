@@ -36,12 +36,18 @@ class WFNVAETrainer(Trainer):
         x = x.to(self.device)
         mask = ~mask.to(self.device)
         x_recon, mu, logvar = self.model(x)
-
-        # print(r2_score(x[100][mask[0]], x_recon[100][mask[0]]))
-
+        # Avoid directly multiplying the mask to x or x_recon to ensure proper loss calculation, accounting for normalization and NaN handling.
         return self.loss(x_recon[:, mask.squeeze()], x[:, mask.squeeze()], mu, logvar)
         
     def evaluate(self, input=None, mask=None, **kwargs):
+        """
+        # TODO: rewrite this function
+        comment:
+            i) it can only get the first batch of the dataloader
+            ii) it can only get one batch of input
+            iii) mask input doesn't make sense
+        """
+
         self.model.eval()
         
         with torch.no_grad():
@@ -70,71 +76,67 @@ class WFNVAETrainer(Trainer):
         return input, x_recon
 
 # wfdata = ManyBodyData.from_existing_dataset('./dataset/dataset_semi.h5')
-wfdata = ManyBodyData.from_existing_dataset('./dataset/dataset_WFN.h5')
+
 def wfn_collate_fn(batch):
     assert len(batch)==1, "Batch size should be 1 for WFN data"
     wfn = batch[0]["wfn"]
     nk, nb, X, Y, C = wfn.shape
-    # This moves the z coordinate dimension to the second dimension,
-    # which, in the eyes of torchvision, is the channel dimension, which is desired.
-    # The first dimension, whose size is nk*nb,
-    # is the batch dimension:
-    # thus one material is one batch, and its Kohn-Sham states are the samples in that batch.
-    # We have to treat a material as a batch,
-    # because the sizes of wave functions from different materials differ. 
+    # Rearrange dimensions to make the z-coordinate the channel dimension,
+    # treating each material as a batch due to varying wave function sizes.
     wfn = (wfn.reshape(nk*nb, X, Y, C)).transpose(0, 3, 1, 2)
     wfn = torch.from_numpy(wfn).float()
     scaling_factor = 4 # TODO: make the process determining the scaling factor automatic
     delta_X = scaling_factor * math.ceil(X / scaling_factor) - X
     delta_Y = scaling_factor * math.ceil(Y / scaling_factor) - Y
     wfn = F.pad(wfn, (0, delta_Y, 0, delta_X), mode="constant", value=np.nan)
-    # Add one batch dimension; the size of the batch dimension is one,
-    # because the mask is the same for all samples in one batch.
-    # We rely on broadcasting to expand it to all batches.
+    # Add a batch dimension to the mask for broadcasting across samples.
     mask = torch.isnan(wfn[0])[None, ...] 
-    # The only reason we keep nans in WFN is to demarcate the boundary of one primitive unit cell;
-    # after the mask is obtained, all nans can be set to zero.
+    # Retain NaNs only to define unit cell boundaries; replace them with zeros afterward.
     wfn = torch.nan_to_num(wfn, nan=0.0)
-
+    # Normalization: make sure that each sample in the batch is rescaled to 0-1.
     max_image = wfn.max(dim=1)[0].max(dim=1)[0].max(dim=1)[0]  # Extract max along each axis
     wfn = wfn / max_image[:, None, None, None]
 
     return wfn, mask
 
-# Here batch_size is set to one, so one material in wfdata corresponds to one batch.
-# Yet a material in wfdata is not a tensor:
-# it is a dict containing keys like "wfn".
-# In wfn_collate_fn, the wave functions are extracted from the material,
-# and reorganized to conform to the standards of torchvision,
-# like the channel dimension being the second dimension.Palm Springs, California
-dataloader = DataLoader(wfdata, batch_size=1, collate_fn=wfn_collate_fn)
+if __name__ == "__main__":
 
-num_epoches = 1000
-beta = 0.0
-vae = EquivariantVAE(input_channels=wfdata.info.cell_slab_truncation,
-                        hidden_cnn_channels=[60,60,48,48,4],
-                        hidden_pooling=[-1,0.66,-1,-1,0.66],
-                        kernel_size=[7,5,5,3,3])
-optimizer = torch.optim.Adam(vae.parameters(), lr=1e-3)
+    num_epoches = 200
+    beta = 0.0
+    train_val_split = 0.8 # 
+
+    wfdata = ManyBodyData.from_existing_dataset('./dataset/dataset_semi.h5')
+
+    wfdata_train = wfdata[:int(len(wfdata)*train_val_split)]
+    wfdata_val = wfdata[int(len(wfdata)*train_val_split):]
+    dataloader_train = DataLoader(wfdata_train, batch_size=1, collate_fn=wfn_collate_fn)
+    dataloader_val = DataLoader(wfdata_val, batch_size=1, collate_fn=wfn_collate_fn)
 
 
-vae_trainer = WFNVAETrainer(vae, optimizer, beta=beta, model_name="vae_e2_wfn")
-vae_trainer.load_model()
-vae_trainer.train(num_epoches, dataloader, dataloader, continued=False)
+    vae = EquivariantVAE(input_channels=wfdata.info.cell_slab_truncation,
+                            hidden_cnn_channels=[60,60,48,48,4],
+                            hidden_pooling=[-1,0.66,-1,-1,0.66],
+                            kernel_size=[7,5,5,3,3])
+    optimizer = torch.optim.Adam(vae.parameters(), lr=1e-3)
 
-#%%
-vae_trainer.load_model(load_best=True)
-x, x_recon = vae_trainer.evaluate(dataloader)
-n_batch_sampling = 12
-i_channel = 3
-fig, axes = plt.subplots(2, n_batch_sampling, figsize=(n_batch_sampling, 3))
-for i in range(n_batch_sampling):
-    axes[0, i].imshow(x[i,  :, :].sum(axis=0))
-    axes[0, i].axis("off")
-    axes[1, i].imshow(x_recon[i,  :, :].sum(axis=0))
-    axes[1, i].axis("off")
 
-axes[0, 0].set_ylabel("Original")
-axes[1, 0].set_ylabel("Reconstructed")
-plt.show()
-# %%
+    vae_trainer = WFNVAETrainer(vae, optimizer, beta=beta, model_name="vae_e2_wfn")
+    vae_trainer.load_model()
+    vae_trainer.train(num_epoches, dataloader_train, dataloader_val, continued=False)
+
+    #%%
+    vae_trainer.load_model(load_best=True)
+    x, x_recon = vae_trainer.evaluate(dataloader_val)
+    sample_idxs = range(10)
+    i_channel = 3
+    fig, axes = plt.subplots(2, len(sample_idxs), figsize=(len(sample_idxs), 3))
+    for i_fig, i_sample in enumerate(sample_idxs):
+        axes[0, i_fig].imshow(x[i_sample,  :, :].sum(axis=0))
+        axes[0, i_fig].axis("off")
+        axes[1, i_fig].imshow(x_recon[i_sample,  :, :].sum(axis=0))
+        axes[1, i_fig].axis("off")
+
+    axes[0, 0].set_ylabel("Original")
+    axes[1, 0].set_ylabel("Reconstructed")
+    plt.show()
+    # %%
