@@ -269,12 +269,18 @@ def generate_sbatch_jobs(fname='./run_aug.sh', nsbatch=3, hours=4, cluster='perl
     
     tasks = []
     start = None
+    stack = []
     for i, line in enumerate(lines):
         if "cd" in line and "cd .." not in line:
-            start = i
+            stack.append('cd')
+            if start is None:
+                start = i
         if "cd .." in line and start is not None:
-            tasks.append(''.join(lines[start:i+1]))
-            start = None
+            stack.pop()
+            if not stack:
+                tasks.append(''.join(lines[start:i+1]))
+                start = None
+            
     
     tasks_per_job = int(np.ceil(len(tasks) / nsbatch))
     
