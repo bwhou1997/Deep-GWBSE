@@ -248,34 +248,51 @@ def check_flows_status(flows: str = './flows-semi', dump: bool = True):
     
     return flows_status
 
-# def check_flows_status(flows: str = './flows-semi', dump: bool = True):
-#     print(f"Checking flows status in {flows}...")
-#     flows_status = {}
-#     for root, dirs, files in os.walk(flows):
-#         if '01-density' in dirs:
-#             flow_status = {"Yes": [], "No": [], "Unknown Job": []}
-#             for dir in dirs:
-#                 if dir == 'pp':
-#                     continue
-#                 if jobdone(os.path.join(root, dir)) == True:
-#                     flow_status["Yes"].append(dir)
-#                 elif jobdone(os.path.join(root, dir)) == False:
-#                     flow_status["No"].append(dir)
-#                 else:
-#                     flow_status["Unknown Job"].append(dir)
-#             for key in flow_status.keys():
-#                 flow_status[key].sort()
-#                 flow_status[key] = ",".join(flow_status[key])
+def generate_sbatch_jobs(fname='./run_aug.sh', nsbatch=3, hours=4, cluster='perlmutter', nodes=4):
+    """
+    Parses a script file to extract tasks and generates multiple SBATCH job scripts.
 
-#             flows_status[root] = flow_status
-#     output_file = os.path.basename(flows)+"_status.json"
-#     if dump:
-#         with open(output_file, 'w') as f:
-#             json.dump(flows_status, f, indent=4, separators=(',', ': '))
-#         print(f"Flows status saved to {output_file}")
-#     return flows_status
-
-# Call the function
+    Parameters:
+        fname (str): Path to the input script file.
+        nsbatch (int): Number of batch jobs to create.
+        hours (int): Time in hours for each job.
+        cluster (str): Cluster name (only 'perlmutter' is supported).
+        nodes (int): Number of nodes for the job.
+    """
+    
+    def set_sbatch(cluster, nodes, hours):
+        assert cluster in ['perlmutter'], "Only perlmutter is supported"
+        return f"#!/bin/bash\n#SBATCH -N {nodes}\n#SBATCH -C cpu\n#SBATCH -q regular\n#SBATCH -t {hours}:00:00\n"
+    
+    with open(fname, 'r') as f:
+        lines = f.readlines()
+    
+    tasks = []
+    start = None
+    for i, line in enumerate(lines):
+        if "cd" in line and "cd .." not in line:
+            start = i
+        if "cd .." in line and start is not None:
+            tasks.append(''.join(lines[start:i+1]))
+            start = None
+    
+    tasks_per_job = int(np.ceil(len(tasks) / nsbatch))
+    
+    for i in range(nsbatch):
+        start = i * tasks_per_job
+        end = min((i + 1) * tasks_per_job, len(tasks))
+        job_tasks = tasks[start:end]
+        
+        prefix = os.path.splitext(fname)[0]
+        job_file = prefix+f'_sub_{i+1}.sh'
+        with open(job_file, 'w') as f:
+            f.write(set_sbatch(cluster, nodes, hours))
+            f.write("\n")
+            for task in job_tasks:
+                f.write(task)
+                f.write("\n")
+    
+    print(f"Generated {nsbatch} job scripts.")
 
 if __name__ == '__main__':
     import argparse
@@ -289,7 +306,7 @@ if __name__ == '__main__':
         formatter_class=argparse.RawTextHelpFormatter
     )
 
-    parser.add_argument('mode', choices=['md', 'deeph', 'metalseek','st'], help="""\
+    parser.add_argument('mode', choices=['md', 'deeph', 'metalseek', 'st', 'sub'], help="""\
     md: collect structures from MD output.
     deeph: collect DFT-Ham from DFT/SIESTA/HPRO flows.
     metalseek: determine metallicity from DFT flows
@@ -299,7 +316,11 @@ if __name__ == '__main__':
     parser.add_argument('-md_input', type=str, help='md: input file name')
     parser.add_argument('-md_output', type=str, help='md: output file name')
     parser.add_argument('-md_suffix', type=str, default='', help='md: suffix for MD files')
-    parser.add_argument('-flows', type=str, default='./flows', help='deeph/metalseek: directory containing DFT/SIESTA/HPRO flows')
+    parser.add_argument('-flows', type=str, help='deeph/metalseek: directory containing DFT/SIESTA/HPRO flows')
+    parser.add_argument('-job', type=str, help='sub: sbatch job file name')
+    parser.add_argument('-nsbatch', type=int, default=3, help='sub: number of sub-sbatch jobs')
+    parser.add_argument('-hours', type=int, default=4, help='sub: hours for each job')
+    parser.add_argument('-nodes', type=int, default=4, help='sub: number of nodes for each job')
 
     args = parser.parse_args()
 
@@ -322,3 +343,9 @@ if __name__ == '__main__':
         if not args.flows:
             parser.error('--flows is required in "st" mode')
         check_flows_status(args.flows)
+    
+    elif args.mode == 'sub':
+        if not args.job:
+            parser.error('--job is required in "sub" mode')
+        generate_sbatch_jobs(args.job, args.nsbatch, args.hours, 'perlmutter', args.nodes)
+        
