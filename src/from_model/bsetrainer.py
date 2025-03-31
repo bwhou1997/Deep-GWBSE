@@ -183,11 +183,11 @@ class bse_training_flow:
 if __name__ == "__main__":  
     
     d_model = 24
-    num_epoches = 1000
+    num_epoches = 200
     train_val_split = 0.7
 
     # bsedata = ToyDataSet.get_bse_dataset()
-    bsedata = ManyBodyData.from_existing_dataset('./dataset/dataset_BSE_semi.h5')
+    bsedata = ManyBodyData.from_existing_dataset('./dataset/dataset_BSE_hBN.h5')
     eb = ManyBodyData_WFN_Embedder_pretrained(d_model, SimpleSumXYEmbedder)
     bsedata = eb.create_latent_for_ManyBodyData(bsedata, del_wfn_original=True)
 
@@ -204,7 +204,7 @@ if __name__ == "__main__":
                            d_model=d_model*2, 
                            BasisAssembly=ElectronHoleBasisAssembly_Concatenate)
     
-    optimizer = torch.optim.Adam(enc2.parameters(), lr=1e-3)
+    optimizer = torch.optim.Adam(enc2.parameters(), lr=1e-4)
     loss = torch.nn.MSELoss()
     # additional_metrics=MeanAbsoluteError()  # Ensure it's on GPU if needed
     additional_metrics = partial(torch.nn.functional.l1_loss, reduction='mean')
@@ -214,7 +214,7 @@ if __name__ == "__main__":
                                                 task=BSEPredictTask.eigenvalues,
                                                 additional_metrics=additional_metrics)
     bse_trainer_eigval.load_model(True)
-    bse_trainer_eigval.train(num_epoches, dataloader_train, dataloader_val, continued=False)
+    bse_trainer_eigval.train(num_epoches, dataloader_train, dataloader_val, continued=True)
 
 
     # bse_trainer_eigvec = BSETransformerTrainer(enc2, loss, optimizer,

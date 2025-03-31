@@ -287,9 +287,9 @@ class Trainer(ABC):
         if self.minimum_validation_loss > validation_loss:
             torch.save(self.model.state_dict(), self.best_model_path)
             self.minimum_validation_loss = validation_loss
-            self.verbose_logger.info(f"Eopch {epoch+1} ({elapsed_time:.1f}s) | train. loss {training_loss:.2e} | val. loss {validation_loss:.2e} | val. metrics: {additional_metrics_info}| (Best model)")
+            self.verbose_logger.info(f"Eopch {epoch+1} | train. loss {training_loss:.2e} | val. loss {validation_loss:.2e} | val. metrics: {additional_metrics_info}| (Best model)")
         else:
-            self.verbose_logger.info(f"Eopch {epoch+1} ({elapsed_time:.1f}s) | train. loss {training_loss:.2e} | val. loss {validation_loss:.2e} | val. metrics: {additional_metrics_info}|")
+            self.verbose_logger.info(f"Eopch {epoch+1} | train. loss {training_loss:.2e} | val. loss {validation_loss:.2e} | val. metrics: {additional_metrics_info}|")
         
 
 

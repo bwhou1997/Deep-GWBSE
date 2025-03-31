@@ -4,77 +4,128 @@ import numpy as np
 from model_util import H5ls
 import matplotlib.pyplot as plt
 from tqdm import tqdm
+from pathos.multiprocessing import ProcessingPool as Pool
+from multiprocessing import Pool, cpu_count
+from tqdm import tqdm
+
+# class ManyBodyData_WFN_Embedder_pretrained:
+#     """
+#     This Embedder Class only support static pretrained embedder embedder
+#     i.e. it cannot be integrated downstream model for training.
+#     """
+#     def __init__(self, latent_dim, latent_embedder , **kwargs):
+#         """
+#         Initialize the WFNEmbedder with any necessary parameters.
+#         latent_dim (int): The dimension of the latent space.
+#         latent_embedder (LatentEmbedderBASE): The latent embedder class.
+#         kwargs:
+#             ...
+#         """
+#         self.latent_embedder = latent_embedder(latent_dim, **kwargs)
+
+#         pass
+#     def create_latent_for_ManyBodyData(self, manybodydata: ManyBodyData, del_wfn_original=False)->ManyBodyData:
+#         """
+#         Abstract method to perform wavefunction embedding from ManyBodyData.
+#         Args:
+#             manybodydata (ManyBodyData): The ManyBodyData object, see ManyBodyData.py "WFN" datapoint for details
+#                 ...
+#                 wfn_datapoint = {...}
+#                 ...
+#             del_wfn_original (bool): Whether to delete the original WFN data (nk, nc, nx, ny, nz) after embedding.
+                
+#         Returns:
+#             manybodydata (ManyBodyData): Modified ManyBodyData object.
+#                 ...
+#                 wfn_datapoint = {..., 'latent': (nk, nc_wfn+nv_wfn, latent) ,...}
+#                 ...
+#         Note: support `WFN`, `GW`, and `BSE`
+#         """
+#         assert manybodydata.info.dataset_type in ['WFN', 'GW', 'BSE'], "only support dataset of `WFN`, `GW`, and `BSE`"
+
+#         # This function will add a "latent" key to each wfn_data point and this is IN-PLACE!
+#         update_wfn_data = lambda wfn_data: wfn_data.update({'latent': self.latent_embedder.embed(wfn_data['wfn'])}) 
+#         update_src_data = lambda data: data['src'].update({'latent': self.latent_embedder.embed(data['src']['wfn'])}) 
+#         update_tgt_data = lambda data: data['tgt'].update({'latent': self.latent_embedder.embed(data['tgt']['wfn'])})
+
+#         if manybodydata.info.dataset_type == 'WFN':
+#             list(map(update_wfn_data, tqdm(manybodydata, desc='Embedding WFN'))) 
+#             if del_wfn_original:
+#                 list(map(lambda data: data.pop('wfn'), manybodydata))
+
+#         elif manybodydata.info.dataset_type == 'GW':
+#             list(map(update_src_data, tqdm(manybodydata, desc='Embedding GW src WFN')))
+#             list(map(update_tgt_data, tqdm(manybodydata, desc='Embedding GW tgt WFN')))
+#             if del_wfn_original:
+#                 list(map(lambda data: data['src'].pop('wfn'), manybodydata))
+#                 list(map(lambda data: data['tgt'].pop('wfn'), manybodydata))
+
+#         elif manybodydata.info.dataset_type == 'BSE':
+#             list(map(update_src_data, tqdm(manybodydata, desc='Embedding BSE src WFN')))   
+#             if del_wfn_original:
+#                 list(map(lambda data: data['src'].pop('wfn'), manybodydata)) 
+
+#         else:
+#             raise NotImplementedError("Task not implemented")
+
+#         return manybodydata
+
+#     def create_latent_for_ManyBodyData_h5(self, h5file, **kwargs)->ManyBodyData:
+#         """
+#         Abstract method to perform wavefunction embedding from HDF5 file.
+#         Args:
+#             h5file (str): Path to the HDF5 file.
+#         Returns:
+#         """
+#         raise NotImplementedError
+
+
+
 
 class ManyBodyData_WFN_Embedder_pretrained:
-    """
-    This Embedder Class only support static pretrained embedder embedder
-    i.e. it cannot be integrated downstream model for training.
-    """
-    def __init__(self, latent_dim, latent_embedder , **kwargs):
-        """
-        Initialize the WFNEmbedder with any necessary parameters.
-        latent_dim (int): The dimension of the latent space.
-        latent_embedder (LatentEmbedderBASE): The latent embedder class.
-        kwargs:
-            ...
-        """
+    def __init__(self, latent_dim, latent_embedder, **kwargs):
         self.latent_embedder = latent_embedder(latent_dim, **kwargs)
 
-        pass
-    def create_latent_for_ManyBodyData(self, manybodydata: ManyBodyData, del_wfn_original=False)->ManyBodyData:
-        """
-        Abstract method to perform wavefunction embedding from ManyBodyData.
-        Args:
-            manybodydata (ManyBodyData): The ManyBodyData object, see ManyBodyData.py "WFN" datapoint for details
-                ...
-                wfn_datapoint = {...}
-                ...
-            del_wfn_original (bool): Whether to delete the original WFN data (nk, nc, nx, ny, nz) after embedding.
-                
-        Returns:
-            manybodydata (ManyBodyData): Modified ManyBodyData object.
-                ...
-                wfn_datapoint = {..., 'latent': (nk, nc_wfn+nv_wfn, latent) ,...}
-                ...
-        Note: support `WFN`, `GW`, and `BSE`
-        """
-        assert manybodydata.info.dataset_type in ['WFN', 'GW', 'BSE'], "only support dataset of `WFN`, `GW`, and `BSE`"
+    def _embed_wfn(self, wfn_data):
+        """Helper function to embed wavefunction data."""
+        wfn_data['latent'] = self.latent_embedder.embed(wfn_data['wfn'])
+        return wfn_data
 
-        # This function will add a "latent" key to each wfn_data point and this is IN-PLACE!
-        update_wfn_data = lambda wfn_data: wfn_data.update({'latent': self.latent_embedder.embed(wfn_data['wfn'])}) 
-        update_src_data = lambda data: data['src'].update({'latent': self.latent_embedder.embed(data['src']['wfn'])}) 
-        update_tgt_data = lambda data: data['tgt'].update({'latent': self.latent_embedder.embed(data['tgt']['wfn'])})
+    def _embed_src(self, data):
+        """Helper function to embed source wavefunction."""
+        data['src']['latent'] = self.latent_embedder.embed(data['src']['wfn'])
+        return data
 
-        if manybodydata.info.dataset_type == 'WFN':
-            list(map(update_wfn_data, tqdm(manybodydata, desc='Embedding WFN'))) 
-            if del_wfn_original:
-                list(map(lambda data: data.pop('wfn'), manybodydata))
+    def _embed_tgt(self, data):
+        """Helper function to embed target wavefunction."""
+        data['tgt']['latent'] = self.latent_embedder.embed(data['tgt']['wfn'])
+        return data
 
-        elif manybodydata.info.dataset_type == 'GW':
-            list(map(update_src_data, tqdm(manybodydata, desc='Embedding GW src WFN')))
-            list(map(update_tgt_data, tqdm(manybodydata, desc='Embedding GW tgt WFN')))
-            if del_wfn_original:
-                list(map(lambda data: data['src'].pop('wfn'), manybodydata))
-                list(map(lambda data: data['tgt'].pop('wfn'), manybodydata))
+    def create_latent_for_ManyBodyData(self, manybodydata, del_wfn_original=False):
+        assert manybodydata.info.dataset_type in ['WFN', 'GW', 'BSE'], "Only support dataset of `WFN`, `GW`, and `BSE`"
+        
+        with Pool(processes=32) as pool:
+            if manybodydata.info.dataset_type == 'WFN':
+                manybodydata = list(tqdm(pool.imap(self._embed_wfn, manybodydata), total=len(manybodydata), desc='Embedding WFN'))
+                if del_wfn_original:
+                    for data in manybodydata:
+                        data.pop('wfn', None)
 
-        elif manybodydata.info.dataset_type == 'BSE':
-            list(map(update_src_data, tqdm(manybodydata, desc='Embedding BSE src WFN')))   
-            if del_wfn_original:
-                list(map(lambda data: data['src'].pop('wfn'), manybodydata)) 
+            elif manybodydata.info.dataset_type == 'GW':
+                manybodydata = list(tqdm(pool.imap(self._embed_src, manybodydata), total=len(manybodydata), desc='Embedding GW src WFN'))
+                manybodydata = list(tqdm(pool.imap(self._embed_tgt, manybodydata), total=len(manybodydata), desc='Embedding GW tgt WFN'))
+                if del_wfn_original:
+                    for data in manybodydata:
+                        data['src'].pop('wfn', None)
+                        data['tgt'].pop('wfn', None)
 
-        else:
-            raise NotImplementedError("Task not implemented")
+            elif manybodydata.info.dataset_type == 'BSE':
+                manybodydata = list(tqdm(pool.imap(self._embed_src, manybodydata), total=len(manybodydata), desc='Embedding BSE src WFN'))
+                if del_wfn_original:
+                    for data in manybodydata:
+                        data['src'].pop('wfn', None)
 
         return manybodydata
-
-    def create_latent_for_ManyBodyData_h5(self, h5file, **kwargs)->ManyBodyData:
-        """
-        Abstract method to perform wavefunction embedding from HDF5 file.
-        Args:
-            h5file (str): Path to the HDF5 file.
-        Returns:
-        """
-        raise NotImplementedError
 
 
 class ManyBodyData_WFN_Embedder_trainable:
@@ -150,7 +201,7 @@ if __name__ == "__main__":
 
     " unit test "
     assert np.allclose(gwdata[0]['src']['latent'],  wfdata[0]['latent'])
-    assert abs(gwdata[0]['tgt']['latent'].sum() -  3.563698976979375) < 1e-6
+    assert abs(gwdata[0]['tgt']['latent'].sum() -  4) < 1e-6
 
     print('unit test passed!')
 

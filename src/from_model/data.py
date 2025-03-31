@@ -297,7 +297,8 @@ class ManyBodyData(Dataset):
         
         #===Process data===
         if self.multiprocessing:
-            with Pool() as pool:
+            with Pool(16) as pool:
+                # It seems 32 or 16 works the best.
                 self.data = list(tqdm(pool.imap(processor, folder_list), total=len(folder_list), desc='Processing WFN data'))
                 self.merge_dataset_h5(list(map(lambda x: x.decode('utf-8'), self.info.mat_id)), save_original=False, dataset_fname=self.dataset_fname)
         else:
