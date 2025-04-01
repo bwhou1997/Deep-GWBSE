@@ -19,6 +19,7 @@ from enum import Enum
 # from torchmetrics.regression import MeanAbsoluteError
 from sklearn.metrics import mean_absolute_error
 from functools import partial
+import os
 
 
 
@@ -183,13 +184,26 @@ class bse_training_flow:
 if __name__ == "__main__":  
     
     d_model = 24
-    num_epoches = 1000
+    num_epoches = 200
     train_val_split = 0.7
+    dataset_dir = './dataset'
+    dataset_fname = 'dataset_BSE_hBN.h5'
+    dataset_latent_fname = dataset_fname.split('.')[0] + '_latent.h5'
 
-    # bsedata = ToyDataSet.get_bse_dataset()
-    bsedata = ManyBodyData.from_existing_dataset('./dataset/dataset_BSE_semi.h5')
-    eb = ManyBodyData_WFN_Embedder_pretrained(d_model, SimpleSumXYEmbedder)
-    bsedata = eb.create_latent_for_ManyBodyData(bsedata, del_wfn_original=True)
+    if not os.path.exists(os.path.join(dataset_dir, dataset_latent_fname)):
+        print(f"latent dataset not found, creating new one")
+        # create latent_dataset
+        bsedata = ManyBodyData.from_existing_dataset(os.path.join(dataset_dir, dataset_fname))
+        eb = ManyBodyData_WFN_Embedder_pretrained(d_model, SimpleSumXYEmbedder)
+        bsedata = eb.create_latent_for_ManyBodyData_h5(bsedata, dataset_dir=dataset_dir, dataset_fname=dataset_latent_fname)
+        # bsedata = eb.create_latent_for_ManyBodyData(bsedata, del_wfn_original=True)
+
+    else:
+        print(f"latent dataset found, using {os.path.join(dataset_dir, dataset_latent_fname)}")
+        # directly read the latent_dataset
+        bsedata = ManyBodyData.from_existing_dataset(os.path.join(dataset_dir, dataset_latent_fname))
+
+    print('loaded latent dataset')
 
     bsedata_train = bsedata[:int(len(bsedata)*train_val_split)]
     bsedata_val = bsedata[int(len(bsedata)*train_val_split):]
@@ -204,7 +218,7 @@ if __name__ == "__main__":
                            d_model=d_model*2, 
                            BasisAssembly=ElectronHoleBasisAssembly_Concatenate)
     
-    optimizer = torch.optim.Adam(enc2.parameters(), lr=1e-3)
+    optimizer = torch.optim.Adam(enc2.parameters(), lr=1e-4)
     loss = torch.nn.MSELoss()
     # additional_metrics=MeanAbsoluteError()  # Ensure it's on GPU if needed
     additional_metrics = partial(torch.nn.functional.l1_loss, reduction='mean')
@@ -214,7 +228,7 @@ if __name__ == "__main__":
                                                 task=BSEPredictTask.eigenvalues,
                                                 additional_metrics=additional_metrics)
     bse_trainer_eigval.load_model(True)
-    bse_trainer_eigval.train(num_epoches, dataloader_train, dataloader_val, continued=False)
+    bse_trainer_eigval.train(num_epoches, dataloader_train, dataloader_val, continued=True)
 
 
     # bse_trainer_eigvec = BSETransformerTrainer(enc2, loss, optimizer,

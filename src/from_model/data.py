@@ -284,7 +284,7 @@ class ManyBodyData(Dataset):
         folder_list, self.info.mat_id = self.mat_statistics(self.flows_dir, self.dataset_type)
 
         #===initialize dataset h5 file===
-        self.init_dataset_h5(self.multiprocessing)
+        self.init_dataset_h5(dataset_dir=self.dataset_dir, dataset_fname=self.dataset_fname, info=self.info, multiprocessing=False)
 
         #==================Dataset Specific Setting==================#
         #===Get processor===
@@ -297,7 +297,8 @@ class ManyBodyData(Dataset):
         
         #===Process data===
         if self.multiprocessing:
-            with Pool() as pool:
+            with Pool(16) as pool:
+                # It seems 32 or 16 works the best.
                 self.data = list(tqdm(pool.imap(processor, folder_list), total=len(folder_list), desc='Processing WFN data'))
                 self.merge_dataset_h5(list(map(lambda x: x.decode('utf-8'), self.info.mat_id)), save_original=False, dataset_fname=self.dataset_fname)
         else:
@@ -344,11 +345,14 @@ class ManyBodyData(Dataset):
         assert len(folder_list) > 0, f"No data found under {flows_dir}"
         print(f"Found {len(folder_list)} out of {len(flows_status)} materials for {dataset_type}")
 
+        folder_list = sorted(folder_list)
+
         mat_ids = np.array([os.path.basename(folder) for folder in folder_list], dtype='S')
 
         return folder_list, mat_ids
 
-    def init_dataset_h5(self, multiprocessing: bool = False):
+    @staticmethod
+    def init_dataset_h5(dataset_dir:str, dataset_fname:str, info:dict, multiprocessing: bool = False):
         """
         multiprocessing: 
             True: create dataset files for each material
@@ -356,23 +360,23 @@ class ManyBodyData(Dataset):
             False: create one dataset file for all materials
                   h5: dataset_fname
         """
-        os.makedirs(self.dataset_dir, exist_ok=True)    
+        os.makedirs(dataset_dir, exist_ok=True)    
         if not multiprocessing:
-            with h5.File(pjoin(self.dataset_dir, self.dataset_fname), 'w') as f:
+            with h5.File(pjoin(dataset_dir, dataset_fname), 'w') as f:
                 # put info dict into h5 file
                 f.create_group('info')
-                for key, value in self.info.__dict__.items():
+                for key, value in info.__dict__.items():
                     f['info'].create_dataset(key, data=value)
                 print(f"[Series]: creating dataset file: {os.path.abspath(f.filename)}")
 
         else:
-            print(f"[Pool]: creating dataset files for {len(self.info.mat_id)} material")
-            mat_id_list = list(map(lambda x: x.decode('utf-8'), self.info.mat_id))
+            print(f"[Pool]: creating dataset files for {len(info.mat_id)} material")
+            mat_id_list = list(map(lambda x: x.decode('utf-8'), info.mat_id))
             for mat_id in mat_id_list:
-                with h5.File(pjoin(self.dataset_dir, mat_id+self.dataset_fname), 'w') as f:
+                with h5.File(pjoin(dataset_dir, mat_id+dataset_fname), 'w') as f:
                     # put info dict into h5 file
                     f.create_group('info')
-                    for key, value in self.info.__dict__.items():
+                    for key, value in info.__dict__.items():
                         f['info'].create_dataset(key, data=value)
                     # print(f"Creating dataset file: {os.path.abspath(f.filename)}")
 
@@ -382,7 +386,7 @@ class ManyBodyData(Dataset):
         """
         # print("Merging dataset h5 files", [mat_id+dataset_fname for mat_id in mat_id_list])
 
-        self.init_dataset_h5(multiprocessing=False)
+        self.init_dataset_h5(dataset_dir=self.dataset_dir, dataset_fname=self.dataset_fname, info=self.info, multiprocessing=False)
 
         for mat_id in mat_id_list:
             with h5.File(pjoin(self.dataset_dir, mat_id+dataset_fname), 'r') as f:
@@ -528,8 +532,8 @@ class ManyBodyData(Dataset):
 
         return datapoint
 
-    @classmethod
-    def datapoint_interface_h5(cls, dataset_h5_fname: str, mat_id: str, datapoint=None, mode: str = 'a'):
+    @staticmethod
+    def datapoint_interface_h5(dataset_h5_fname: str, mat_id: str, datapoint=None, mode: str = 'a'):
         """
         Save or load a datapoint to/from an HDF5 file.
         
