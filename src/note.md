@@ -132,7 +132,10 @@ Related files on top of the file:
 - `from_model/bsetrainer.py` (**unit-test**)
 - `from_model/gwtrainer.py`
 - `from_model/e2vaetrainer.py` (todo)
-- `from_mode/wfnembedder.py` (todo, used before transformer)
+- `from_mode/wfnembedder.py` (**unit-test**)
+  - create latent rep to manybodydata
+  - create latent rep and save to manybodydata h5 file (suggested!)
+  - parallel I/O
 
 - models:
     - `from_model/transformer.py` (**unit-test**)

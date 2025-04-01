@@ -160,8 +160,8 @@ class Mat_Flows_Augmentation(Workflow):
                 if taskname == 'gw':
                     aug_fpconfig['ngkpt'] = grid_sizes[j]
                     aug_fpconfig['kshift'] = grid_shift[j]
-                aug_fpconfig['dirname'] = aug_fpconfig['dirname'] + f'-aug-{j+1}-{taskname}-{labels[j]}'
-                aug_fpconfig['prefix'] = org_fpconfig['prefix'] + f'-aug-{j+1}-{taskname}-{labels[j]}'
+                aug_fpconfig['dirname'] = aug_fpconfig['dirname'] + f'-aug-{j+1:03d}-{taskname}-{labels[j]}'
+                aug_fpconfig['prefix'] = org_fpconfig['prefix'] + f'-aug-{j+1:03d}-{taskname}-{labels[j]}'
                 aug_fpconfigs.append(aug_fpconfig)
                 bse_org_fpconfigs_of_each_aug.append(bse_org_fpconfig_of_each_aug)
 

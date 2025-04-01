@@ -7,6 +7,8 @@ from tqdm import tqdm
 from pathos.multiprocessing import ProcessingPool as Pool
 from multiprocessing import Pool, cpu_count
 from tqdm import tqdm
+import os
+from os.path import join as pjoin
 
 # class ManyBodyData_WFN_Embedder_pretrained:
 #     """
@@ -79,54 +81,70 @@ from tqdm import tqdm
 #         """
 #         raise NotImplementedError
 
-
-
-
 class ManyBodyData_WFN_Embedder_pretrained:
     def __init__(self, latent_dim, latent_embedder, **kwargs):
         self.latent_embedder = latent_embedder(latent_dim, **kwargs)
+        self.del_wfn_original = False
 
     def _embed_wfn(self, wfn_data):
         """Helper function to embed wavefunction data."""
         wfn_data['latent'] = self.latent_embedder.embed(wfn_data['wfn'])
+        if self.del_wfn_original:
+            wfn_data.pop('wfn', None)
         return wfn_data
 
     def _embed_src(self, data):
         """Helper function to embed source wavefunction."""
         data['src']['latent'] = self.latent_embedder.embed(data['src']['wfn'])
+        if self.del_wfn_original:
+            data['src'].pop('wfn', None)
         return data
 
     def _embed_tgt(self, data):
         """Helper function to embed target wavefunction."""
         data['tgt']['latent'] = self.latent_embedder.embed(data['tgt']['wfn'])
+        if self.del_wfn_original:
+            data['tgt'].pop('wfn', None)
         return data
 
-    def create_latent_for_ManyBodyData(self, manybodydata, del_wfn_original=False):
+    def create_latent_for_ManyBodyData(self, manybodydata, del_wfn_original=False)->ManyBodyData:
+        """
+        manybodydata -> manybodydata (latent created)
+        """
+        self.del_wfn_original = del_wfn_original
         assert manybodydata.info.dataset_type in ['WFN', 'GW', 'BSE'], "Only support dataset of `WFN`, `GW`, and `BSE`"
         
         with Pool(processes=32) as pool:
             if manybodydata.info.dataset_type == 'WFN':
                 manybodydata = list(tqdm(pool.imap(self._embed_wfn, manybodydata), total=len(manybodydata), desc='Embedding WFN'))
-                if del_wfn_original:
-                    for data in manybodydata:
-                        data.pop('wfn', None)
 
             elif manybodydata.info.dataset_type == 'GW':
                 manybodydata = list(tqdm(pool.imap(self._embed_src, manybodydata), total=len(manybodydata), desc='Embedding GW src WFN'))
                 manybodydata = list(tqdm(pool.imap(self._embed_tgt, manybodydata), total=len(manybodydata), desc='Embedding GW tgt WFN'))
-                if del_wfn_original:
-                    for data in manybodydata:
-                        data['src'].pop('wfn', None)
-                        data['tgt'].pop('wfn', None)
 
             elif manybodydata.info.dataset_type == 'BSE':
                 manybodydata = list(tqdm(pool.imap(self._embed_src, manybodydata), total=len(manybodydata), desc='Embedding BSE src WFN'))
-                if del_wfn_original:
-                    for data in manybodydata:
-                        data['src'].pop('wfn', None)
-
+                
         return manybodydata
 
+    def create_latent_for_ManyBodyData_h5(self, manybodydata:ManyBodyData, dataset_dir:str='./', dataset_fname:str='./latent_mbdata.h5'):
+        """
+        manybodydata -> manybodydata, manybody_h5file (latent replacing wfn)
+        """
+        info = manybodydata.info
+        self.info = info
+        info.latent_created = True
+        manybodydata = self.create_latent_for_ManyBodyData(manybodydata, del_wfn_original=True)
+
+        # Create a new HDF5 file with the updated data
+        ManyBodyData.init_dataset_h5(dataset_dir, dataset_fname, info, multiprocessing=False)
+
+        # inf.mats_id has the same order ad manybodydata
+        # see data.py ManyBodyData.load_dataset, ManyBodyData.mat_statistics, and ManyBodyData.process for details
+        for i, mat_id in enumerate(info.mat_id):
+            ManyBodyData.datapoint_interface_h5(pjoin(dataset_dir, dataset_fname), mat_id, manybodydata[i], mode='a')
+        
+        return manybodydata
 
 class ManyBodyData_WFN_Embedder_trainable:
     """
@@ -194,14 +212,25 @@ if __name__ == "__main__":
     bsedata = ManyBodyData.from_existing_dataset('./dataset/dataset_BSE.h5')
 
     eb = ManyBodyData_WFN_Embedder_pretrained(24, SimpleSumXYEmbedder)
+    eb.create_latent_for_ManyBodyData_h5(wfdata, dataset_dir='./dataset', dataset_fname='dataset_WFN_latent.h5')
+    eb.create_latent_for_ManyBodyData_h5(gwdata, dataset_dir='./dataset', dataset_fname='dataset_GW_latent.h5')
+    eb.create_latent_for_ManyBodyData_h5(bsedata, dataset_dir='./dataset', dataset_fname='dataset_BSE_latent.h5')
 
     wfdata = eb.create_latent_for_ManyBodyData(wfdata, del_wfn_original=True)
     gwdata = eb.create_latent_for_ManyBodyData(gwdata, del_wfn_original=True)
     bsedata = eb.create_latent_for_ManyBodyData(bsedata, del_wfn_original=True)
 
+    wfdata_h5 = ManyBodyData.from_existing_dataset('./dataset/dataset_WFN_latent.h5')
+    gwdata_h5 = ManyBodyData.from_existing_dataset('./dataset/dataset_GW_latent.h5')
+    bsedata_h5 = ManyBodyData.from_existing_dataset('./dataset/dataset_BSE_latent.h5')
+
     " unit test "
     assert np.allclose(gwdata[0]['src']['latent'],  wfdata[0]['latent'])
     assert abs(gwdata[0]['tgt']['latent'].sum() -  4) < 1e-6
+    assert np.allclose(gwdata[0]['src']['latent'],  gwdata_h5[0]['src']['latent'])
+    assert np.allclose(gwdata[0]['tgt']['latent'],  gwdata_h5[0]['tgt']['latent'])
+    assert np.allclose(bsedata[0]['src']['latent'],  bsedata_h5[0]['src']['latent'])
+    assert np.allclose(wfdata[0]['latent'],  wfdata_h5[0]['latent'])
 
     print('unit test passed!')
 
