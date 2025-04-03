@@ -32,7 +32,6 @@ Features: G0W0, BSE (binding energy, |<cvk|S>|)
 The stru-input folder contains the crystal structures
 ```bash
 stru-input
-├── fpconfig.json
 ├── mat-1 # (extensible)
 |   └── stru.cif
 ├── mat-2

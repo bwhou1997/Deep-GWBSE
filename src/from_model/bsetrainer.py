@@ -17,7 +17,7 @@ from basisassembly import ElectronHoleBasisAssembly_Concatenate, sort_exciton_ei
 from wfnembedder import ManyBodyData_WFN_Embedder_pretrained, SimpleSumXYEmbedder
 from enum import Enum
 # from torchmetrics.regression import MeanAbsoluteError
-from sklearn.metrics import mean_absolute_error
+from sklearn.metrics import mean_absolute_error, r2_score
 from functools import partial
 import os
 
@@ -86,7 +86,8 @@ class BSETransformerTrainer(Trainer):
             if self.task == BSEPredictTask.eigenvalues:
                 return self.additional_metrics(self.value.ravel(), self.eigenvalues_sorted_by_eh_pair_energy.ravel())
             else:
-                raise NotImplementedError("Only support eigenvalues additional metrics task for now")
+                return self.additional_metrics(self.atten.ravel(), self.eigenvectors_sorted_by_eh_pair_energy.ravel())
+                # raise NotImplementedError("Only support eigenvalues additional metrics task for now")
 
 
     @torch.no_grad()
@@ -185,7 +186,7 @@ if __name__ == "__main__":
     
     d_model = 24
     num_epoches = 200
-    train_val_split = 0.7
+    train_val_split = 0.6
     dataset_dir = './dataset'
     dataset_fname = 'dataset_BSE_hBN.h5'
     dataset_latent_fname = dataset_fname.split('.')[0] + '_latent.h5'
@@ -218,35 +219,41 @@ if __name__ == "__main__":
                            d_model=d_model*2, 
                            BasisAssembly=ElectronHoleBasisAssembly_Concatenate)
     
-    optimizer = torch.optim.Adam(enc2.parameters(), lr=1e-4)
+    optimizer = torch.optim.Adam(enc2.parameters(), lr=1e-3)
     loss = torch.nn.MSELoss()
     # additional_metrics=MeanAbsoluteError()  # Ensure it's on GPU if needed
     additional_metrics = partial(torch.nn.functional.l1_loss, reduction='mean')
 
-    bse_trainer_eigval = BSETransformerTrainer(enc2, loss, optimizer,  
-                                                model_name="bse_transformer_eval", 
-                                                task=BSEPredictTask.eigenvalues,
-                                                additional_metrics=additional_metrics)
-    bse_trainer_eigval.load_model(True)
-    bse_trainer_eigval.train(num_epoches, dataloader_train, dataloader_val, continued=True)
+    # bse_trainer_eigval = BSETransformerTrainer(enc2, loss, optimizer,  
+    #                                             model_name="bse_transformer_eval", 
+    #                                             task=BSEPredictTask.eigenvalues,
+    #                                             additional_metrics=additional_metrics)
+    # bse_trainer_eigval.load_model(True)
+    # bse_trainer_eigval.train(num_epoches, dataloader_train, dataloader_val, continued=True)
 
 
-    # bse_trainer_eigvec = BSETransformerTrainer(enc2, loss, optimizer,
-    #                                            model_name="bse_transformer_evec",
-    #                                            task=BSEPredictTask.eigenvectors)
-    # bse_trainer_eigvec.load_model(load_best=True)
-    # bse_trainer_eigvec.train(num_epoches, dataloader_train, dataloader_val, continued=True)
+    bse_trainer_eigvec = BSETransformerTrainer(enc2, loss, optimizer,
+                                               model_name="bse_transformer_evec",
+                                               task=BSEPredictTask.eigenvectors,
+                                               additional_metrics=additional_metrics)
+    bse_trainer_eigvec.load_model(load_best=True)
+    bse_trainer_eigvec.train(num_epoches, dataloader_train, dataloader_val, continued=True)
 
-    loss = 0
-    bse_trainer_eigval.load_model(load_best=True)
-    for d in dataloader_val:
-        ele, hole, eigenvalues, eigenvectors = d
-        eigval_sort, eigvec_sort = sort_exciton_eigenvalues_by_eh_pair_energy(ele, hole, eigenvalues, eigenvectors) 
-        # break
-        loss += mean_absolute_error(bse_trainer_eigval.evaluate(d).ravel(), eigval_sort.ravel())
+    # loss = 0
+    # r2 = 0
+    # bse_trainer_eigval.load_model(load_best=True)
+    # for d in dataloader_val:
+    #     ele, hole, eigenvalues, eigenvectors = d
+    #     eigval_sort, eigvec_sort = sort_exciton_eigenvalues_by_eh_pair_energy(ele, hole, eigenvalues, eigenvectors) 
+    #     # break
+    #     loss += mean_absolute_error(bse_trainer_eigval.evaluate(d).ravel(), eigval_sort.ravel())
+    #     r2 += r2_score(bse_trainer_eigval.evaluate(d).ravel(), eigval_sort.ravel())
 
-        print("eigenval:", mean_absolute_error(bse_trainer_eigval.evaluate(d).ravel(), eigval_sort.ravel()), 'eV')
+    #     print('\n')
+    #     print("eigenval:", mean_absolute_error(bse_trainer_eigval.evaluate(d).ravel(), eigval_sort.ravel()), 'eV')
+    #     print('r2:', r2_score(bse_trainer_eigval.evaluate(d).ravel(), eigval_sort.ravel()))
 
-    print('MAE:', loss/len(dataloader_val))
+    # print('MAE:', loss/len(dataloader_val))
+    # print('R2:', r2/len(dataloader_val))
     # bse_trainer_eigval.load_model(load_best=True)
     # print('eigenvec:', mean_absolute_error(bse_trainer_eigval.evaluate(d).ravel(), eigvec_sort.ravel()))

@@ -139,7 +139,7 @@ class ManyBodyData_WFN_Embedder_pretrained:
         # Create a new HDF5 file with the updated data
         ManyBodyData.init_dataset_h5(dataset_dir, dataset_fname, info, multiprocessing=False)
 
-        # inf.mats_id has the same order ad manybodydata
+        # info.mats_id has the same order as manybodydata
         # see data.py ManyBodyData.load_dataset, ManyBodyData.mat_statistics, and ManyBodyData.process for details
         for i, mat_id in enumerate(info.mat_id):
             ManyBodyData.datapoint_interface_h5(pjoin(dataset_dir, dataset_fname), mat_id, manybodydata[i], mode='a')
