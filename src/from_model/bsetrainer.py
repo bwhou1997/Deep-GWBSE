@@ -58,6 +58,7 @@ class BSETransformerTrainer(Trainer):
         hole = [x.to(self.device) for x in hole]
         eigenvalues = eigenvalues.to(self.device)
         eigenvectors = eigenvectors.to(self.device)
+        kcv_prod = np.prod(eigenvalues.shape[-3:])
 
         self.value, self.atten = self.model([ele, hole])
 
@@ -70,7 +71,10 @@ class BSETransformerTrainer(Trainer):
         elif self.task == BSEPredictTask.eigenvectors:
             _, self.eigenvectors_sorted_by_eh_pair_energy = sort_exciton_eigenvalues_by_eh_pair_energy(ele, hole, eigenvalues, eigenvectors) 
             assert self.atten.shape == self.eigenvectors_sorted_by_eh_pair_energy.shape, f"atten.shape: {self.atten.shape}, eigenvectors_sorted_by_eh_pair_energy.shape: {eigenvectors_sorted_by_eh_pair_energy.shape}. Make sure [ele, hole] order right"
-            return self.loss(self.atten, self.eigenvectors_sorted_by_eh_pair_energy)
+            
+            # soft_atten = F.softmax(self.atten.reshape(kcv_prod, kcv_prod), dim=-1)
+            log_atten = (self.atten.reshape(kcv_prod, kcv_prod)).log()
+            return self.loss(log_atten, self.eigenvectors_sorted_by_eh_pair_energy.reshape(kcv_prod, kcv_prod))
         else:
             raise NotImplementedError("Task not implemented")
 
@@ -161,6 +165,9 @@ def bse_collate_fn(batch):
     eigenvalues = (torch.from_numpy(label['eigenvalues']).float())[None,...]
     eigenvectors = (torch.from_numpy(label['eigenvectors']).float())[None,...]
 
+    # normalize eigenvectors
+    eigenvectors = eigenvectors / eigenvectors.sum(axis=(2,3,4), keepdim=True)
+
     assert ele[0].shape[1] == nk, f"ele[0].shape[1]: {ele[0].shape[1]}, nk: {nk}"
     assert ele[0].shape[2] == nc, f"ele[0].shape[2]: {ele[0].shape[2]}, nc: {nc}"
     assert hole[0].shape[1] == nk, f"hole[0].shape[1]: {hole[0].shape[1]}, nk: {nk}"
@@ -186,10 +193,12 @@ if __name__ == "__main__":
     
     d_model = 24
     num_epoches = 200
-    train_val_split = 0.6
+    train_val_split = 0.5
     dataset_dir = './dataset'
-    dataset_fname = 'dataset_BSE_hBN.h5'
+    dataset_fname = 'dataset_BSE.h5'
     dataset_latent_fname = dataset_fname.split('.')[0] + '_latent.h5'
+    # data_slice = slice(0,-1)
+    data_slice = None
 
     if not os.path.exists(os.path.join(dataset_dir, dataset_latent_fname)):
         print(f"latent dataset not found, creating new one")
@@ -202,7 +211,7 @@ if __name__ == "__main__":
     else:
         print(f"latent dataset found, using {os.path.join(dataset_dir, dataset_latent_fname)}")
         # directly read the latent_dataset
-        bsedata = ManyBodyData.from_existing_dataset(os.path.join(dataset_dir, dataset_latent_fname))
+        bsedata = ManyBodyData.from_existing_dataset(os.path.join(dataset_dir, dataset_latent_fname), data_slice=data_slice)
 
     print('loaded latent dataset')
 
