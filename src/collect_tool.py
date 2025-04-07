@@ -300,6 +300,17 @@ def generate_sbatch_jobs(fname='./run_aug.sh', nsbatch=3, hours=4, cluster='perl
     
     print(f"Generated {nsbatch} job scripts.")
 
+def compact_data(folder: str = '.', unwanted: dict = None):
+    unwanted_files = unwanted.get('unwanted_files', [])
+    for file in unwanted_files:
+        file_path = pjoin(folder, file)
+        if os.path.exists(file_path):
+            os.remove(file_path)
+            print(f"Removed {file_path}")
+        else:
+            print(f"{file_path} does not exist")
+    return 0
+
 if __name__ == '__main__':
     import argparse
 
@@ -312,11 +323,12 @@ if __name__ == '__main__':
         formatter_class=argparse.RawTextHelpFormatter
     )
 
-    parser.add_argument('mode', choices=['md', 'deeph', 'metalseek', 'st', 'sub'], help="""\
+    parser.add_argument('mode', choices=['md', 'deeph', 'metalseek', 'st', 'sub','compact'], help="""\
     md: collect structures from MD output.
     deeph: collect DFT-Ham from DFT/SIESTA/HPRO flows.
     metalseek: determine metallicity from DFT flows
     st: check the status of the flows
+    compact: compact data. delete the unwanted files to save space
     """)
     # parser.add_argument('mode', choices=['md', 'deeph', 'metal'], help='md: collect structures from MD output. \ndeeph: collect DFT-Ham from DFT/SIESTA/HPRO flows. \nmetal:')
     parser.add_argument('-md_input', type=str, help='md: input file name')
@@ -327,6 +339,8 @@ if __name__ == '__main__':
     parser.add_argument('-nsbatch', type=int, default=3, help='sub: number of sub-sbatch jobs')
     parser.add_argument('-hours', type=int, default=4, help='sub: hours for each job')
     parser.add_argument('-nodes', type=int, default=4, help='sub: number of nodes for each job')
+    parser.add_argument('-folder', type=str, default='.', help='compact: folder to compact')
+    parser.add_argument('-unwanted', type=str, default='./unwanted.json', help='compact: json includes unwanted files to delete')
 
     args = parser.parse_args()
 
@@ -354,4 +368,13 @@ if __name__ == '__main__':
         if not args.job:
             parser.error('--job is required in "sub" mode')
         generate_sbatch_jobs(args.job, args.nsbatch, args.hours, 'perlmutter', args.nodes)
+
+    elif args.mode == 'compact':
+        if not args.folder:
+            parser.error('--folder is required in "compact" mode')
+        if not args.unwanted:
+            parser.error('--unwanted is required in "compact" mode')
+        with open(args.unwanted, 'r') as f:
+            unwanted = json.load(f)
+        compact_data(args.folder, unwanted)
         
