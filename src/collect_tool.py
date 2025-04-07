@@ -15,6 +15,7 @@ from os.path import join as pjoin
 import os
 import subprocess
 from tqdm import tqdm
+import glob
 
 
 def collect_from_md(md_input_fname = './flow-hBN-md/flow-hBN-AB-661/01-density/scf.in',
@@ -300,6 +301,56 @@ def generate_sbatch_jobs(fname='./run_aug.sh', nsbatch=3, hours=4, cluster='perl
     
     print(f"Generated {nsbatch} job scripts.")
 
+def compact_data_folder(folder: str = '.', unwanted: dict = None):
+    unwanted_files = unwanted.get('unwanted_files', [])
+    for file in unwanted_files:
+        pattern = glob.glob(pjoin(folder, file))
+        if not pattern:
+            print(f"{pjoin(folder, file)} does not exist")
+        else:
+            for file_path in pattern:
+                os.remove(file_path)
+            print(f"Removed {pjoin(folder, file)}")
+def compact_data_flows(flows: str = './flows', unwanted: dict = None):
+    unwanted_files = unwanted.get('unwanted_files', [])
+    f = os.scandir(flows)
+    for entry in f:
+        if entry.is_dir():
+            print("")
+            print(f"Compacting {entry.path}")
+            compact_data_folder(entry.path, unwanted)
+
+def restart_sbatch_jobs(flows):
+    """
+    Restart sbatch jobs for unfinished flows.
+    """
+    # check the status of the flows
+    flows_status = check_flows_status(flows, dump=False)
+
+    length_of_flows = len(flows_status)
+    
+    # find the unfinished flows
+    unfinished_flows = []
+    for flow, status in flows_status.items():
+        if "No" in status and status["No"]:
+            unfinished_flows.append(flow)
+    length_of_unfinished_flows = len(unfinished_flows)
+    print(f"Found {length_of_unfinished_flows} unfinished flows out of {length_of_flows} flows.")
+    # generate sbatch jobs for the unfinished flows
+
+    with open('restart_run.sh', 'w') as f:
+        f.write("#!/bin/bash\n")
+        f.write("\n")
+        for flow in unfinished_flows:
+            f.write(f"cd {flow}\n")
+            f.write(f'echo "{flow}"\n')
+            f.write("bash run.sh\n")
+            f.write("cd ..\n")
+            f.write("\n")
+    
+    print(f"Generated restart_run.sh for {length_of_unfinished_flows} unfinished flows.")
+
+
 if __name__ == '__main__':
     import argparse
 
@@ -312,21 +363,25 @@ if __name__ == '__main__':
         formatter_class=argparse.RawTextHelpFormatter
     )
 
-    parser.add_argument('mode', choices=['md', 'deeph', 'metalseek', 'st', 'sub'], help="""\
+    parser.add_argument('mode', choices=['md', 'deeph', 'metalseek', 'st', 'sub','compact', 'restart'], help="""\
     md: collect structures from MD output.
     deeph: collect DFT-Ham from DFT/SIESTA/HPRO flows.
     metalseek: determine metallicity from DFT flows
     st: check the status of the flows
+    compact: compact data. delete the unwanted files to save space
+    restart: generate new sbatch jobs for all the unfinished flows
     """)
     # parser.add_argument('mode', choices=['md', 'deeph', 'metal'], help='md: collect structures from MD output. \ndeeph: collect DFT-Ham from DFT/SIESTA/HPRO flows. \nmetal:')
     parser.add_argument('-md_input', type=str, help='md: input file name')
     parser.add_argument('-md_output', type=str, help='md: output file name')
     parser.add_argument('-md_suffix', type=str, default='', help='md: suffix for MD files')
-    parser.add_argument('-flows', type=str, help='deeph/metalseek: directory containing DFT/SIESTA/HPRO flows')
+    parser.add_argument('-flows', type=str, help='deeph/metalseek & compact: directory containing DFT/SIESTA/HPRO/GW/BSE flows')
     parser.add_argument('-job', type=str, help='sub: sbatch job file name')
     parser.add_argument('-nsbatch', type=int, default=3, help='sub: number of sub-sbatch jobs')
     parser.add_argument('-hours', type=int, default=4, help='sub: hours for each job')
     parser.add_argument('-nodes', type=int, default=4, help='sub: number of nodes for each job')
+    parser.add_argument('-folder', type=str, help='compact: directory to compact')
+    parser.add_argument('-unwanted', type=str,  help='compact: json includes unwanted files to delete')
 
     args = parser.parse_args()
 
@@ -354,4 +409,24 @@ if __name__ == '__main__':
         if not args.job:
             parser.error('--job is required in "sub" mode')
         generate_sbatch_jobs(args.job, args.nsbatch, args.hours, 'perlmutter', args.nodes)
+
+    
+    elif args.mode == 'compact':
+        if not args.unwanted:
+            parser.error('--unwanted is required in "compact" mode')
+        with open(args.unwanted, 'r') as f:
+            unwanted = json.load(f)
+        if args.flows != None and args.folder == None:
+            compact_data_flows(args.flows, unwanted)
+        elif args.flows == None and args.folder != None:
+            compact_data_folder(args.folder, unwanted)
+        elif args.flows != None and args.folder != None:
+            parser.error('--folder and --flows are mutually exclusive')
+        elif args.flows == None and args.folder == None:
+            parser.error('--folder or --flows is required in "compact" mode')
+
+    elif args.mode == 'restart':
+        if not args.flows:
+            parser.error('--flows is required in "restart" mode')
+        restart_sbatch_jobs(args.flows)
         
