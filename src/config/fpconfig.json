@@ -92,5 +92,6 @@
     "5_HPRO": "HPRO settings",
         "hpro_calcator": true,
     "Others": "Other settings",
-        "compact_data": false
+        "compact_data": true,
+        "unwanted_files": "/pscratch/sd/x/xianxu/Deep-GWBSE/Deep-GWBSE/src/config/unwanted.json"
     }
