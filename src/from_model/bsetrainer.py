@@ -17,8 +17,9 @@ from basisassembly import ElectronHoleBasisAssembly_Concatenate, sort_exciton_ei
 from wfnembedder import ManyBodyData_WFN_Embedder_pretrained, SimpleSumXYEmbedder
 from enum import Enum
 # from torchmetrics.regression import MeanAbsoluteError
-from sklearn.metrics import mean_absolute_error
+from sklearn.metrics import mean_absolute_error, r2_score
 from functools import partial
+import os
 
 
 
@@ -57,6 +58,7 @@ class BSETransformerTrainer(Trainer):
         hole = [x.to(self.device) for x in hole]
         eigenvalues = eigenvalues.to(self.device)
         eigenvectors = eigenvectors.to(self.device)
+        kcv_prod = np.prod(eigenvalues.shape[-3:])
 
         self.value, self.atten = self.model([ele, hole])
 
@@ -69,7 +71,10 @@ class BSETransformerTrainer(Trainer):
         elif self.task == BSEPredictTask.eigenvectors:
             _, self.eigenvectors_sorted_by_eh_pair_energy = sort_exciton_eigenvalues_by_eh_pair_energy(ele, hole, eigenvalues, eigenvectors) 
             assert self.atten.shape == self.eigenvectors_sorted_by_eh_pair_energy.shape, f"atten.shape: {self.atten.shape}, eigenvectors_sorted_by_eh_pair_energy.shape: {eigenvectors_sorted_by_eh_pair_energy.shape}. Make sure [ele, hole] order right"
-            return self.loss(self.atten, self.eigenvectors_sorted_by_eh_pair_energy)
+            
+            # soft_atten = F.softmax(self.atten.reshape(kcv_prod, kcv_prod), dim=-1)
+            log_atten = (self.atten.reshape(kcv_prod, kcv_prod)).log()
+            return self.loss(log_atten, self.eigenvectors_sorted_by_eh_pair_energy.reshape(kcv_prod, kcv_prod))
         else:
             raise NotImplementedError("Task not implemented")
 
@@ -85,7 +90,8 @@ class BSETransformerTrainer(Trainer):
             if self.task == BSEPredictTask.eigenvalues:
                 return self.additional_metrics(self.value.ravel(), self.eigenvalues_sorted_by_eh_pair_energy.ravel())
             else:
-                raise NotImplementedError("Only support eigenvalues additional metrics task for now")
+                return self.additional_metrics(self.atten.ravel(), self.eigenvectors_sorted_by_eh_pair_energy.ravel())
+                # raise NotImplementedError("Only support eigenvalues additional metrics task for now")
 
 
     @torch.no_grad()
@@ -159,6 +165,9 @@ def bse_collate_fn(batch):
     eigenvalues = (torch.from_numpy(label['eigenvalues']).float())[None,...]
     eigenvectors = (torch.from_numpy(label['eigenvectors']).float())[None,...]
 
+    # normalize eigenvectors
+    eigenvectors = eigenvectors / eigenvectors.sum(axis=(2,3,4), keepdim=True)
+
     assert ele[0].shape[1] == nk, f"ele[0].shape[1]: {ele[0].shape[1]}, nk: {nk}"
     assert ele[0].shape[2] == nc, f"ele[0].shape[2]: {ele[0].shape[2]}, nc: {nc}"
     assert hole[0].shape[1] == nk, f"hole[0].shape[1]: {hole[0].shape[1]}, nk: {nk}"
@@ -183,13 +192,28 @@ class bse_training_flow:
 if __name__ == "__main__":  
     
     d_model = 24
-    num_epoches = 1000
-    train_val_split = 0.7
+    num_epoches = 200
+    train_val_split = 0.5
+    dataset_dir = './dataset'
+    dataset_fname = 'dataset_BSE.h5'
+    dataset_latent_fname = dataset_fname.split('.')[0] + '_latent.h5'
+    # data_slice = slice(0,-1)
+    data_slice = None
 
-    # bsedata = ToyDataSet.get_bse_dataset()
-    bsedata = ManyBodyData.from_existing_dataset('./dataset/dataset_BSE_semi.h5')
-    eb = ManyBodyData_WFN_Embedder_pretrained(d_model, SimpleSumXYEmbedder)
-    bsedata = eb.create_latent_for_ManyBodyData(bsedata, del_wfn_original=True)
+    if not os.path.exists(os.path.join(dataset_dir, dataset_latent_fname)):
+        print(f"latent dataset not found, creating new one")
+        # create latent_dataset
+        bsedata = ManyBodyData.from_existing_dataset(os.path.join(dataset_dir, dataset_fname))
+        eb = ManyBodyData_WFN_Embedder_pretrained(d_model, SimpleSumXYEmbedder)
+        bsedata = eb.create_latent_for_ManyBodyData_h5(bsedata, dataset_dir=dataset_dir, dataset_fname=dataset_latent_fname)
+        # bsedata = eb.create_latent_for_ManyBodyData(bsedata, del_wfn_original=True)
+
+    else:
+        print(f"latent dataset found, using {os.path.join(dataset_dir, dataset_latent_fname)}")
+        # directly read the latent_dataset
+        bsedata = ManyBodyData.from_existing_dataset(os.path.join(dataset_dir, dataset_latent_fname), data_slice=data_slice)
+
+    print('loaded latent dataset')
 
     bsedata_train = bsedata[:int(len(bsedata)*train_val_split)]
     bsedata_val = bsedata[int(len(bsedata)*train_val_split):]
@@ -209,30 +233,36 @@ if __name__ == "__main__":
     # additional_metrics=MeanAbsoluteError()  # Ensure it's on GPU if needed
     additional_metrics = partial(torch.nn.functional.l1_loss, reduction='mean')
 
-    bse_trainer_eigval = BSETransformerTrainer(enc2, loss, optimizer,  
-                                                model_name="bse_transformer_eval", 
-                                                task=BSEPredictTask.eigenvalues,
-                                                additional_metrics=additional_metrics)
-    bse_trainer_eigval.load_model(True)
-    bse_trainer_eigval.train(num_epoches, dataloader_train, dataloader_val, continued=False)
+    # bse_trainer_eigval = BSETransformerTrainer(enc2, loss, optimizer,  
+    #                                             model_name="bse_transformer_eval", 
+    #                                             task=BSEPredictTask.eigenvalues,
+    #                                             additional_metrics=additional_metrics)
+    # bse_trainer_eigval.load_model(True)
+    # bse_trainer_eigval.train(num_epoches, dataloader_train, dataloader_val, continued=True)
 
 
-    # bse_trainer_eigvec = BSETransformerTrainer(enc2, loss, optimizer,
-    #                                            model_name="bse_transformer_evec",
-    #                                            task=BSEPredictTask.eigenvectors)
-    # bse_trainer_eigvec.load_model(load_best=True)
-    # bse_trainer_eigvec.train(num_epoches, dataloader_train, dataloader_val, continued=True)
+    bse_trainer_eigvec = BSETransformerTrainer(enc2, loss, optimizer,
+                                               model_name="bse_transformer_evec",
+                                               task=BSEPredictTask.eigenvectors,
+                                               additional_metrics=additional_metrics)
+    bse_trainer_eigvec.load_model(load_best=True)
+    bse_trainer_eigvec.train(num_epoches, dataloader_train, dataloader_val, continued=True)
 
-    loss = 0
-    bse_trainer_eigval.load_model(load_best=True)
-    for d in dataloader_val:
-        ele, hole, eigenvalues, eigenvectors = d
-        eigval_sort, eigvec_sort = sort_exciton_eigenvalues_by_eh_pair_energy(ele, hole, eigenvalues, eigenvectors) 
-        # break
-        loss += mean_absolute_error(bse_trainer_eigval.evaluate(d).ravel(), eigval_sort.ravel())
+    # loss = 0
+    # r2 = 0
+    # bse_trainer_eigval.load_model(load_best=True)
+    # for d in dataloader_val:
+    #     ele, hole, eigenvalues, eigenvectors = d
+    #     eigval_sort, eigvec_sort = sort_exciton_eigenvalues_by_eh_pair_energy(ele, hole, eigenvalues, eigenvectors) 
+    #     # break
+    #     loss += mean_absolute_error(bse_trainer_eigval.evaluate(d).ravel(), eigval_sort.ravel())
+    #     r2 += r2_score(bse_trainer_eigval.evaluate(d).ravel(), eigval_sort.ravel())
 
-        print("eigenval:", mean_absolute_error(bse_trainer_eigval.evaluate(d).ravel(), eigval_sort.ravel()), 'eV')
+    #     print('\n')
+    #     print("eigenval:", mean_absolute_error(bse_trainer_eigval.evaluate(d).ravel(), eigval_sort.ravel()), 'eV')
+    #     print('r2:', r2_score(bse_trainer_eigval.evaluate(d).ravel(), eigval_sort.ravel()))
 
-    print('MAE:', loss/len(dataloader_val))
+    # print('MAE:', loss/len(dataloader_val))
+    # print('R2:', r2/len(dataloader_val))
     # bse_trainer_eigval.load_model(load_best=True)
     # print('eigenvec:', mean_absolute_error(bse_trainer_eigval.evaluate(d).ravel(), eigvec_sort.ravel()))

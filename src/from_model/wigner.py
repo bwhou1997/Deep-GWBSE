@@ -181,7 +181,7 @@ if __name__ == '__main__':
     # logging.basicConfig(level=logging.INFO, format='%(message)s')
 
     wf = interface.wfn('../../examples/flows/mat-5/02-wfn/wfn.h5')
-    w00_3D = abs(wf.get_wfn_dataset(cell_slab_truncation=15, AngstromPerPixel_z=0.2)['wfn'][0,3,:,:,:])
+    w00_3D = abs(wf.get_dataset(cell_slab_truncation=15, AngstromPerPixel_z=0.2)['wfn'][0,3,:,:,:])
     lattice = wf.crystal['avec'] * wf.crystal['alat'] * au2ang
     FFT_grid_shape = w00_3D.shape
     shift = 14

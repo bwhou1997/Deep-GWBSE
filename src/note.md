@@ -20,8 +20,9 @@ twist.cif─┌──(deephe3-xx.py, diag_plot.py)─> band.png
 ```
 --Path 2--:
 1. Train:
-external database──>fp-input─(flows.py, data.py)─> ml_dataset.h5 ─(xx_trainer.py)─> model
-
+external database──>fp-input─(flows.py, data.py)─> ml_dataset.h5 ──┌─(xx_trainer.py)─> model
+                                                   └─(flows-aug.py)┘
+2. Use:
 Features: G0W0, BSE (binding energy, |<cvk|S>|)
 ```
 
@@ -31,7 +32,6 @@ Features: G0W0, BSE (binding energy, |<cvk|S>|)
 The stru-input folder contains the crystal structures
 ```bash
 stru-input
-├── fpconfig.json
 ├── mat-1 # (extensible)
 |   └── stru.cif
 ├── mat-2
@@ -41,6 +41,7 @@ stru-input
 Related files on top of the folder:
 - `flow.py` (**unit-test**): `-c` reads .json file, create simple material flow.
 - `flows.py` (**unit-test**): `-c` reads .json file, create multiple material flows.
+- `flows-augmentations.py`: `-c` reads .json file, create `GW` or `BSE` augmentation flows for finished flows.
 - `fptask.py`: customized task for the `flow.py` script.
 - `collect_tool.py`: `md` collect molecular dynamics data to build stru-input 
 - `config/single_mat_config.json`: The configuration file for the `flow.py`(single material flow).
@@ -130,7 +131,10 @@ Related files on top of the file:
 - `from_model/bsetrainer.py` (**unit-test**)
 - `from_model/gwtrainer.py`
 - `from_model/e2vaetrainer.py` (todo)
-- `from_mode/wfnembedder.py` (todo, used before transformer)
+- `from_mode/wfnembedder.py` (**unit-test**)
+  - create latent rep to manybodydata
+  - create latent rep and save to manybodydata h5 file (suggested!)
+  - parallel I/O
 
 - models:
     - `from_model/transformer.py` (**unit-test**)

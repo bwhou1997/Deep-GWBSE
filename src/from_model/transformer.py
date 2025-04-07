@@ -36,7 +36,7 @@ class MBformerEncoder(nn.Module):
 
         self.kpt_dim = kpt_dim
         self.max_band = max_band
-        assert activation in ["relu", "gelu", "silu", 'leaky_relu'], f"activation should be relu, gelu or glu, but got {activation}"
+        assert activation in ["relu", "gelu"], f"activation should be relu, gelu but got {activation}"
 
         # BasisAssembly: get d_input based on BasisAssembly and d_model
         # e.g. if assmebly is tensor product, then d_fixed**2 == d_model

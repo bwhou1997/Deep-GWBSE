@@ -132,6 +132,7 @@ class DFT_GW_HPRO_Flow(Workflow):
         self.ngkpt = kwargs.pop('ngkpt')
         self.ngkpt_fi = kwargs.pop('ngkpt_fi')
         self.kshift = kwargs.pop('kshift', [.0,.0,.0])
+        self.kshift_fi = kwargs.pop('kshift_fi', [.0,.0,.0]) # for 17-wfn_fi
         self.qshift = kwargs.pop('qshift', [.0,.0,.0])
         nband_aliases = ('nbnd', 'nband')
         for key in nband_aliases:
@@ -481,7 +482,7 @@ class DFT_GW_HPRO_Flow(Workflow):
         self.wfn_fi_task_sh = QeBgwFlow(
             dirname = pjoin(self.dirname, '17-wfn_fi'),
             ngkpt = self.ngkpt_fi,
-            kshift = self.kshift,
+            kshift = self.kshift_fi,
             nbnd = self.n_z_valence+kwargs.get('nbnd_cond')+self.nbnd,
             rhog_flag = False,
             wfnhdf5 = True,

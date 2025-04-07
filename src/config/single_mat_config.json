@@ -61,6 +61,7 @@
             "frequency_dependence 1",
             "screening_semiconductor",
             "cell_slab_truncation",
+            "no_symmetries_q_grid",
             "dont_use_vxcdat"
         ],
         "kernel_extra_lines": [

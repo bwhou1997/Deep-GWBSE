@@ -131,7 +131,7 @@ class ManyBodyData(Dataset):
 
     def __init__(self, flows_dir: str, dataset_dir: str, dataset_type: str='WFN',
                  dataset_fname: str='dataset.h5', multiprocessing: bool = False, load_dataset: bool = True, 
-                 onlySave:bool=False, **kwargs):
+                 onlySave:bool=False, data_slice: slice=None, **kwargs):
         """
         :param **kwargs: all parameters related to specific dataset ['WFN','GW','BSE'], see DataSetInfo
         :param flows_dir: Path to the raw data directory (flows)
@@ -194,6 +194,7 @@ class ManyBodyData(Dataset):
         :param multiprocessing: Whether to use multiprocessing to process data
         :param load_dataset: Whether to load existing dataset
         :param onlySave (TODO): Whether to only save the dataset without loading (used for large dataset)
+        :param data_slice: slice of the data to load (only used for loading large dataset)
 
         Output: 
             self.data: [datapoint1, datapoint2, ...]
@@ -217,7 +218,7 @@ class ManyBodyData(Dataset):
 
         if load_dataset and os.path.exists(pjoin(dataset_dir, dataset_fname)):
             print(f"Loading existing dataset: {os.path.abspath(pjoin(dataset_dir, dataset_fname))}")
-            self.load_dataset()
+            self.load_dataset(data_slice=data_slice)
         else:
             if not os.path.exists(pjoin(dataset_dir, dataset_fname)):
                 print(f"Dataset file not found: {os.path.abspath(pjoin(dataset_dir, dataset_fname))}")
@@ -234,7 +235,7 @@ class ManyBodyData(Dataset):
         return self.data[idx]
     
     @classmethod
-    def from_existing_dataset(cls, existing_dataset_fname: str) -> 'ManyBodyData':
+    def from_existing_dataset(cls, existing_dataset_fname: str, data_slice:slice=None) -> 'ManyBodyData':
         assert os.path.exists(existing_dataset_fname), f"{existing_dataset_fname} does not exist"
         dataset_dir, dataset_fname = os.path.dirname(existing_dataset_fname), os.path.basename(existing_dataset_fname)
         print('Loading dataset info')
@@ -254,9 +255,10 @@ class ManyBodyData(Dataset):
                    dataset_fname=dataset_fname,
                    multiprocessing=False,
                    onlySave=False,
+                   data_slice=data_slice,
                    **info_dict)
 
-    def load_dataset(self):
+    def load_dataset(self, data_slice: slice=None):
         """
         load existing dataset
         """
@@ -269,7 +271,8 @@ class ManyBodyData(Dataset):
                     self.info.__dict__[key] = value[()].decode('utf-8')
                     continue
                 self.info.__dict__[key] = value[()]
-        
+
+        self.info.mat_id = self.info.mat_id[data_slice] if data_slice is not None else self.info.mat_id
         print("loading data")
         self.data = [self.datapoint_interface_h5(pjoin(self.dataset_dir, self.dataset_fname), mat_id, mode='r') for mat_id in self.info.mat_id]
 
@@ -284,7 +287,7 @@ class ManyBodyData(Dataset):
         folder_list, self.info.mat_id = self.mat_statistics(self.flows_dir, self.dataset_type)
 
         #===initialize dataset h5 file===
-        self.init_dataset_h5(self.multiprocessing)
+        self.init_dataset_h5(dataset_dir=self.dataset_dir, dataset_fname=self.dataset_fname, info=self.info, multiprocessing=False)
 
         #==================Dataset Specific Setting==================#
         #===Get processor===
@@ -297,7 +300,8 @@ class ManyBodyData(Dataset):
         
         #===Process data===
         if self.multiprocessing:
-            with Pool() as pool:
+            with Pool(16) as pool:
+                # It seems 32 or 16 works the best.
                 self.data = list(tqdm(pool.imap(processor, folder_list), total=len(folder_list), desc='Processing WFN data'))
                 self.merge_dataset_h5(list(map(lambda x: x.decode('utf-8'), self.info.mat_id)), save_original=False, dataset_fname=self.dataset_fname)
         else:
@@ -344,11 +348,14 @@ class ManyBodyData(Dataset):
         assert len(folder_list) > 0, f"No data found under {flows_dir}"
         print(f"Found {len(folder_list)} out of {len(flows_status)} materials for {dataset_type}")
 
+        folder_list = sorted(folder_list)
+
         mat_ids = np.array([os.path.basename(folder) for folder in folder_list], dtype='S')
 
         return folder_list, mat_ids
 
-    def init_dataset_h5(self, multiprocessing: bool = False):
+    @staticmethod
+    def init_dataset_h5(dataset_dir:str, dataset_fname:str, info:dict, multiprocessing: bool = False):
         """
         multiprocessing: 
             True: create dataset files for each material
@@ -356,23 +363,23 @@ class ManyBodyData(Dataset):
             False: create one dataset file for all materials
                   h5: dataset_fname
         """
-        os.makedirs(self.dataset_dir, exist_ok=True)    
+        os.makedirs(dataset_dir, exist_ok=True)    
         if not multiprocessing:
-            with h5.File(pjoin(self.dataset_dir, self.dataset_fname), 'w') as f:
+            with h5.File(pjoin(dataset_dir, dataset_fname), 'w') as f:
                 # put info dict into h5 file
                 f.create_group('info')
-                for key, value in self.info.__dict__.items():
+                for key, value in info.__dict__.items():
                     f['info'].create_dataset(key, data=value)
                 print(f"[Series]: creating dataset file: {os.path.abspath(f.filename)}")
 
         else:
-            print(f"[Pool]: creating dataset files for {len(self.info.mat_id)} material")
-            mat_id_list = list(map(lambda x: x.decode('utf-8'), self.info.mat_id))
+            print(f"[Pool]: creating dataset files for {len(info.mat_id)} material")
+            mat_id_list = list(map(lambda x: x.decode('utf-8'), info.mat_id))
             for mat_id in mat_id_list:
-                with h5.File(pjoin(self.dataset_dir, mat_id+self.dataset_fname), 'w') as f:
+                with h5.File(pjoin(dataset_dir, mat_id+dataset_fname), 'w') as f:
                     # put info dict into h5 file
                     f.create_group('info')
-                    for key, value in self.info.__dict__.items():
+                    for key, value in info.__dict__.items():
                         f['info'].create_dataset(key, data=value)
                     # print(f"Creating dataset file: {os.path.abspath(f.filename)}")
 
@@ -382,7 +389,7 @@ class ManyBodyData(Dataset):
         """
         # print("Merging dataset h5 files", [mat_id+dataset_fname for mat_id in mat_id_list])
 
-        self.init_dataset_h5(multiprocessing=False)
+        self.init_dataset_h5(dataset_dir=self.dataset_dir, dataset_fname=self.dataset_fname, info=self.info, multiprocessing=False)
 
         for mat_id in mat_id_list:
             with h5.File(pjoin(self.dataset_dir, mat_id+dataset_fname), 'r') as f:
@@ -528,8 +535,8 @@ class ManyBodyData(Dataset):
 
         return datapoint
 
-    @classmethod
-    def datapoint_interface_h5(cls, dataset_h5_fname: str, mat_id: str, datapoint=None, mode: str = 'a'):
+    @staticmethod
+    def datapoint_interface_h5(dataset_h5_fname: str, mat_id: str, datapoint=None, mode: str = 'a'):
         """
         Save or load a datapoint to/from an HDF5 file.
         
@@ -703,6 +710,11 @@ if __name__ == "__main__":
                             from_dft=True, predict_only=True, nc_wfn=4,nv_wfn=2)   
 
     assert abs(bsedata[1]['src']['wfn'][0,0,14,13,15] - 5.971020835603282e-07) < 1e-10, "BSE Unit Test Failed"
+
+    # slice
+    bsedata = ManyBodyData.from_existing_dataset('./dataset/dataset_BSE.h5', slice(1,2))
+    assert abs(bsedata[0]['src']['wfn'][0,0,14,13,15] - 5.971020835603282e-07) < 1e-10
+    assert len(bsedata) == 1, "BSE Unit Test Failed"
 
     # please see ToyDataSet.get_bse_dataset() for how to use ManyBodyData (Two ways)
     bsedata = ToyDataSet.get_bse_dataset(read=False)

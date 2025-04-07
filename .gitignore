@@ -71,3 +71,9 @@ src/from_model/wfn_dataset_generate.py
 examples/fpconfig-semi.json
 examples/nc300-semi-gw-bse
 examples/Notes.md
+src/fpconfig.json
+src/fp-input/mat-5/stru.cif
+src/from_model/bse_training/
+examples/c2db/
+c2db-1000-7-0.4
+examples/other-1000/
