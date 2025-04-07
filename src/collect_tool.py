@@ -320,6 +320,37 @@ def compact_data_flows(flows: str = './flows', unwanted: dict = None):
             print(f"Compacting {entry.path}")
             compact_data_folder(entry.path, unwanted)
 
+def restart_sbatch_jobs(flows):
+    """
+    Restart sbatch jobs for unfinished flows.
+    """
+    # check the status of the flows
+    flows_status = check_flows_status(flows, dump=False)
+
+    length_of_flows = len(flows_status)
+    
+    # find the unfinished flows
+    unfinished_flows = []
+    for flow, status in flows_status.items():
+        if "No" in status and status["No"]:
+            unfinished_flows.append(flow)
+    length_of_unfinished_flows = len(unfinished_flows)
+    print(f"Found {length_of_unfinished_flows} unfinished flows out of {length_of_flows} flows.")
+    # generate sbatch jobs for the unfinished flows
+
+    with open('restart_run.sh', 'w') as f:
+        f.write("#!/bin/bash\n")
+        f.write("\n")
+        for flow in unfinished_flows:
+            f.write(f"cd {flow}\n")
+            f.write(f'echo "{flow}"\n')
+            f.write("bash run.sh\n")
+            f.write("cd ..\n")
+            f.write("\n")
+    
+    print(f"Generated restart_run.sh for {length_of_unfinished_flows} unfinished flows.")
+
+
 if __name__ == '__main__':
     import argparse
 
@@ -332,12 +363,13 @@ if __name__ == '__main__':
         formatter_class=argparse.RawTextHelpFormatter
     )
 
-    parser.add_argument('mode', choices=['md', 'deeph', 'metalseek', 'st', 'sub','compact'], help="""\
+    parser.add_argument('mode', choices=['md', 'deeph', 'metalseek', 'st', 'sub','compact', 'restart'], help="""\
     md: collect structures from MD output.
     deeph: collect DFT-Ham from DFT/SIESTA/HPRO flows.
     metalseek: determine metallicity from DFT flows
     st: check the status of the flows
     compact: compact data. delete the unwanted files to save space
+    restart: generate new sbatch jobs for all the unfinished flows
     """)
     # parser.add_argument('mode', choices=['md', 'deeph', 'metal'], help='md: collect structures from MD output. \ndeeph: collect DFT-Ham from DFT/SIESTA/HPRO flows. \nmetal:')
     parser.add_argument('-md_input', type=str, help='md: input file name')
@@ -392,4 +424,9 @@ if __name__ == '__main__':
             parser.error('--folder and --flows are mutually exclusive')
         elif args.flows == None and args.folder == None:
             parser.error('--folder or --flows is required in "compact" mode')
+
+    elif args.mode == 'restart':
+        if not args.flows:
+            parser.error('--flows is required in "restart" mode')
+        restart_sbatch_jobs(args.flows)
         
