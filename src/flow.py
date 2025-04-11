@@ -523,7 +523,11 @@ class DFT_GW_HPRO_Flow(Workflow):
         self.add_tasks([self.kerneltask, self.absorptiontask], merge=False)
 
     def compact_data(self, **kwargs):
-        self.runscript.append('collect_tool.py compact -folder ./ -unwanted {}'.format(kwargs['unwanted_files']))
+        if kwargs.get('unwanted_files', None):
+            self.runscript.append('collect_tool.py compact -folder ./ -unwanted {}'.format(kwargs['unwanted_files']))
+        else:
+            self.runscript.append('collect_tool.py compact -folder ./')
+
 
     def summary(self, verbose):
         pass
