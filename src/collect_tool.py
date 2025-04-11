@@ -302,6 +302,37 @@ def generate_sbatch_jobs(fname='./run_aug.sh', nsbatch=3, hours=4, cluster='perl
     print(f"Generated {nsbatch} job scripts.")
 
 def compact_data_folder(folder: str = '.', unwanted: dict = None):
+    if unwanted is None:
+        unwanted = {
+        "unwanted_files": [
+        "01-density/VSC",
+        "01-density/VXC",
+        "01-density/wfn.cplx",
+        "01-density/*.wfc*",
+        "01-density/*.save/wfc*.dat",
+        "02-wfn/VSC",
+        "02-wfn/VXC",
+        "02-wfn/VKB",
+        "02-wfn/wfn.cplx",
+        "02-wfn/*.wfc*",
+        "02-wfn/*.save/wfc*.dat",
+        "03-wfnq/wfn.h5",
+        "03-wfnq/wfn.cplx",
+        "03-wfnq/wfn_k.h5",
+        "03-wfnq/wfn_q.h5",
+        "03-wfnq/*.wfc*",
+        "03-wfnq/*.save/wfc*.dat",
+        "05-band/wfn.cplx",
+        "05-band/*.wfc*",
+        "05-band/*.save/wfc*.dat",
+        "06-wfnq-nns/wfn.cplx",
+        "06-wfnq-nns/*.wfc*",
+        "06-wfnq-nns/*.save/wfc*.dat",
+        "12-epsilon-nns/eps0mat.h5",
+        "17-wfn_fi/wfn.cplx",
+        "17-wfn_fi/*.wfc*",
+        "17-wfn_fi/*.save/wfc*.dat"]}
+
     unwanted_files = unwanted.get('unwanted_files', [])
     for file in unwanted_files:
         pattern = glob.glob(pjoin(folder, file))
@@ -311,14 +342,22 @@ def compact_data_folder(folder: str = '.', unwanted: dict = None):
             for file_path in pattern:
                 os.remove(file_path)
             print(f"Removed {pjoin(folder, file)}")
+
 def compact_data_flows(flows: str = './flows', unwanted: dict = None):
-    unwanted_files = unwanted.get('unwanted_files', [])
     f = os.scandir(flows)
     for entry in f:
         if entry.is_dir():
             print("")
             print(f"Compacting {entry.path}")
             compact_data_folder(entry.path, unwanted)
+    
+    # remove wfn.h5 from all unfinished flow
+    status = check_flows_status(flows, dump=False)
+    unwanted_wfn = {"unwanted_files":['02-wfn/wfn.h5']}
+    for flow, status in status.items():
+        if status["Yes"] and status["No"]: # unfinished
+            compact_data_folder(flow, unwanted_wfn)
+
 
 def restart_sbatch_jobs(flows):
     """
@@ -332,7 +371,7 @@ def restart_sbatch_jobs(flows):
     # find the unfinished flows
     unfinished_flows = []
     for flow, status in flows_status.items():
-        if "No" in status and status["No"]:
+        if not status["Yes"]: # TODO: modify this after updating check_flows_status
             unfinished_flows.append(flow)
     length_of_unfinished_flows = len(unfinished_flows)
     print(f"Found {length_of_unfinished_flows} unfinished flows out of {length_of_flows} flows.")
@@ -381,7 +420,7 @@ if __name__ == '__main__':
     parser.add_argument('-hours', type=int, default=4, help='sub: hours for each job')
     parser.add_argument('-nodes', type=int, default=4, help='sub: number of nodes for each job')
     parser.add_argument('-folder', type=str, help='compact: directory to compact')
-    parser.add_argument('-unwanted', type=str,  help='compact: json includes unwanted files to delete')
+    parser.add_argument('-unwanted', type=str, default=None, help='compact: json includes unwanted files to delete')
 
     args = parser.parse_args()
 
@@ -413,9 +452,13 @@ if __name__ == '__main__':
     
     elif args.mode == 'compact':
         if not args.unwanted:
-            parser.error('--unwanted is required in "compact" mode')
-        with open(args.unwanted, 'r') as f:
-            unwanted = json.load(f)
+            # parser.error('--unwanted is required in "compact" mode')
+            print('default unwanted list is used')
+            unwanted = None
+        else:
+            print('Using user provided unwanted list')
+            with open(args.unwanted, 'r') as f:
+                unwanted = json.load(f)
         if args.flows != None and args.folder == None:
             compact_data_flows(args.flows, unwanted)
         elif args.flows == None and args.folder != None:

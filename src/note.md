@@ -115,7 +115,7 @@ Related files on top of the folder:
     - metalseek: `collect_tool.py metalseek -flows FLOWS `
     - st: `collect_tool.py st -flows FLOWS`
     - sub: `collect_tool.py sub -job JOB -hours HOURS -nodes NODES`
-    - compact: `collect_tool.py compact -flows FLOWS (-folder FOLDER) -unwanted UNWANTED`
+    - compact: `collect_tool.py compact -flows FLOWS (-folder FOLDER) (-unwanted UNWANTED)` (delete unwanted files for all flow and delete 02-wfn/wfn.h5 for all unifhished flow to save space)
     - restart: `collect_tool.py restart -flows FLOWS`
 - `from_model/data.py` (**unit-test**): create for WFN, GW, BSE datatype
     - `from_model/wigner.py` (**unit-test**): create wigner cell for WFN
