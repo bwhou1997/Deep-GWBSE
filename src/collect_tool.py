@@ -375,7 +375,7 @@ if __name__ == '__main__':
     parser.add_argument('-md_input', type=str, help='md: input file name')
     parser.add_argument('-md_output', type=str, help='md: output file name')
     parser.add_argument('-md_suffix', type=str, default='', help='md: suffix for MD files')
-    parser.add_argument('-flows', type=str, help='deeph/metalseek & compact: directory containing DFT/SIESTA/HPRO/GW/BSE flows')
+    parser.add_argument('-flows', type=str, help='deeph/metalseek/compact/restart: directory containing DFT/SIESTA/HPRO/GW/BSE flows')
     parser.add_argument('-job', type=str, help='sub: sbatch job file name')
     parser.add_argument('-nsbatch', type=int, default=3, help='sub: number of sub-sbatch jobs')
     parser.add_argument('-hours', type=int, default=4, help='sub: hours for each job')
