@@ -20,8 +20,8 @@ twist.cif─┌──(deephe3-xx.py, diag_plot.py)─> band.png
 ```
 --Path 2--:
 1. Train:
-external database──>fp-input─(flows.py, data.py)─> ml_dataset.h5 ──┌─(xx_trainer.py)─> model
-                                                   └─(flows-aug.py)┘
+external database─>stru_input─(flows.py,flows-aug.py)─>flows─>(data.py)─>dataset.h5─(trainer.py)─> model
+
 2. Use:
 Features: G0W0, BSE (binding energy, |<cvk|S>|)
 ```

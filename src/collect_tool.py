@@ -249,6 +249,11 @@ def check_flows_status(flows: str = './flows-semi', dump: bool = True):
     
     return flows_status
 
+
+def set_sbatch(cluster, nodes, hours):
+    assert cluster in ['perlmutter'], "Only perlmutter is supported"
+    return f"#!/bin/bash\n#SBATCH -N {nodes}\n#SBATCH -C cpu\n#SBATCH -q regular\n#SBATCH -t {hours}:00:00\n"
+
 def generate_sbatch_jobs(fname='./run_aug.sh', nsbatch=3, hours=4, cluster='perlmutter', nodes=4):
     """
     Parses a script file to extract tasks and generates multiple SBATCH job scripts.
@@ -260,10 +265,6 @@ def generate_sbatch_jobs(fname='./run_aug.sh', nsbatch=3, hours=4, cluster='perl
         cluster (str): Cluster name (only 'perlmutter' is supported).
         nodes (int): Number of nodes for the job.
     """
-    
-    def set_sbatch(cluster, nodes, hours):
-        assert cluster in ['perlmutter'], "Only perlmutter is supported"
-        return f"#!/bin/bash\n#SBATCH -N {nodes}\n#SBATCH -C cpu\n#SBATCH -q regular\n#SBATCH -t {hours}:00:00\n"
     
     with open(fname, 'r') as f:
         lines = f.readlines()
@@ -313,12 +314,11 @@ def compact_data_folder(folder: str = '.', unwanted: dict = None):
         "02-wfn/VSC",
         "02-wfn/VXC",
         "02-wfn/VKB",
-        "02-wfn/wfn.cplx",
+        "02-wfn/wfn.h5", # This is parabands wfn, we don't need it
         "02-wfn/*.wfc*",
         "02-wfn/*.save/wfc*.dat",
         "03-wfnq/wfn.h5",
         "03-wfnq/wfn.cplx",
-        "03-wfnq/wfn_k.h5",
         "03-wfnq/wfn_q.h5",
         "03-wfnq/*.wfc*",
         "03-wfnq/*.save/wfc*.dat",
@@ -371,7 +371,7 @@ def restart_sbatch_jobs(flows):
     # find the unfinished flows
     unfinished_flows = []
     for flow, status in flows_status.items():
-        if not status["Yes"]: # TODO: modify this after updating check_flows_status
+        if not status["Yes"]: # TODO: modify this after updating "bug_list" to check_flows_status 
             unfinished_flows.append(flow)
     length_of_unfinished_flows = len(unfinished_flows)
     print(f"Found {length_of_unfinished_flows} unfinished flows out of {length_of_flows} flows.")
@@ -381,8 +381,8 @@ def restart_sbatch_jobs(flows):
         f.write("#!/bin/bash\n")
         f.write("\n")
         for flow in unfinished_flows:
-            f.write(f"cd {flow}\n")
-            f.write(f'echo "{flow}"\n')
+            f.write(f"cd {os.path.basename(flow)}\n")
+            f.write(f'echo "{os.path.basename(flow)}"\n')
             f.write("bash run.sh\n")
             f.write("cd ..\n")
             f.write("\n")

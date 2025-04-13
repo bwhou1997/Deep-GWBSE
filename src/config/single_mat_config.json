@@ -90,6 +90,7 @@
         "mesh_cutoff_siesta": 320,
         "dm_tolerance_siesta": 1e-06,
         "max_scf_iter_siesta": 300,
-    "5_HPRO": "HPRO settings",
-        "hpro_calcator": true
+    "Others": "Other settings",
+        "compact_data": true,
+        "unwanted_files": null
     }
