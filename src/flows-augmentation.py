@@ -439,6 +439,23 @@ class BSE_aug_Flow(Workflow):
 
 
 if __name__ == "__main__":
+
+    # This is used to generate the grid for augmentation:
+    # grid_size, grid_shift, labels = Mat_Flows_Augmentation.grid_aug_2d(grid_size_augment=150, grid_shift_augment=3, org_grid=[12,12,1])
+    # grid = np.array(grid_size) + np.array(grid_shift)
+    # import matplotlib.pyplot as plt
+    # from matplotlib.ticker import MultipleLocator
+
+    # plt.figure(figsize=(5, 5), dpi=300)
+    # plt.scatter(grid[:, 0], grid[:, 1])
+    # plt.scatter(grid[:90, 0], grid[:90, 1])
+
+    # ax = plt.gca()
+    # ax.set_aspect('equal')  # Optional: makes square grid cells
+    # ax.xaxis.set_major_locator(MultipleLocator(1))
+    # ax.yaxis.set_major_locator(MultipleLocator(1))
+    # ax.grid(True, linestyle='--')
+
     import argparse
     
     parser = argparse.ArgumentParser(description='Create a workflow for a single material.')

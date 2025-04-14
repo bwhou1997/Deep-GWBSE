@@ -193,7 +193,7 @@ class ManyBodyData(Dataset):
         :param dataset_name: name of the dataset
         :param multiprocessing: Whether to use multiprocessing to process data
         :param load_dataset: Whether to load existing dataset
-        :param onlySave (TODO): Whether to only save the dataset without loading (used for large dataset)
+        :param onlySave: Whether to only save the dataset without loading (used for creating large dataset)
         :param data_slice: slice of the data to load (only used for loading large dataset)
 
         Output: 
@@ -209,6 +209,7 @@ class ManyBodyData(Dataset):
         self.dataset_dir = dataset_dir
         self.dataset_type = dataset_type
         self.dataset_fname = dataset_fname
+        self.onlySave = onlySave
         self.kwargs = kwargs
         
         # dataset and hyperparameters
@@ -225,7 +226,12 @@ class ManyBodyData(Dataset):
             print(f"Creating new dataset: {os.path.abspath(pjoin(dataset_dir, dataset_fname))}")
             self.process()
         
-        assert self.data is not None, "Data is not loaded or processed"
+        if not self.onlySave:
+            assert self.data is not None, "Data is not loaded or processed"
+        else:
+            self.data = []
+            print(f"Only saving dataset")
+            
         self.info.show_info()
 
     def __len__(self):
@@ -299,13 +305,23 @@ class ManyBodyData(Dataset):
             processor = self.process_worker_BSE
         
         #===Process data===
+
+        def processor_return_None_wrapper(folder):
+            processor(folder)
+            return None
+
         if self.multiprocessing:
-            with Pool(16) as pool:
-                # It seems 32 or 16 works the best.
-                self.data = list(tqdm(pool.imap(processor, folder_list), total=len(folder_list), desc='Processing WFN data'))
+            with Pool(16) as pool: # It seems 32 or 16 works the best.
+                if self.onlySave: # used to handle large dataset
+                    list(tqdm(pool.imap(processor_return_None_wrapper, folder_list), total=len(folder_list), desc='Processing WFN data'))
+                else:
+                    self.data = list(tqdm(pool.imap(processor, folder_list), total=len(folder_list), desc='Processing WFN data'))
                 self.merge_dataset_h5(list(map(lambda x: x.decode('utf-8'), self.info.mat_id)), save_original=False, dataset_fname=self.dataset_fname)
         else:
-            self.data = [processor(folder) for folder in tqdm(folder_list, desc='Processing WFN data')]
+            if self.onlySave: # used to handle large dataset
+                list(tqdm(map(processor_return_None_wrapper, folder_list), total=len(folder_list), desc='Processing WFN data'))
+            else:
+                self.data = [processor(folder) for folder in tqdm(folder_list, desc='Processing WFN data')]
 
     def mat_statistics(self, flows_dir:str, dataset_type:type='WFN')-> tuple[list, np.ndarray]:
         """
@@ -719,6 +735,17 @@ if __name__ == "__main__":
     # please see ToyDataSet.get_bse_dataset() for how to use ManyBodyData (Two ways)
     bsedata = ToyDataSet.get_bse_dataset(read=False)
     bsedata = ToyDataSet.get_bse_dataset(read=True)
+
+    """onlySave Test"""
+    bsedata = ManyBodyData(flows_dir='../../examples/flows', dataset_dir='./dataset', dataset_type='BSE', dataset_fname='dataset_BSE.h5',
+                            load_dataset=False, cell_slab_truncation=30, useWignerXY=True,  AngstromPerPixel=0.1, 
+                            AngstromPerPixel_z=0.2, upsampling_factor=2, multiprocessing=True, onlySave=True,
+                            from_dft=True, predict_only=True, nc_wfn=4,nv_wfn=2) 
+    assert len(bsedata) == 0, "onlySave Test Failed"
+
+    bsedata = ManyBodyData.from_existing_dataset('./dataset/dataset_BSE.h5', slice(1,2))
+    assert abs(bsedata[0]['src']['wfn'][0,0,14,13,15] - 5.971020835603282e-07) < 1e-10
+    assert len(bsedata) == 1, "BSE Unit Test Failed"
 
     print("WFN: unit test passed")    
     print("GW: unit test passed")
