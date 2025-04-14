@@ -314,7 +314,7 @@ def compact_data_folder(folder: str = '.', unwanted: dict = None):
         "02-wfn/VSC",
         "02-wfn/VXC",
         "02-wfn/VKB",
-        "02-wfn/wfn.h5", # This is parabands wfn, we don't need it
+        # "02-wfn/wfn.h5", # This is parabands wfn, we don't need it
         "02-wfn/*.wfc*",
         "02-wfn/*.save/wfc*.dat",
         "03-wfnq/wfn.h5",
