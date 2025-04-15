@@ -133,6 +133,8 @@ dataset.h5 (see data.py)
 ```
 
 Related files on top of the file:
+- `collect_tool.py`(see `-h`): 
+    - merge: `collect_tool.py merge -folder FOLDER -dataset_fname DATASET_FNAME` (merge all dataset h5 files into one)
 - `from_model/data.py` (**unit-test**): load from h5 file
 - `from_model/trainer.py`: train the model on the dataset
 - `from_model/bsetrainer.py` (**unit-test**)

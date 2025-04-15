@@ -10,7 +10,7 @@ import torch
 from scipy.interpolate import LinearNDInterpolator
 from data import ManyBodyData, ToyDataSet
 from torch.utils.data import DataLoader
-from collect_tool import check_flows_status
+# from collect_tool import check_flows_status
 from trainer import Trainer
 from transformer import MBformerEncoder, MBformer
 from basisassembly import ElectronHoleBasisAssembly_Concatenate, sort_exciton_eigenvalues_by_eh_pair_energy, b1b2_grid, PassBasisAssembly
