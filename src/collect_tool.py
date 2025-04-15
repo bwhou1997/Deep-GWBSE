@@ -322,14 +322,14 @@ def compact_data_folder(folder: str = '.', unwanted: dict = None):
         "03-wfnq/wfn_q.h5",
         "03-wfnq/*.wfc*",
         "03-wfnq/*.save/wfc*.dat",
-        "05-band/wfn.cplx",
+        # "05-band/wfn.cplx", # saved for data-aug
         "05-band/*.wfc*",
         "05-band/*.save/wfc*.dat",
         "06-wfnq-nns/wfn.cplx",
         "06-wfnq-nns/*.wfc*",
         "06-wfnq-nns/*.save/wfc*.dat",
         "12-epsilon-nns/eps0mat.h5",
-        "17-wfn_fi/wfn.cplx",
+        # "17-wfn_fi/wfn.cplx", # saved for data-aug
         "17-wfn_fi/*.wfc*",
         "17-wfn_fi/*.save/wfc*.dat"]}
 
@@ -352,11 +352,11 @@ def compact_data_flows(flows: str = './flows', unwanted: dict = None):
             compact_data_folder(entry.path, unwanted)
     
     # remove wfn.h5 from all unfinished flow
-    status = check_flows_status(flows, dump=False)
-    unwanted_wfn = {"unwanted_files":['02-wfn/wfn.h5']}
-    for flow, status in status.items():
-        if status["Yes"] and status["No"]: # unfinished
-            compact_data_folder(flow, unwanted_wfn)
+    # status = check_flows_status(flows, dump=False)
+    # unwanted_wfn = {"unwanted_files":['02-wfn/wfn.h5']}
+    # for flow, status in status.items():
+    #     if status["Yes"] and status["No"]: # unfinished
+    #         compact_data_folder(flow, unwanted_wfn)
 
 
 def restart_sbatch_jobs(flows):
