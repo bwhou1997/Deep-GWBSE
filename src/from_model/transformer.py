@@ -3,14 +3,14 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch import Tensor
 from torch.utils.data import Dataset, DataLoader, TensorDataset
-from data import ToyDataSet as d
+from from_model.data import ToyDataSet as d
 import torch
 import torch.nn as nn
 import numpy as np
 import logging
-from model_util import print_model_size, timeCudaWatch
-from posemb import PositionalEmbeddings_band_energy_kpt
-from basisassembly import PassBasisAssembly, ElectronHoleBasisAssembly_Concatenate, ElectronHoleBasisAssembly_TensorProduct
+from from_model.model_util import print_model_size, timeCudaWatch
+from from_model.posemb import PositionalEmbeddings_band_energy_kpt
+from from_model.basisassembly import PassBasisAssembly, ElectronHoleBasisAssembly_Concatenate, ElectronHoleBasisAssembly_TensorProduct
 
 
 class MBformerEncoder(nn.Module):

@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
-from data import ManyBodyData
+from from_model.data import ManyBodyData
 import numpy as np
-from model_util import H5ls
+from from_model.model_util import H5ls
 import matplotlib.pyplot as plt
 from tqdm import tqdm
 from pathos.multiprocessing import ProcessingPool as Pool

@@ -2,19 +2,19 @@ import numpy as np
 import matplotlib.pyplot as plt
 from scipy.spatial import Voronoi, Delaunay
 from scipy.interpolate import griddata
-from interface import wfn
+from from_model.interface import wfn
 import torch.nn.functional as F
 from scipy.ndimage import zoom
 import time
 import torch
 from scipy.interpolate import LinearNDInterpolator
-from data import ManyBodyData, ToyDataSet
+from from_model.data import ManyBodyData, ToyDataSet
 from torch.utils.data import DataLoader
 # from collect_tool import check_flows_status
-from trainer import Trainer
-from transformer import MBformerEncoder
-from basisassembly import ElectronHoleBasisAssembly_Concatenate, sort_exciton_eigenvalues_by_eh_pair_energy, b1b2_grid
-from wfnembedder import ManyBodyData_WFN_Embedder_pretrained, SimpleSumXYEmbedder
+from from_model.trainer import Trainer
+from from_model.transformer import MBformerEncoder
+from from_model.basisassembly import ElectronHoleBasisAssembly_Concatenate, sort_exciton_eigenvalues_by_eh_pair_energy, b1b2_grid
+from from_model.wfnembedder import ManyBodyData_WFN_Embedder_pretrained, SimpleSumXYEmbedder
 from enum import Enum
 # from torchmetrics.regression import MeanAbsoluteError
 from sklearn.metrics import mean_absolute_error, r2_score

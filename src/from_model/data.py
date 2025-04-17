@@ -131,7 +131,7 @@ class ManyBodyData(Dataset):
 
     def __init__(self, flows_dir: str, dataset_dir: str, dataset_type: str='WFN',
                  dataset_fname: str='dataset.h5', multiprocessing: bool = False, load_dataset: bool = True, 
-                 onlySave:bool=False, data_slice: slice=None, **kwargs):
+                 onlySave:bool=False, data_slice=None, **kwargs):
         """
         :param **kwargs: all parameters related to specific dataset ['WFN','GW','BSE'], see DataSetInfo
         :param flows_dir: Path to the raw data directory (flows)
@@ -195,6 +195,7 @@ class ManyBodyData(Dataset):
         :param load_dataset: Whether to load existing dataset
         :param onlySave: Whether to only save the dataset without loading (used for creating large dataset)
         :param data_slice: slice of the data to load (only used for loading large dataset)
+                           support format: slice, list, np.ndarray(int)
 
         Output: 
             self.data: [datapoint1, datapoint2, ...]
@@ -264,9 +265,10 @@ class ManyBodyData(Dataset):
                    data_slice=data_slice,
                    **info_dict)
 
-    def load_dataset(self, data_slice: slice=None):
+    def load_dataset(self, data_slice=None):
         """
         load existing dataset
+        data_slice: None, sclie, list, np.ndarray(int)
         """
 
         with h5.File(pjoin(self.dataset_dir, self.dataset_fname), 'r') as f:
