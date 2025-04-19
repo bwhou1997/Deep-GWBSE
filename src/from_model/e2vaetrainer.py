@@ -100,8 +100,8 @@ def wfn_collate_fn(batch):
     return wfn, mask
 
 if __name__ == "__main__":
-
-    num_epoches = 500
+    config_model_path = "./vae_e2_wfn.save"
+    num_epoches = 200
     beta = 0.0
     train_val_split = 0.8 # 
 
@@ -112,11 +112,14 @@ if __name__ == "__main__":
     dataloader_train = DataLoader(wfdata_train, batch_size=1, collate_fn=wfn_collate_fn)
     dataloader_val = DataLoader(wfdata_val, batch_size=1, collate_fn=wfn_collate_fn)
 
-
-    vae = EquivariantVAE(input_channels=wfdata.info.cell_slab_truncation,
-                            hidden_cnn_channels=[60,60,48,48,48],
-                            hidden_pooling=[-1,0.66,-1,-1,0.66],
-                            kernel_size=[7,5,5,3,3])
+    if os.path.exists(config_model_path):
+        print("Loading model from", config_model_path)
+        vae = Trainer.configure_model(EquivariantVAE, config_model_path)
+    else:
+        vae = EquivariantVAE(input_channels=wfdata.info.cell_slab_truncation,
+                                hidden_cnn_channels=[60,60,48,48,48],
+                                hidden_pooling=[-1,0.66,-1,-1,0.66],
+                                kernel_size=[7,5,5,3,3])
     optimizer = torch.optim.Adam(vae.parameters(), lr=1e-3)
 
 

@@ -12,7 +12,7 @@ import torch
 from os.path import join as pjoin
 from from_model.e2vaetrainer import wfn_collate_fn, WFNVAETrainer
 from from_model.e2vae import EquivariantVAE
-
+from from_model.trainer import Trainer
 
 # class ManyBodyData_WFN_Embedder_pretrained:
 #     """
@@ -278,10 +278,8 @@ if __name__ == "__main__":
         wfdata = ManyBodyData.from_existing_dataset('./dataset/dataset_WFN.h5')
         wfn_data = wfdata[0]['wfn']
 
-        vae = EquivariantVAE(input_channels=wfdata.info.cell_slab_truncation,
-                                hidden_cnn_channels=[60,60,48,48,48],
-                                hidden_pooling=[-1,0.66,-1,-1,0.66],
-                                kernel_size=[7,5,5,3,3])
+        vae = Trainer.configure_model(EquivariantVAE, './vae_e2_wfn.save')
+
         vae_eb = E2VAEEmbedder(24,vae,"vae_e2_wfn",'./vae_e2_wfn.save')
 
         mu, wfn_data, wfn_recon, mask = vae_eb.embed(wfn_data)

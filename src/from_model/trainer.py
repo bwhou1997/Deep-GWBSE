@@ -7,6 +7,7 @@ import math
 from torch.utils.tensorboard import SummaryWriter 
 from abc import ABC, abstractmethod
 import copy 
+import json
 class Trainer(ABC):
     """
     Here we define a generic trainer for Sup- and Unsupervised learning.
@@ -43,6 +44,7 @@ class Trainer(ABC):
         self.model_name = model_name
         self.current_model_path = os.path.join(self.save_path, f"{self.model_name}.pth")
         self.best_model_path = os.path.join(self.save_path, f"{self.model_name}_best.pth")
+        self.model_config_path = os.path.join(self.save_path, f"model_config.json")
         self.best_model = Trainer.BEST_MODEL
         self.checkpoint = Trainer.CHECKPOINT
         self.minimum_validation_loss = math.inf
@@ -76,6 +78,15 @@ class Trainer(ABC):
             self.logger.warn("The program is running on CPUs. Performance may be bad!")
         self.model = model.to(self.device)    
         self.initial_state = copy.deepcopy(self.model.state_dict()) # save the initial state of the model for training from scratch
+        # export model_config to a json file
+        if hasattr(model, "model_config"):
+            self.model_config = model.model_config
+            with open(self.model_config_path, "w") as f:
+                json.dump(self.model_config, f, indent=4)
+            self.logger.info(f"Model config is found and saved to {self.model_config_path}")
+        else:
+            self.model_config = None
+            self.logger.info("Model config is not found. No model config is saved.")
         
         # Training data
         # Note that at initialization, by default we do not specify the datasets used in training:
@@ -101,6 +112,16 @@ class Trainer(ABC):
         """
         # TODO: make this a abstract method
         return cls
+
+    @staticmethod
+    def configure_model(model, model_config_path:str):
+        """
+        Configure the model from a json file.
+        The json file should be in the format of model_config.json.
+        """
+        with open(os.path.join(model_config_path, "model_config.json"), "r") as f:
+            model_config = json.load(f)
+        return model(**model_config)
 
     def load_model(self, load_best=False):
         """
@@ -325,3 +346,6 @@ if __name__ == "__main__":
     trainer.load_model(load_best=True)
     trainer.evaluate(...)
     trainer.train(continued=False)
+
+    # Configure a model
+    model = Trainer.configure_model(model=..., model_config_path=...)
