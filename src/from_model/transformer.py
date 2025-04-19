@@ -14,7 +14,7 @@ from from_model.basisassembly import PassBasisAssembly, ElectronHoleBasisAssembl
 from from_model.model_util import capture_config
 
 class MBformerEncoder(nn.Module):
-    @capture_config
+    # @capture_config
     def __init__(self, d_input: int = 24, d_output: int = 1, d_model: int = 576, 
                  nhead: int = 2, num_encoder_layers: int =3, dim_feedforward: int = 2048, dropout: float = 0.1,
                  activation: str = "relu", layer_norm_eps: float = 1e-5, norm_first: bool = False, bias: bool = True, 
@@ -129,7 +129,7 @@ class MBformerEncoder(nn.Module):
         return y.view(*y_emb_shape), attn_weights.view(*attn_weights_shape)
     
 class MBformerDecoder(MBformerEncoder):
-    @capture_config
+    # @capture_config
     def __init__(self, d_input: int = 24 ,d_output: int = 1, d_model: int = 576, 
                  nhead: int = 2, num_decoder_layers: int =3, dim_feedforward: int = 2048, dropout: float = 0.1,
                  activation: str = "relu", layer_norm_eps: float = 1e-5, norm_first: bool = False, bias: bool = True, 
@@ -190,7 +190,7 @@ class MBformerDecoder(MBformerEncoder):
 
 
 class MBformer(nn.Module):
-    @capture_config
+    # @capture_config
     def __init__(self, d_input_src: int = 24,  num_encoder_layers: int =3,
                  d_input_tgt: int = 24, num_decoder_layers: int =3, 
                  BasisAssembly: nn.Module = PassBasisAssembly, d_output: int = 1, d_model: int = 576, nhead: int = 2, 

@@ -742,7 +742,7 @@ if __name__ == "__main__":
     bsedata = ManyBodyData(flows_dir='../../examples/flows', dataset_dir='./dataset', dataset_type='BSE', dataset_fname='dataset_BSE.h5',
                             load_dataset=False, cell_slab_truncation=30, useWignerXY=True,  AngstromPerPixel=0.1, 
                             AngstromPerPixel_z=0.2, upsampling_factor=2, multiprocessing=True, onlySave=True,
-                            from_dft=True, predict_only=True, nc_wfn=4,nv_wfn=2) 
+                            from_dft=True, predict_only=False, nc_wfn=4,nv_wfn=2) 
     assert len(bsedata) == 0, "onlySave Test Failed"
 
     bsedata = ManyBodyData.from_existing_dataset('./dataset/dataset_BSE.h5', slice(1,2))

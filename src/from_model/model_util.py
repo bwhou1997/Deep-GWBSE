@@ -105,6 +105,9 @@ def convert_to_serializable(obj):
         return obj
 
 def capture_config(init):
+    """
+    This only works for __init__ methods which takes int, float, str, list, dict as arguments. (doesn't support obj such as Transformer)
+    """
     @functools.wraps(init)
     def wrapper(self, *args, **kwargs):
         sig = inspect.signature(init)
