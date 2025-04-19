@@ -8,7 +8,11 @@ from pathos.multiprocessing import ProcessingPool as Pool
 from multiprocessing import Pool, cpu_count
 from tqdm import tqdm
 import os
+import torch
 from os.path import join as pjoin
+from from_model.e2vaetrainer import wfn_collate_fn, WFNVAETrainer
+from from_model.e2vae import EquivariantVAE
+
 
 # class ManyBodyData_WFN_Embedder_pretrained:
 #     """
@@ -198,6 +202,40 @@ class SimpleSumXYEmbedder(LatentEmbedderBASE):
         # return np.ones((nk, nc_nv, self.latent_dim))
         return extracted / extracted.sum(axis=2, keepdims=True)
 
+
+
+class E2VAEEmbedder(LatentEmbedderBASE):
+    def __init__(self, latent_dim, model, model_name, save_path, **kwargs):
+        # self.latent_dim = latent_dim
+        print("E2VAEEmbedder doesn't support customized latent_dim, it depends on the model")
+        self.kwargs = kwargs
+        optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
+        self.vaetrainer = WFNVAETrainer(model, 
+                                        optimizer, # don't matter for evaluation
+                                        0.02, # doesn't matter for evaluation 
+                                        save_path=save_path,
+                                        model_name=model_name, 
+                                        **kwargs)
+        self.vaetrainer.load_model(load_best=True)
+        self.vaetrainer.model.eval()
+
+    @torch.no_grad()
+    def embed(self, wfn_data: np.ndarray) -> np.ndarray:
+        nk, nb, X, Y, C = wfn_data.shape
+        batch = [{'wfn':wfn_data}] # since wfn_collate_fn only support batch size 1
+        wfn_data, mask = wfn_collate_fn(batch)
+        wfn_data = wfn_data.to(self.vaetrainer.device)
+        mask = ~mask.to(self.vaetrainer.device)
+        wfn_recon, mu, logvar = self.vaetrainer.model(wfn_data)
+
+        # GOP layer
+        mu = mu.mean(dim=(2,3))
+        # normalize dim=1
+        mu = mu / mu.sum(dim=1, keepdim=True)
+
+        return mu, wfn_data, wfn_recon, mask
+
+
 class OtherEmbedder(LatentEmbedderBASE):
     def __init__(self, latent_dim, **kwargs):
         pass
@@ -232,6 +270,34 @@ if __name__ == "__main__":
     assert np.allclose(bsedata[0]['src']['latent'],  bsedata_h5[0]['src']['latent'])
     assert np.allclose(wfdata[0]['latent'],  wfdata_h5[0]['latent'])
 
-    print('unit test passed!')
+    print('basic unit test passed!')
+
+    """ unit test for E2VAEEmbedder """
+    if os.path.exists('./vae_e2_wfn'+'.save'):
+        # wfdata = ManyBodyData.from_existing_dataset('./dataset/1000_wfn_1/dataset_WFN_1000.h5')
+        wfdata = ManyBodyData.from_existing_dataset('./dataset/dataset_WFN.h5')
+        wfn_data = wfdata[0]['wfn']
+
+        vae = EquivariantVAE(input_channels=wfdata.info.cell_slab_truncation,
+                                hidden_cnn_channels=[60,60,48,48,48],
+                                hidden_pooling=[-1,0.66,-1,-1,0.66],
+                                kernel_size=[7,5,5,3,3])
+        vae_eb = E2VAEEmbedder(24,vae,"vae_e2_wfn",'./vae_e2_wfn.save')
+
+        mu, wfn_data, wfn_recon, mask = vae_eb.embed(wfn_data)
+        mask = ~mask
+        mask_nan = torch.where(mask, np.nan, 1.0)
+        wfn_recon = mask_nan * wfn_recon
+        wfn_data = mask_nan * wfn_data
+        wfn_data = wfn_data.cpu().numpy()
+        wfn_recon = wfn_recon.cpu().numpy()
+        mask = mask.cpu().numpy()
+        plt.figure()
+        plt.imshow(wfn_data[0].sum(0))
+        plt.figure()
+        plt.imshow(wfn_recon[0].sum(0))
+        # assert mu.shape == ()
+    else:
+        print("vae_e2_wfn not found, skip E2VAEEmbedder test")
 
 

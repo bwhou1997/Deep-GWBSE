@@ -7,7 +7,7 @@ import torch
 import torchvision
 import torchvision.transforms as transforms
 from torch.utils.data import DataLoader
-from model_util import print_model_size
+from from_model.model_util import print_model_size
 import os
 from tqdm import tqdm
 
@@ -430,6 +430,10 @@ def unit_test():
         print("Reconstruction Shape: Pass")
         loss = vae_loss(x_recon, data, mu, logvar)
         print(loss)
+        print("shape data:", data.shape)
+        print("shape x_recon:", x_recon.shape)
+        print("shape mu:", mu.shape)
+        print("shape logvar:", logvar.shape)
     else:
         print("Reconstruction Shape: Fail")
         print(f"Expected: {data.shape}, Got: {x_recon.shape}")
