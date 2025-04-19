@@ -119,7 +119,9 @@ class Trainer(ABC):
         Configure the model from a json file.
         The json file should be in the format of model_config.json.
         """
-        with open(os.path.join(model_config_path, "model_config.json"), "r") as f:
+        model_config_json_path = os.path.join(model_config_path, "model_config.json")
+        assert os.path.exists(model_config_json_path), f"Model config file {model_config_json_path} does not exist."
+        with open( model_config_json_path, "r") as f:
             model_config = json.load(f)
         return model(**model_config)
 
