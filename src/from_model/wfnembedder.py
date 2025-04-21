@@ -89,7 +89,10 @@ class ManyBodyData_WFN_Embedder_pretrained:
     def __init__(self, latent_dim, latent_embedder, **kwargs):
         self.latent_embedder = latent_embedder(latent_dim, **kwargs)
         self.del_wfn_original = False
-
+        self.on_cuda = False
+        if hasattr(self.latent_embedder, 'vaetrainer'):
+            self.on_cuda = True
+    
     def _embed_wfn(self, wfn_data):
         """Helper function to embed wavefunction data."""
         wfn_data['latent'] = self.latent_embedder.embed(wfn_data['wfn'])
@@ -110,7 +113,7 @@ class ManyBodyData_WFN_Embedder_pretrained:
         if self.del_wfn_original:
             data['tgt'].pop('wfn', None)
         return data
-
+    
     def create_latent_for_ManyBodyData(self, manybodydata, del_wfn_original=False)->ManyBodyData:
         """
         manybodydata -> manybodydata (latent created)
@@ -118,17 +121,29 @@ class ManyBodyData_WFN_Embedder_pretrained:
         self.del_wfn_original = del_wfn_original
         assert manybodydata.info.dataset_type in ['WFN', 'GW', 'BSE'], "Only support dataset of `WFN`, `GW`, and `BSE`"
         
-        with Pool(processes=32) as pool:
-            if manybodydata.info.dataset_type == 'WFN':
-                manybodydata = list(tqdm(pool.imap(self._embed_wfn, manybodydata), total=len(manybodydata), desc='Embedding WFN'))
+        if manybodydata.info.dataset_type == 'WFN':
+            if not self.on_cuda:
+                with Pool(processes=32) as pool:
+                    manybodydata = list(tqdm(pool.imap(self._embed_wfn, manybodydata), total=len(manybodydata), desc='Embedding WFN'))
+            else:
+                manybodydata = list(tqdm(map(self._embed_wfn, manybodydata), total=len(manybodydata), desc='Embedding WFN'))
 
-            elif manybodydata.info.dataset_type == 'GW':
-                manybodydata = list(tqdm(pool.imap(self._embed_src, manybodydata), total=len(manybodydata), desc='Embedding GW src WFN'))
-                manybodydata = list(tqdm(pool.imap(self._embed_tgt, manybodydata), total=len(manybodydata), desc='Embedding GW tgt WFN'))
+        elif manybodydata.info.dataset_type == 'GW':
+            if not self.on_cuda:
+                with Pool(processes=32) as pool:
+                    manybodydata = list(tqdm(pool.imap(self._embed_src, manybodydata), total=len(manybodydata), desc='Embedding GW src WFN'))
+                    manybodydata = list(tqdm(pool.imap(self._embed_tgt, manybodydata), total=len(manybodydata), desc='Embedding GW tgt WFN'))
+            else:  
+                manybodydata = list(tqdm(map(self._embed_src, manybodydata), total=len(manybodydata), desc='Embedding GW src WFN'))
+                manybodydata = list(tqdm(map(self._embed_tgt, manybodydata), total=len(manybodydata), desc='Embedding GW tgt WFN'))
 
-            elif manybodydata.info.dataset_type == 'BSE':
-                manybodydata = list(tqdm(pool.imap(self._embed_src, manybodydata), total=len(manybodydata), desc='Embedding BSE src WFN'))
-                
+        elif manybodydata.info.dataset_type == 'BSE':
+            if not self.on_cuda:
+                with Pool(processes=32) as pool:
+                    manybodydata = list(tqdm(pool.imap(self._embed_src, manybodydata), total=len(manybodydata), desc='Embedding BSE src WFN'))
+            else:
+                manybodydata = list(tqdm(map(self._embed_src, manybodydata), total=len(manybodydata), desc='Embedding BSE src WFN'))
+
         return manybodydata
 
     def create_latent_for_ManyBodyData_h5(self, manybodydata:ManyBodyData, dataset_dir:str='./', dataset_fname:str='./latent_mbdata.h5'):
@@ -206,6 +221,9 @@ class SimpleSumXYEmbedder(LatentEmbedderBASE):
 
 class E2VAEEmbedder(LatentEmbedderBASE):
     def __init__(self, latent_dim, model, model_name, save_path, **kwargs):
+        """
+        model: instantiazed
+        """
         # self.latent_dim = latent_dim
         print("E2VAEEmbedder doesn't support customized latent_dim, it depends on the model")
         self.kwargs = kwargs
@@ -216,6 +234,7 @@ class E2VAEEmbedder(LatentEmbedderBASE):
                                         save_path=save_path,
                                         model_name=model_name, 
                                         **kwargs)
+        # self.vaetrainer.device = torch.device('cpu')
         self.vaetrainer.load_model(load_best=True)
         self.vaetrainer.model.eval()
 
@@ -233,7 +252,14 @@ class E2VAEEmbedder(LatentEmbedderBASE):
         # normalize dim=1
         mu = mu / mu.sum(dim=1, keepdim=True)
 
-        return mu, wfn_data, wfn_recon, mask
+        self.mu = mu
+        self.wfn_data = wfn_data
+        self.wfn_recon = wfn_recon
+        self.mask = mask
+
+        mu = mu.detach().cpu().numpy()
+
+        return mu.reshape(nk, nb, -1) # (nk, nb, latent_dim)
 
 
 class OtherEmbedder(LatentEmbedderBASE):
@@ -277,12 +303,13 @@ if __name__ == "__main__":
         # wfdata = ManyBodyData.from_existing_dataset('./dataset/1000_wfn_1/dataset_WFN_1000.h5')
         wfdata = ManyBodyData.from_existing_dataset('./dataset/dataset_WFN.h5')
         wfn_data = wfdata[0]['wfn']
-
         vae = Trainer.configure_model(EquivariantVAE, './vae_e2_wfn.save')
-
         vae_eb = E2VAEEmbedder(24,vae,"vae_e2_wfn",'./vae_e2_wfn.save')
-
-        mu, wfn_data, wfn_recon, mask = vae_eb.embed(wfn_data)
+        mu = vae_eb.embed(wfn_data)
+        mu = vae_eb.mu
+        mask = vae_eb.mask
+        wfn_data = vae_eb.wfn_data
+        wfn_recon = vae_eb.wfn_recon
         mask = ~mask
         mask_nan = torch.where(mask, np.nan, 1.0)
         wfn_recon = mask_nan * wfn_recon
@@ -295,6 +322,12 @@ if __name__ == "__main__":
         plt.figure()
         plt.imshow(wfn_recon[0].sum(0))
         # assert mu.shape == ()
+
+        # usage of E2VAEEmbedder
+        vae = Trainer.configure_model(EquivariantVAE, "./vae_e2_wfn.save")
+        eb = ManyBodyData_WFN_Embedder_pretrained(24, E2VAEEmbedder, model=vae, model_name='vae_e2_wfn', save_path='./vae_e2_wfn.save')
+        eb.create_latent_for_ManyBodyData_h5(wfdata, dataset_dir='./dataset', dataset_fname='dataset_WFN_latent_vae.h5')
+
     else:
         print("vae_e2_wfn not found, skip E2VAEEmbedder test")
 
