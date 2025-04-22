@@ -633,9 +633,17 @@ class AScvk(BGWIO):
         if not self.eigenvectors or not self.eigenvalues:
             self.get_acvkS()
 
+        # get dipole strength
+        abs_dirname = os.path.dirname(self.eigenvech5_file)
+        dipole_sequred = np.loadtxt(os.path.join(abs_dirname, 'eigenvalues_b1.dat'))[:,1]
+
+        assert np.allclose(np.loadtxt(os.path.join(abs_dirname, 'eigenvalues_b1.dat'))[:,0],
+                           self.eigenvalues)
+
         dataset = {
             "eigenvectors": abs(self.eigenvectors),
             "eigenvalues": self.eigenvalues[:, None],
+            "dipole_squared": dipole_sequred
         }
 
         return dataset  
