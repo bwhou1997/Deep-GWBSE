@@ -14,8 +14,9 @@ from torch.utils.data import DataLoader
 from from_model.trainer import Trainer
 from from_model.transformer import MBformerEncoder
 from from_model.basisassembly import ElectronHoleBasisAssembly_Concatenate, sort_exciton_eigenvalues_by_eh_pair_energy, b1b2_grid
-from from_model.wfnembedder import ManyBodyData_WFN_Embedder_pretrained, SimpleSumXYEmbedder
+from from_model.wfnembedder import ManyBodyData_WFN_Embedder_pretrained, SimpleSumXYEmbedder, E2VAEEmbedder
 from enum import Enum
+from from_model.e2vae import EquivariantVAE
 # from torchmetrics.regression import MeanAbsoluteError
 from sklearn.metrics import mean_absolute_error, r2_score
 from functools import partial
@@ -179,18 +180,115 @@ def bse_collate_fn(batch):
     return ele, hole, eigenvalues, eigenvectors
 
 
-class bse_training_flow:
+class bse_training_manager_for_deepgwbse_paper:
     """
-    1) create and read dataset: ManyBodyData
-    2) get wfn embedding
-    3) create model
-    4) create trainer
-    5) train model
-    6) evaluate model
+    Note: This class is designed to generate data and figure for deep-gwbse paper
+    functionality:
+     - train
+     - evaluate and plot figure xx
     """
+    def __init__(self, d_model:int, model_name:str, task:BSEPredictTask
+                 , BasisAssembly=ElectronHoleBasisAssembly_Concatenate,
+                 optimizer=torch.optim.Adam, loss=torch.nn.MSELoss, lr=1e-3,
+                 **kwargs):
+        self.d_model = d_model
+        self.task = task
+        self.model = MBformerEncoder(d_input=d_model,
+                                    d_model=d_model*2, 
+                                    BasisAssembly=BasisAssembly,
+                                    **kwargs)
+        self.optimizer = optimizer(self.model.parameters(), lr=lr)
+        self.loss = loss()
+        self.additional_metrics = partial(torch.nn.functional.l1_loss, reduction='mean')
+        self.trainer = BSETransformerTrainer(self.model, self.loss, self.optimizer,
+                                            model_name=model_name, 
+                                            task=self.task,
+                                            additional_metrics=self.additional_metrics)
+
+    def load_data(self, dataset_dir:str, dataset_fname:str,  dataset_latent_fname_suffix:str,
+                 eb:ManyBodyData_WFN_Embedder_pretrained, data_slice:slice=None, train_val_split:float=0.2,**kwargs):
+
+        self.dataset_dir = dataset_dir
+        self.dataset_fname = dataset_fname
+        self.dataset_latent_fname = dataset_fname.split('.')[0] + dataset_latent_fname_suffix
+
+        if not os.path.exists(os.path.join(self.dataset_dir, self.dataset_latent_fname)):
+            print(f"latent dataset not found, creating new one")
+            # create latent_dataset
+            self.bsedata = ManyBodyData.from_existing_dataset(os.path.join(self.dataset_dir, self.dataset_fname))
+            self.bsedata = eb.create_latent_for_ManyBodyData_h5(self.bsedata, dataset_dir=self.dataset_dir, dataset_fname=self.dataset_latent_fname)
+        else:
+            print(f"latent dataset found, using {os.path.join(self.dataset_dir, self.dataset_latent_fname)}")
+            # directly read the latent_dataset
+            self.bsedata = ManyBodyData.from_existing_dataset(os.path.join(self.dataset_dir, self.dataset_latent_fname), data_slice=data_slice)
+
+        self.bsedata_train = self.bsedata[:int(len(self.bsedata)*train_val_split)]
+        self.bsedata_val = self.bsedata[int(len(self.bsedata)*train_val_split):]
+        self.dataloader_train = DataLoader(self.bsedata_train, batch_size=1, collate_fn=bse_collate_fn)
+        self.dataloader_val = DataLoader(self.bsedata_val, batch_size=1, collate_fn=bse_collate_fn)
+        return self.dataloader_train, self.dataloader_val
+
+    def train(self, num_epoches:int, continued:bool=True):
+        self.trainer.load_model(True)
+        self.trainer.train(num_epoches, self.dataloader_train, self.dataloader_val, continued=continued)
+
+    def evaluate_dataset(self, dataloader=None):
+        # see test r2
+        # if valid_dataset:
+        #     self.dataloader = self.dataloader_val
+        # else:
+        #     self.dataloader = self.dataloader_train
+        assert dataloader is not None, "dataloader is None, please load data first"
+        loss = 0
+        r2 = 0
+        eval_original = torch.tensor([])
+        eval_pred = np.array([])
+        self.trainer.load_model(load_best=True)
+        for d in dataloader:
+            ele, hole, eigenvalues, eigenvectors = d
+            eigval_sort, eigvec_sort = sort_exciton_eigenvalues_by_eh_pair_energy(ele, hole, eigenvalues, eigenvectors) 
+            # break
+            loss += mean_absolute_error(self.trainer.evaluate(d).ravel(), eigval_sort.ravel())
+            r2 += r2_score(self.trainer.evaluate(d).ravel(), eigval_sort.ravel())
+
+            eval_original = torch.cat((eval_original, eigval_sort.ravel()))
+            eval_pred = np.concatenate((eval_pred, self.trainer.evaluate(d).ravel()), axis=0)
+
+            print('\n')
+            print("eigenval:", mean_absolute_error(self.trainer.evaluate(d).ravel(), eigval_sort.ravel()), 'eV')
+            print('r2:', r2_score(self.trainer.evaluate(d).ravel(), eigval_sort.ravel()))
+
+        print('\nMAE:', loss/len(dataloader))
+        print('R2:', r2/len(dataloader))
+        np.savetxt('data1.dat', eval_original)
+        np.savetxt('data2.dat', eval_pred)
+
+        # For plotting energy vs energy (ML)!
+        # cnt = 0
+        # for d in self.dataloader_val:
+        #     ele, hole, eigenvalues, eigenvectors = d
+        #     eigval_sort, eigvec_sort = sort_exciton_eigenvalues_by_eh_pair_energy(ele, hole, eigenvalues, eigenvectors) 
+        #     plt.figure(figsize=(5,5))
+        #     plt.scatter(np.sort(self.bse_trainer_eigval.evaluate(d).ravel())[:], np.sort(eigval_sort.ravel())[:], s=1, alpha=1)
+        #     plt.xlim(5,15)
+        #     plt.ylim(5,15)
+        #     if cnt == 1:
+        #         break
+        #     else:
+        #         cnt += 2
+
+        # np.savetxt('data.dat',self.bse_trainer_eigval.evaluate(d).ravel())
+        # np.savetxt('data.dat',eigval_sort.ravel())
+
+    def fig_a(self):
+        # #f = h5.File(os.path.join(dataset_dir, dataset_latent_fname),'r')
+        # # r2_score(f[f['info/mat_id'][100]]['label']['eigenvalues'][:3600], f[f['info/mat_id'][440]]['label']['eigenvalues'][:3600])
+        pass
+
 
 if __name__ == "__main__":  
     
+    """A Basic way to train and evaluate the model"""
     d_model = 24
     num_epoches = 200
     train_val_split = 0.5
@@ -266,3 +364,26 @@ if __name__ == "__main__":
     # print('R2:', r2/len(dataloader_val))
     # bse_trainer_eigval.load_model(load_best=True)
     # print('eigenvec:', mean_absolute_error(bse_trainer_eigval.evaluate(d).ravel(), eigvec_sort.ravel()))
+
+
+    """A Better wrap-up way for managinging training"""
+        
+    vae = Trainer.configure_model(EquivariantVAE, "./vae_e2_wfn.save")
+    eb = ManyBodyData_WFN_Embedder_pretrained(48, E2VAEEmbedder, model=vae, model_name='vae_e2_wfn', 
+                                              save_path='../vae_e2_wfn.save')
+
+    bse = bse_training_manager_for_deepgwbse_paper(d_model=48, model_name='bse_transformer_eval_vae_test', task=BSEPredictTask.eigenvalues,
+                                            BasisAssembly=ElectronHoleBasisAssembly_Concatenate,
+                                            optimizer=torch.optim.Adam, loss=torch.nn.MSELoss, lr=1e-3)
+
+    dataset_kwargs = {
+        'dataset_dir': './dataset',
+        'dataset_fname': 'dataset_BSE.h5',
+        'dataset_latent_fname_suffix': '_latent_vae.h5',
+    }
+
+    bse.load_data(eb=eb, data_slice=None, train_val_split=0.5, **dataset_kwargs)
+    bse.train(600, continued=False)
+
+    _, dataloader_val = bse.load_data(eb=eb, data_slice=slice(-20,-1), train_val_split=0.5, **dataset_kwargs)
+    bse.evaluate_dataset(dataloader_val)
