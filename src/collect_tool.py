@@ -307,12 +307,14 @@ def merge_dataset(path:str, dataset_fname:str):
     Merge multiple dataset h5files into one dataset h5 file.
     Requirements: info must be the same in all h5 files.
     """
-    h5_files = [f for f in os.listdir(path) if f.endswith('.h5')]
+    h5_files = [os.path.join(path, f) for f in os.listdir(path) if f.endswith('.h5')]
 
-    data = ManyBodyData.from_existing_dataset(os.path.join(path, h5_files[0]), slice(0,0))
+    data = ManyBodyData.from_existing_dataset(h5_files[0], slice(0,0))
     info = copy.deepcopy(data.info)
     info.merged_data = True
     del data
+
+    print("h5 files to be merged:", h5_files)
 
     # compare the info with the rest of the files
     for h5_file in h5_files:
@@ -340,7 +342,7 @@ def merge_dataset(path:str, dataset_fname:str):
 
     for h5_file in h5_files:
         print(f"merging {h5_file}")
-        with h5.File(os.path.join(path, h5_file), 'r') as f:
+        with h5.File(h5_file, 'r') as f:
             for mat_id in tqdm(f['info']['mat_id'][()]):
                 ManyBodyData.datapoint_interface_h5(os.path.join(path, dataset_fname), mat_id, f[mat_id], mode='a')
             
