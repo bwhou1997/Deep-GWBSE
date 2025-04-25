@@ -60,6 +60,7 @@ class BSETransformerTrainer(Trainer):
         eigenvalues = eigenvalues.to(self.device)
         eigenvectors = eigenvectors.to(self.device)
         kcv_prod = np.prod(eigenvalues.shape[-3:])
+        kcv = eigenvalues.shape[-3:]
 
         self.value, self.atten = self.model([ele, hole])
 
@@ -74,8 +75,11 @@ class BSETransformerTrainer(Trainer):
             assert self.atten.shape == self.eigenvectors_sorted_by_eh_pair_energy.shape, f"atten.shape: {self.atten.shape}, eigenvectors_sorted_by_eh_pair_energy.shape: {eigenvectors_sorted_by_eh_pair_energy.shape}. Make sure [ele, hole] order right"
             
             # soft_atten = F.softmax(self.atten.reshape(kcv_prod, kcv_prod), dim=-1)
-            log_atten = (self.atten.reshape(kcv_prod, kcv_prod)).log()
-            return self.loss(log_atten, self.eigenvectors_sorted_by_eh_pair_energy.reshape(kcv_prod, kcv_prod))
+            # log_atten = (self.atten.reshape(kcv_prod, kcv_prod)).log() ###?????
+            atten = (self.atten.reshape(kcv_prod, kcv_prod))
+            target = self.eigenvectors_sorted_by_eh_pair_energy.reshape(kcv_prod, kcv_prod)
+            # return self.loss(log_atten, self.eigenvectors_sorted_by_eh_pair_energy.reshape(kcv_prod, kcv_prod))
+            return self.loss(atten, target)
         else:
             raise NotImplementedError("Task not implemented")
 
@@ -167,7 +171,10 @@ def bse_collate_fn(batch):
     eigenvectors = (torch.from_numpy(label['eigenvectors']).float())[None,...]
 
     # normalize eigenvectors
+    # eigenvectors = eigenvectors / eigenvectors.amax(dim=(2, 3, 4), keepdim=True)
     eigenvectors = eigenvectors / eigenvectors.sum(axis=(2,3,4), keepdim=True)
+
+    # eigenvectors = torch.log(eigenvectors + 1e-7)  # Avoid log(0)
 
     assert ele[0].shape[1] == nk, f"ele[0].shape[1]: {ele[0].shape[1]}, nk: {nk}"
     assert ele[0].shape[2] == nc, f"ele[0].shape[2]: {ele[0].shape[2]}, nc: {nc}"

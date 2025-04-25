@@ -121,6 +121,11 @@ class MBformerEncoder(nn.Module):
 
         # calculate attention and output
         _, attn_weights = self.calculate_attention(y)  # -> Tensor, (batch, nk*nb1*nb2.., nk*nb1*nb2..)
+
+        # add a logarithm to avoid numerical instability
+        # attn_weights = torch.log(attn_weights + 1e-7) # -> Tensor, (batch, nk*nb1*nb2.., nk*nb1*nb2..)
+        # attn_weights = attn_weights / torch.max(attn_weights, dim=-1, keepdim=True)[0] # -> Tensor, (batch, nk*nb1*nb2.., nk*nb1*nb2..)
+
         y = self.apply_final_linear(y)
         
         # reshape y and attn_weights
