@@ -18,7 +18,7 @@ class Trainer(ABC):
     BEST_MODEL = True
 
     def __init__(self, model, optimizer, loss, 
-                model_name="model", save_path=None, additional_metrics=None) -> None:
+                model_name="model", save_path=None, additional_metrics=None, scheduler=None) -> None:
         """
         The model will be saved each time a epoch finishes.
         In addition, the model with the lowest loss is saved in `model_name_best.pth`.
@@ -95,6 +95,7 @@ class Trainer(ABC):
         self.training_dataloader = None
         self.validation_dataloader = None
         self.optimizer = optimizer
+        self.scheduler = scheduler
         self.loss = loss
         self.additional_metrics = additional_metrics
         
@@ -176,8 +177,11 @@ class Trainer(ABC):
             torch.nn.utils.clip_grad_norm_(self.model.parameters(), 1)
 
             self.optimizer.step()
+            if self.scheduler is not None:
+                self.scheduler.step()
             total_loss += this_loss.item()
-
+        if self.scheduler is not None:
+            print(f"Learning rate: {self.scheduler.get_last_lr()}")
         if self.additional_metrics is not None:
             validation_loss, additional_metrics_info =  self.validate(validation_dataloader, get_additional_loss=self.get_additional_loss)
         else:
