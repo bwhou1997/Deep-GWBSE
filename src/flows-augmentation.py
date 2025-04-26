@@ -5,7 +5,7 @@ from from_bgwpy.core import Workflow
 import os
 import json
 from tqdm import tqdm
-from collect_tool import check_flows_status
+from utils import check_flows_status
 import copy
 import numpy as np
 from os.path import join as pjoin
