@@ -41,7 +41,12 @@ class GWTransformerTrainer(Trainer):
         src_data = [x.to(self.device) for x in src_data]
         tgt_data = [x.to(self.device) for x in tgt_data]
         corr = corr.to(self.device)
-        self.value, self.atten = self.model([tgt_data],[src_data])
+        value, _ = self.model([tgt_data],[src_data])
+        # value = torch.zeros(corr.shape).to(self.device)
+        # for i in range(corr.shape[2]):
+        #     tgt_data_bandi = [x[:, :, i:i+1, :] for x in tgt_data]
+        #     value[:, :, i:i+1, :], _ = self.model([tgt_data_bandi],[src_data])
+        self.value = value
         if self.task == GWPredictTask.G0W0_energy:
             self.corr = corr
             assert self.value.shape == corr.shape, f"Value shape {self.value.shape} does not match corr shape {corr.shape}"
@@ -69,6 +74,10 @@ class GWTransformerTrainer(Trainer):
 
         src_data = [x.to(self.device) for x in src_data]
         tgt_data = [x.to(self.device) for x in tgt_data]
+        # value = torch.zeros(tgt[3].shape).to(self.device)
+        # for i in range(value.shape[2]):
+        #     tgt_data_bandi = [x[:, :, i:i+1, :] for x in tgt_data]
+        #     value[:, :, i:i+1, :], _ = self.model([tgt_data_bandi],[src_data])
         value, atten = self.model([tgt_data],[src_data])
 
         if self.task == GWPredictTask.G0W0_energy:
@@ -132,11 +141,13 @@ class gw_training_flow:
     pass
 
 if __name__ == "__main__":
+    torch.manual_seed(42)
     d_model = 24
-    num_epoches = 10
+    num_epoches = 100
     train_val_split = 0.7
-    dataset_dir = './dataset'
-    dataset_fname = 'dataset_GW.h5'
+    config_model_path = "./gw_transformer_sigma.save"
+    dataset_dir = './gw_xian_train/dataset'
+    dataset_fname = 'dataset_GW_1000_1.h5'
     dataset_latent_fname = dataset_fname.split('.')[0] + '_latent.h5'
 
     if not os.path.exists(os.path.join(dataset_dir, dataset_latent_fname)):
@@ -156,17 +167,24 @@ if __name__ == "__main__":
     gwdata_val = gwdata[int(len(gwdata)*train_val_split):]
     dataloader_train = DataLoader(gwdata_train, batch_size=1, collate_fn=gw_collate_fn)
     dataloader_val = DataLoader(gwdata_val, batch_size=1, collate_fn=gw_collate_fn)
-       
+    
+    # if os.path.exists(config_model_path):
+    #     print("Loading model from", config_model_path)
+    #     enc2 = Trainer.configure_model(MBformer, config_model_path)
+    # else:
     enc2 = MBformer(d_input_src=d_model,d_input_tgt=d_model, d_model=d_model)
     
-    optimizer = torch.optim.Adam(enc2.parameters(), lr=4e-4)
+    optimizer = torch.optim.Adam(enc2.parameters(), lr=2e-4)
+    # lr_scheduler  = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=num_epoches * len(dataloader_train))
+    lr_scheduler = None
     loss = torch.nn.MSELoss()
+    # loss = torch.nn.CrossEntropyLoss()
     additional_metrics = partial(torch.nn.functional.l1_loss, reduction='mean')
 
     gw_trainer_sigma = GWTransformerTrainer(enc2, loss, optimizer,  
                                                 model_name="gw_transformer_sigma", 
                                                 task=GWPredictTask.G0W0_energy,
-                                                additional_metrics=additional_metrics)    
+                                                additional_metrics=None, scheduler=lr_scheduler)    
     gw_trainer_sigma.load_model(True)
     gw_trainer_sigma.train(num_epoches, dataloader_train, dataloader_val, continued=False)
 
