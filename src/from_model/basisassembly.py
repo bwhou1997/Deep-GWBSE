@@ -81,7 +81,7 @@ def sort_exciton_eigenvalues_by_eh_pair_energy(ele:list, hole:list, eigenvalues:
     
     kcv_shape = eigenvectors.shape[-3:]
     eigenvectors_sorted_by_eh_pair_energy = torch.zeros((nk*nc*nv, *kcv_shape), device=eigenvectors.device)
-    eigenvectors_sorted_by_eh_pair_energy[eh_pair_energy_indices,:] = eigenvectors.squeeze()
+    eigenvectors_sorted_by_eh_pair_energy[eh_pair_energy_indices,:] = eigenvectors[0]
     eigenvectors_sorted_by_eh_pair_energy = eigenvectors_sorted_by_eh_pair_energy.reshape(*eh_pair_energy_shape[:4], *kcv_shape)
     eigenvectors_sorted_by_eh_pair_energy = eigenvectors_sorted_by_eh_pair_energy.permute(0,1,2,3,4,6,5)
 
