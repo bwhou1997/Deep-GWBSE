@@ -20,6 +20,7 @@ from wfnembedder import ManyBodyData_WFN_Embedder_pretrained, SimpleSumXYEmbedde
 from functools import partial
 import os
 
+
 class GWPredictTask(Enum):
     G0W0_energy = 1
     updated_wavefunction = 2
@@ -37,20 +38,21 @@ class GWTransformerTrainer(Trainer):
         input: [src_data, tgt_data, corr]
 
         """
-        src_data, tgt_data, corr = input
+        src_data, tgt_data, corr, src_mask, tgt_mask = input
         src_data = [x.to(self.device) for x in src_data]
         tgt_data = [x.to(self.device) for x in tgt_data]
         corr = corr.to(self.device)
-        value, _ = self.model([tgt_data],[src_data])
-        # value = torch.zeros(corr.shape).to(self.device)
-        # for i in range(corr.shape[2]):
-        #     tgt_data_bandi = [x[:, :, i:i+1, :] for x in tgt_data]
-        #     value[:, :, i:i+1, :], _ = self.model([tgt_data_bandi],[src_data])
+        src_mask = src_mask.to(self.device)
+        tgt_mask = tgt_mask.to(self.device)
+        value, _ = self.model([tgt_data],[src_data], tgt_mask=tgt_mask, src_mask=src_mask)
         self.value = value
         if self.task == GWPredictTask.G0W0_energy:
             self.corr = corr
             assert self.value.shape == corr.shape, f"Value shape {self.value.shape} does not match corr shape {corr.shape}"
-            return self.loss(self.value, corr)
+            raw_loss = self.loss(self.value, corr)
+            masked = raw_loss * tgt_mask.unsqueeze(-1)
+            loss = masked.sum() / tgt_mask.sum()
+            return loss
         elif self.task == GWPredictTask.updated_wavefunction:
             raise NotImplementedError("Task not implemented")
         elif self.task == GWPredictTask.self_GW_energy:
@@ -65,20 +67,18 @@ class GWTransformerTrainer(Trainer):
         if input is None:
             assert self.validation_dataloader is not None, "Must have a non-empty input"
             for data in self.validation_dataloader:
-                src_data, tgt_data, _, = data
+                src_data, tgt_data, corr, src_mask, tgt_mask = data
                 break  # By default, get only one batch
         elif isinstance(input,list) or isinstance(input, tuple):
-            assert len(input) == 3 or len(input) == 3, f"Input must be a list of two or three elements, but got {len(input)}"
-            src_data, tgt_data = input[:2]
+            # assert len(input) == 3 or len(input) == 3, f"Input must be a list of two or three elements, but got {len(input)}"
+            src_data, tgt_data, corr, src_mask, tgt_mask = input
 
 
         src_data = [x.to(self.device) for x in src_data]
         tgt_data = [x.to(self.device) for x in tgt_data]
-        # value = torch.zeros(tgt[3].shape).to(self.device)
-        # for i in range(value.shape[2]):
-        #     tgt_data_bandi = [x[:, :, i:i+1, :] for x in tgt_data]
-        #     value[:, :, i:i+1, :], _ = self.model([tgt_data_bandi],[src_data])
-        value, atten = self.model([tgt_data],[src_data])
+        src_mask = src_mask.to(self.device)
+        tgt_mask = tgt_mask.to(self.device)
+        value, atten = self.model([tgt_data],[src_data], tgt_mask=tgt_mask, src_mask=src_mask)
 
         if self.task == GWPredictTask.G0W0_energy:
             return value.cpu().numpy() 
@@ -98,52 +98,81 @@ class GWTransformerTrainer(Trainer):
             else:
                 raise NotImplementedError("Task not implemented")
 
-
+def _pad(t, target_nk, target_nb, pad_value=1):
+    """
+    Pad a 3-D tensor (nk, nb, d) to (target_nk, target_nb, d).
+    """
+    nk, nb, d = t.shape
+    # pad sizes are given as (pad_last_dim_left, pad_last_dim_right, …, pad_first_dim_right)
+    pad = (0, 0,                         # d  (no padding in last dim)
+           0, target_nb - nb,            # nb
+           0, target_nk - nk)            # nk
+    return torch.nn.functional.pad(t, pad, value=pad_value)
 
 def gw_collate_fn(batch):
     """
-    input: {'src', 'tgt','label'}
-        src: {'band_indices', 'kpt', 'el', 'latent'}: wavefunction with all bands
-        tgt: {'band_indices', 'kpt', 'el', 'latent'}: wavefunction with only sigma bands
-        label: {'corr'}: G0W0 energy, {updated_wavefunction, self_GW energy} not implemented
-
-    output: [src_data, tgt_data, corr]
-        src_data: [latent, kpt, band_indices, el]
-        tgt_data: [latent, kpt, band_indices, el]
-        corr: [1, nk, nc_sigma+nv_sigma,1]
+    Pads every sample in the batch to the largest nk / nband and
+    returns masks so the model can ignore padding.
     """
 
-    src, tgt, label = batch[0]['src'], batch[0]['tgt'], batch[0]['label']
+    B = len(batch)                         # minibatch size
 
-    nk = src['band_indices'].shape[0]
-    nc = sum(src['band_indices'][0]>0)[0]
-    nv = sum(src['band_indices'][0]<0)[0]
-    nc_sigma = sum(tgt['band_indices'][0]>0)[0]
-    nv_sigma = sum(tgt['band_indices'][0]<0)[0]
+    #largest nk and nband for src / tgt in minibatch
+    max_nk       = max(item['src']['band_indices'].shape[0] for item in batch)
+    max_nb_src   = max(item['src']['band_indices'].shape[1] for item in batch)
+    max_nb_tgt   = max(item['tgt']['band_indices'].shape[1] for item in batch)
 
-    src_data = [torch.from_numpy(src['latent'][()].reshape(1,nk, nc+nv, -1)).float(),
-        torch.from_numpy(src['kpt'][()].reshape(1,nk, nc+nv, -1)).float(), 
-        torch.from_numpy(src['band_indices'][()].reshape(1,nk, nc+nv, -1)).int(), 
-        torch.from_numpy(src['el'][()].reshape(1,nk, nc+nv, -1)).float()]
-    
-    tgt_data = [torch.from_numpy(tgt['latent'][()].reshape(1,nk, nc_sigma+nv_sigma, -1)).float(),
-        torch.from_numpy(tgt['kpt'][()].reshape(1,nk, nc_sigma+nv_sigma, -1)).float(), 
-        torch.from_numpy(tgt['band_indices'][()].reshape(1,nk, nc_sigma+nv_sigma, -1)).int(), 
-        torch.from_numpy(tgt['el'][()].reshape(1,nk, nc_sigma+nv_sigma, -1)).float()]
-    
-    corr = torch.from_numpy(label['corr'][()].reshape(1,nk, nc_sigma+nv_sigma, -1)).float()
+    # fixed size
+    d_latent = batch[0]['src']['latent'].shape[-1]
+    d_kpt    = batch[0]['src']['kpt'   ].shape[-1]
 
-    return src_data, tgt_data, corr
+    src_lat   = torch.zeros(B, max_nk, max_nb_src, d_latent, dtype=torch.float32)
+    src_kpt   = torch.zeros(B, max_nk, max_nb_src, d_kpt   , dtype=torch.float32)
+    src_band  = torch.zeros(B, max_nk, max_nb_src, 1       , dtype=torch.int32 )
+    src_el    = torch.zeros(B, max_nk, max_nb_src, 1       , dtype=torch.float32)
+    src_mask  = torch.zeros(B, max_nk, max_nb_src, dtype=torch.bool)  # 1 = real token
 
+    tgt_lat   = torch.zeros(B, max_nk, max_nb_tgt, d_latent, dtype=torch.float32)
+    tgt_kpt   = torch.zeros(B, max_nk, max_nb_tgt, d_kpt   , dtype=torch.float32)
+    tgt_band  = torch.zeros(B, max_nk, max_nb_tgt, 1       , dtype=torch.int32 )
+    tgt_el    = torch.zeros(B, max_nk, max_nb_tgt, 1       , dtype=torch.float32)
+    tgt_mask  = torch.zeros(B, max_nk, max_nb_tgt, dtype=torch.bool)
 
-class gw_training_flow:
-    # ignore this class for now
-    pass
+    corr      = torch.zeros(B, max_nk, max_nb_tgt, 1, dtype=torch.float32)
+
+    for i, item in enumerate(batch):
+        src, tgt, label = item['src'], item['tgt'], item['label']
+
+        nk_i, nb_src_i = src['band_indices'].shape[:2]
+        nb_tgt_i       = tgt['band_indices'].shape[1]
+
+        #src
+        src_lat [i] = _pad(torch.as_tensor(src['latent'      ]), max_nk, max_nb_src)
+        src_kpt [i] = _pad(torch.as_tensor(src['kpt'         ]), max_nk, max_nb_src)
+        src_band[i] = _pad(torch.as_tensor(src['band_indices']), max_nk, max_nb_src)
+        src_el  [i] = _pad(torch.as_tensor(src['el'          ]), max_nk, max_nb_src)
+        src_mask[i, :nk_i, :nb_src_i] = True
+
+        #tgt
+        tgt_lat [i] = _pad(torch.as_tensor(tgt['latent'      ]), max_nk, max_nb_tgt)
+        tgt_kpt [i] = _pad(torch.as_tensor(tgt['kpt'         ]), max_nk, max_nb_tgt)
+        tgt_band[i] = _pad(torch.as_tensor(tgt['band_indices']), max_nk, max_nb_tgt)
+        tgt_el  [i] = _pad(torch.as_tensor(tgt['el'          ]), max_nk, max_nb_tgt)
+        tgt_mask[i, :nk_i, :nb_tgt_i] = True
+
+        #corr
+        corr    [i] = _pad(torch.as_tensor(label['corr']), max_nk, max_nb_tgt)
+
+    src_data = [src_lat, src_kpt, src_band, src_el]
+    tgt_data = [tgt_lat, tgt_kpt, tgt_band, tgt_el]
+
+    return src_data, tgt_data, corr, src_mask, tgt_mask
+
 
 if __name__ == "__main__":
     torch.manual_seed(42)
     d_model = 24
-    num_epoches = 100
+    num_epoches = 1000
     train_val_split = 0.7
     config_model_path = "./gw_transformer_sigma.save"
     dataset_dir = './gw_xian_train/dataset'
@@ -165,8 +194,8 @@ if __name__ == "__main__":
 
     gwdata_train = gwdata[:int(len(gwdata)*train_val_split)]
     gwdata_val = gwdata[int(len(gwdata)*train_val_split):]
-    dataloader_train = DataLoader(gwdata_train, batch_size=1, collate_fn=gw_collate_fn)
-    dataloader_val = DataLoader(gwdata_val, batch_size=1, collate_fn=gw_collate_fn)
+    dataloader_train = DataLoader(gwdata_train, batch_size=32, collate_fn=gw_collate_fn)
+    dataloader_val = DataLoader(gwdata_val, batch_size=32, collate_fn=gw_collate_fn)
     
     # if os.path.exists(config_model_path):
     #     print("Loading model from", config_model_path)
@@ -174,17 +203,16 @@ if __name__ == "__main__":
     # else:
     enc2 = MBformer(d_input_src=d_model,d_input_tgt=d_model, d_model=d_model)
     
-    optimizer = torch.optim.Adam(enc2.parameters(), lr=2e-4)
-    # lr_scheduler  = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=num_epoches * len(dataloader_train))
-    lr_scheduler = None
+    optimizer = torch.optim.Adam(enc2.parameters(), lr=2e-5)
+    lr_scheduler  = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=num_epoches)
+    #lr_scheduler = None
     loss = torch.nn.MSELoss()
-    # loss = torch.nn.CrossEntropyLoss()
     additional_metrics = partial(torch.nn.functional.l1_loss, reduction='mean')
 
     gw_trainer_sigma = GWTransformerTrainer(enc2, loss, optimizer,  
                                                 model_name="gw_transformer_sigma", 
                                                 task=GWPredictTask.G0W0_energy,
-                                                additional_metrics=None, scheduler=lr_scheduler)    
+                                                additional_metrics=additional_metrics, scheduler=lr_scheduler)    
     gw_trainer_sigma.load_model(True)
     gw_trainer_sigma.train(num_epoches, dataloader_train, dataloader_val, continued=False)
 
@@ -192,7 +220,7 @@ if __name__ == "__main__":
     gw_trainer_sigma.load_model(load_best=True)
 
     for d in dataloader_val:
-        src, tgt, corr = d
+        src, tgt, corr, src_mask, tgt_mask = d
         loss += mean_absolute_error(gw_trainer_sigma.evaluate(d).ravel(), corr.ravel())
 
         print("sigma:", mean_absolute_error(gw_trainer_sigma.evaluate(d).ravel(), corr.ravel()), 'eV')

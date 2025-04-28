@@ -177,11 +177,10 @@ class Trainer(ABC):
             torch.nn.utils.clip_grad_norm_(self.model.parameters(), 1)
 
             self.optimizer.step()
-            if self.scheduler is not None:
-                self.scheduler.step()
             total_loss += this_loss.item()
         if self.scheduler is not None:
-            print(f"Learning rate: {self.scheduler.get_last_lr()}")
+            self.scheduler.step()
+        
         if self.additional_metrics is not None:
             validation_loss, additional_metrics_info =  self.validate(validation_dataloader, get_additional_loss=self.get_additional_loss)
         else:
@@ -304,6 +303,7 @@ class Trainer(ABC):
  
         training_loss = kwargs["training_loss"]
         validation_loss = kwargs["validation_loss"]
+        learning_rate = self.optimizer.param_groups[0]["lr"]
         elapsed_time = kwargs["elapsed_time"]
         additional_metrics_info = kwargs["additional_metrics_info"]
         additional_metrics_info = f'{additional_metrics_info:.2e}' if additional_metrics_info != "" else ""
@@ -314,9 +314,9 @@ class Trainer(ABC):
         if self.minimum_validation_loss > validation_loss:
             torch.save(self.model.state_dict(), self.best_model_path)
             self.minimum_validation_loss = validation_loss
-            self.verbose_logger.info(f"Eopch {epoch+1} | train. loss {training_loss:.2e} | val. loss {validation_loss:.2e} | val. metrics: {additional_metrics_info}| (Best model)")
+            self.verbose_logger.info(f"Eopch {epoch+1} | train. loss {training_loss:.2e} | val. loss {validation_loss:.2e} | val. metrics: {additional_metrics_info}| learning rate: {learning_rate:.2e} | (Best model)")
         else:
-            self.verbose_logger.info(f"Eopch {epoch+1} | train. loss {training_loss:.2e} | val. loss {validation_loss:.2e} | val. metrics: {additional_metrics_info}|")
+            self.verbose_logger.info(f"Eopch {epoch+1} | train. loss {training_loss:.2e} | val. loss {validation_loss:.2e} | val. metrics: {additional_metrics_info}| learning rate: {learning_rate:.2e} |")
         
 
 
