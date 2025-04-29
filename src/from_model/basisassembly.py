@@ -46,7 +46,8 @@ def b1b2_grid(nb1, nb2):
     return bb1, bb2
 
 
-def sort_exciton_eigenvalues_by_eh_pair_energy(ele:list, hole:list, eigenvalues:torch.Tensor, eigenvectors:torch.Tensor=None):
+def sort_exciton_eigenvalues_by_eh_pair_energy(ele:list, hole:list, eigenvalues:torch.Tensor, eigenvectors:torch.Tensor=None,
+                                               dipole:torch.Tensor=None) -> tuple:
     """
     Sort eigenvalues by eh pair energy
     make sure the shape and energy order of transformer output matches with the exciton eigenvalues
@@ -56,9 +57,11 @@ def sort_exciton_eigenvalues_by_eh_pair_energy(ele:list, hole:list, eigenvalues:
         hole[2]: [batch, kpt, nv, 1] # hole energy (hole[2]<0)
         eigenvalues: [batch, nS, 1]
         eigenvectors: [batch, nS, nk, nc, nv] # This is optional, if None, we only sort eigenvalues
+        dipole: [batch, nS, 1]
     Output:
         eigenvalues_sorted_by_eh_pair_energy: [batch, (kpt, nv, nc), 1], # (kpt, nv, nc) is 'nS' sorted by eh pair energy
         eigenvectors_sorted_by_eh_pair_energy: [batch, (kpt, nv, nc), nk, nv, nc] # (kpt, nv, nc) is 'nS' sorted by eh pair energy
+        dipole_sorted_by_eh_pair_energy: [batch, (kpt, nv, nc), 1] # (kpt, nv, nc) is 'nS' sorted by eh pair energy
     """
     assert ele[0].shape[0] == 1, f"ele[0].shape[0]: {ele[0].shape[0]}, only support batch size 1"
     assert hole[0].shape[0] == 1, f"hole[0].shape[0]: {hole[0].shape[0]}, only support batch size 1"
@@ -72,20 +75,29 @@ def sort_exciton_eigenvalues_by_eh_pair_energy(ele:list, hole:list, eigenvalues:
     assert (eh_pair_energy > 0).all(), "eh_pair_energy should be positive, input order: ele, hole"  
     eh_pair_energy_shape = eh_pair_energy.shape
     eh_pair_energy_indices = torch.argsort(eh_pair_energy.flatten())
+
+    # sort eigenvalues by eh_pair_energy
     eigenvalues_sorted_by_eh_pair_energy = torch.zeros_like(eigenvalues.flatten())
     eigenvalues_sorted_by_eh_pair_energy[eh_pair_energy_indices] = eigenvalues.flatten()
     eigenvalues_sorted_by_eh_pair_energy = eigenvalues_sorted_by_eh_pair_energy.reshape(eh_pair_energy_shape)
 
-    if eigenvectors is None:
-        return eigenvalues_sorted_by_eh_pair_energy, None
-    
-    kcv_shape = eigenvectors.shape[-3:]
-    eigenvectors_sorted_by_eh_pair_energy = torch.zeros((nk*nc*nv, *kcv_shape), device=eigenvectors.device)
-    eigenvectors_sorted_by_eh_pair_energy[eh_pair_energy_indices,:] = eigenvectors[0]
-    eigenvectors_sorted_by_eh_pair_energy = eigenvectors_sorted_by_eh_pair_energy.reshape(*eh_pair_energy_shape[:4], *kcv_shape)
-    eigenvectors_sorted_by_eh_pair_energy = eigenvectors_sorted_by_eh_pair_energy.permute(0,1,2,3,4,6,5)
+    eigenvectors_sorted_by_eh_pair_energy = None
+    dipole_sorted_by_eh_pair_energy = None
 
-    return eigenvalues_sorted_by_eh_pair_energy, eigenvectors_sorted_by_eh_pair_energy
+    if eigenvectors is not None:
+        # return eigenvalues_sorted_by_eh_pair_energy, None
+        kcv_shape = eigenvectors.shape[-3:]
+        eigenvectors_sorted_by_eh_pair_energy = torch.zeros((nk*nc*nv, *kcv_shape), device=eigenvectors.device)
+        eigenvectors_sorted_by_eh_pair_energy[eh_pair_energy_indices,:] = eigenvectors[0]
+        eigenvectors_sorted_by_eh_pair_energy = eigenvectors_sorted_by_eh_pair_energy.reshape(*eh_pair_energy_shape[:4], *kcv_shape)
+        eigenvectors_sorted_by_eh_pair_energy = eigenvectors_sorted_by_eh_pair_energy.permute(0,1,2,3,4,6,5)
+    
+    if dipole is not None:
+        dipole_sorted_by_eh_pair_energy = torch.zeros_like(dipole.flatten())
+        dipole_sorted_by_eh_pair_energy[eh_pair_energy_indices] = dipole.flatten()
+        dipole_sorted_by_eh_pair_energy = dipole_sorted_by_eh_pair_energy.reshape(eh_pair_energy_shape)
+
+    return eigenvalues_sorted_by_eh_pair_energy, eigenvectors_sorted_by_eh_pair_energy, dipole_sorted_by_eh_pair_energy
 
 class PassBasisAssembly(nn.Module):
     nbasis = 1

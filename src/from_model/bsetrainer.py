@@ -21,12 +21,13 @@ from from_model.e2vae import EquivariantVAE
 from sklearn.metrics import mean_absolute_error, r2_score
 from functools import partial
 import os
-
+import shutil
 
 
 class BSEPredictTask(Enum):
     eigenvalues = 1
     eigenvectors = 2
+    dipole = 3
 
 # def toy_wfn_embedder(dataset, wfn_latent_dim=24):
 #     nk, nb = dataset[0]['src']['wfn'].shape[:2]
@@ -54,10 +55,11 @@ class BSETransformerTrainer(Trainer):
                see bse_collate_fn for details
         """
 
-        ele, hole, eigenvalues, eigenvectors = input
+        ele, hole, eigenvalues, dipole, eigenvectors = input
         ele = [x.to(self.device) for x in ele]
         hole = [x.to(self.device) for x in hole]
         eigenvalues = eigenvalues.to(self.device)
+        dipole = dipole.to(self.device)
         eigenvectors = eigenvectors.to(self.device)
         kcv_prod = np.prod(eigenvalues.shape[-3:])
         kcv = eigenvalues.shape[-3:]
@@ -66,20 +68,26 @@ class BSETransformerTrainer(Trainer):
 
         if self.task == BSEPredictTask.eigenvalues:
             # eigenvalues has shape of (batch, nS, 1), here we reorder the eigenvalues based on electron-hole pair energy
-            self.eigenvalues_sorted_by_eh_pair_energy, _ = sort_exciton_eigenvalues_by_eh_pair_energy(ele, hole, eigenvalues)
+            self.eigenvalues_sorted_by_eh_pair_energy, _, _ = sort_exciton_eigenvalues_by_eh_pair_energy(ele, hole, eigenvalues, None, None)
             assert self.value.shape == self.eigenvalues_sorted_by_eh_pair_energy.shape, f"value.shape: {self.value.shape}, eigenvalues_sorted_by_eh_pair_energy.shape: {eigenvalues_sorted_by_eh_pair_energy.shape}. Make sure [ele, hole] order right"
             return self.loss(self.value, self.eigenvalues_sorted_by_eh_pair_energy)
         
         elif self.task == BSEPredictTask.eigenvectors:
-            _, self.eigenvectors_sorted_by_eh_pair_energy = sort_exciton_eigenvalues_by_eh_pair_energy(ele, hole, eigenvalues, eigenvectors) 
+            _, self.eigenvectors_sorted_by_eh_pair_energy, _ = sort_exciton_eigenvalues_by_eh_pair_energy(ele, hole, eigenvalues, eigenvectors, None) 
             assert self.atten.shape == self.eigenvectors_sorted_by_eh_pair_energy.shape, f"atten.shape: {self.atten.shape}, eigenvectors_sorted_by_eh_pair_energy.shape: {eigenvectors_sorted_by_eh_pair_energy.shape}. Make sure [ele, hole] order right"
             
             # soft_atten = F.softmax(self.atten.reshape(kcv_prod, kcv_prod), dim=-1)
             # log_atten = (self.atten.reshape(kcv_prod, kcv_prod)).log() ###?????
             atten = (self.atten.reshape(kcv_prod, kcv_prod))
             target = self.eigenvectors_sorted_by_eh_pair_energy.reshape(kcv_prod, kcv_prod)
-            # return self.loss(log_atten, self.eigenvectors_sorted_by_eh_pair_energy.reshape(kcv_prod, kcv_prod))
             return self.loss(atten, target)
+    
+        elif self.task == BSEPredictTask.dipole:
+            _, _, self.dipole_sorted_by_eh_pair_energy = sort_exciton_eigenvalues_by_eh_pair_energy(ele, hole, eigenvalues, None, dipole)
+            assert self.value.shape == self.dipole_sorted_by_eh_pair_energy.shape, f"value.shape: {self.value.shape}, dipole_sorted_by_eh_pair_energy.shape: {self.dipole_sorted_by_eh_pair_energy.shape}. Make sure [ele, hole] order right"
+            value =torch.nn.functional.log_softmax(self.value + 1e-7, dim=1)
+            return self.loss(value, self.dipole_sorted_by_eh_pair_energy)
+
         else:
             raise NotImplementedError("Task not implemented")
 
@@ -94,9 +102,13 @@ class BSETransformerTrainer(Trainer):
         else:
             if self.task == BSEPredictTask.eigenvalues:
                 return self.additional_metrics(self.value.ravel(), self.eigenvalues_sorted_by_eh_pair_energy.ravel())
-            else:
+            elif self.task == BSEPredictTask.eigenvectors:
                 return self.additional_metrics(self.atten.ravel(), self.eigenvectors_sorted_by_eh_pair_energy.ravel())
                 # raise NotImplementedError("Only support eigenvalues additional metrics task for now")
+            elif self.task == BSEPredictTask.dipole:
+                return self.additional_metrics(torch.exp(self.value.ravel()), self.dipole_sorted_by_eh_pair_energy.ravel())
+            else:
+                raise NotImplementedError("Task not implemented")
 
 
     @torch.no_grad()
@@ -112,10 +124,10 @@ class BSETransformerTrainer(Trainer):
         if input is None:
             assert self.validation_dataloader is not None, "Must have a non-empty input"
             for data in self.validation_dataloader:
-                ele, hole, _, _ = data
+                ele, hole, _, _, _ = data
                 break  # By default, get only one batch
         elif isinstance(input,list) or isinstance(input, tuple):
-            assert len(input)==2 or len(input)==4, f"Input should be of length 2 or 4, but got {len(input)}"
+            assert len(input)>=2, f"Input should be larger than 2, but got {len(input)}"
             ele, hole = input[:2]
 
         else:
@@ -130,6 +142,8 @@ class BSETransformerTrainer(Trainer):
             return value.cpu().numpy()
         elif self.task == BSEPredictTask.eigenvectors:
             return atten.cpu().numpy()
+        elif self.task == BSEPredictTask.dipole:
+            return value.cpu().numpy()
         else:
             raise NotImplementedError("Task not implemented")
 
@@ -143,6 +157,7 @@ def bse_collate_fn(batch):
         ele: [latent, kpt, band_indices, el]
         hole: [latent, kpt, band_indices, el]
         eigenvalues: [nS, 1]
+        dipole: [nS, 1]
         eigenvectors: [nS, nk, nc, nv]
     """
     # electron and hole partition
@@ -168,10 +183,12 @@ def bse_collate_fn(batch):
            torch.from_numpy(src['el'][hole_partition].reshape(1,nk, nv, -1)).float()]
 
     eigenvalues = (torch.from_numpy(label['eigenvalues']).float())[None,...]
+    dipole = (torch.from_numpy(label['dipole_squared']).float()).reshape(*eigenvalues.shape)
     eigenvectors = (torch.from_numpy(label['eigenvectors']).float())[None,...]
 
     # normalize eigenvectors
     # eigenvectors = eigenvectors / eigenvectors.amax(dim=(2, 3, 4), keepdim=True)
+    dipole = dipole / dipole.sum(dim=(1, 2), keepdim=True) # this is not a distribution, don't normalize it to one
     eigenvectors = eigenvectors / eigenvectors.sum(axis=(2,3,4), keepdim=True)
 
     # eigenvectors = torch.log(eigenvectors + 1e-7)  # Avoid log(0)
@@ -184,7 +201,7 @@ def bse_collate_fn(batch):
     assert eigenvectors.shape[3] == nc, f"eigenvectors.shape[3]: {eigenvectors.shape[3]}, nc: {nc}"
     assert eigenvectors.shape[4] == nv, f"eigenvectors.shape[4]: {eigenvectors.shape[4]}, nv: {nv}"
 
-    return ele, hole, eigenvalues, eigenvectors
+    return ele, hole, eigenvalues, dipole, eigenvectors
 
 
 class bse_training_manager_for_deepgwbse_paper:
@@ -252,18 +269,26 @@ class bse_training_manager_for_deepgwbse_paper:
         eval_pred = np.array([])
         self.trainer.load_model(load_best=True)
         for d in dataloader:
-            ele, hole, eigenvalues, eigenvectors = d
-            eigval_sort, eigvec_sort = sort_exciton_eigenvalues_by_eh_pair_energy(ele, hole, eigenvalues, eigenvectors) 
+            ele, hole, eigenvalues, dipole, eigenvectors = d
+            eigval_sort, eigvec_sort, dipole = sort_exciton_eigenvalues_by_eh_pair_energy(ele, hole, eigenvalues, None, dipole) 
             # break
-            loss += mean_absolute_error(self.trainer.evaluate(d).ravel(), eigval_sort.ravel())
-            r2 += r2_score(self.trainer.evaluate(d).ravel(), eigval_sort.ravel())
 
-            eval_original = torch.cat((eval_original, eigval_sort.ravel()))
+            if self.trainer.task == BSEPredictTask.eigenvalues:    
+                original = eigval_sort
+            elif self.trainer.task == BSEPredictTask.dipole:
+                original = dipole
+            else:
+                raise NotImplementedError("Task not implemented")
+
+            loss += mean_absolute_error(self.trainer.evaluate(d).ravel(), original.ravel())
+            r2 += r2_score(self.trainer.evaluate(d).ravel(), original.ravel())
+
+            eval_original = torch.cat((eval_original, original.ravel()))
             eval_pred = np.concatenate((eval_pred, self.trainer.evaluate(d).ravel()), axis=0)
 
             print('\n')
-            print("eigenval:", mean_absolute_error(self.trainer.evaluate(d).ravel(), eigval_sort.ravel()), 'eV')
-            print('r2:', r2_score(self.trainer.evaluate(d).ravel(), eigval_sort.ravel()))
+            print("eigenval:", mean_absolute_error(self.trainer.evaluate(d).ravel(), original.ravel()), 'eV')
+            print('r2:', r2_score(self.trainer.evaluate(d).ravel(), original.ravel()))
 
         print('\nMAE:', loss/len(dataloader))
         print('R2:', r2/len(dataloader))
@@ -296,62 +321,62 @@ class bse_training_manager_for_deepgwbse_paper:
 if __name__ == "__main__":  
     
     """A Basic way to train and evaluate the model"""
-    d_model = 24
-    num_epoches = 200
-    train_val_split = 0.5
-    dataset_dir = './dataset'
-    dataset_fname = 'dataset_BSE.h5'
-    dataset_latent_fname = dataset_fname.split('.')[0] + '_latent.h5'
-    # data_slice = slice(0,-1)
-    data_slice = None
+    # d_model = 24
+    # num_epoches = 200
+    # train_val_split = 0.5
+    # dataset_dir = './dataset'
+    # dataset_fname = 'dataset_BSE.h5'
+    # dataset_latent_fname = dataset_fname.split('.')[0] + '_latent.h5'
+    # # data_slice = slice(0,-1)
+    # data_slice = None
 
-    if not os.path.exists(os.path.join(dataset_dir, dataset_latent_fname)):
-        print(f"latent dataset not found, creating new one")
-        # create latent_dataset
-        bsedata = ManyBodyData.from_existing_dataset(os.path.join(dataset_dir, dataset_fname))
-        eb = ManyBodyData_WFN_Embedder_pretrained(d_model, SimpleSumXYEmbedder)
-        bsedata = eb.create_latent_for_ManyBodyData_h5(bsedata, dataset_dir=dataset_dir, dataset_fname=dataset_latent_fname)
-        # bsedata = eb.create_latent_for_ManyBodyData(bsedata, del_wfn_original=True)
+    # if not os.path.exists(os.path.join(dataset_dir, dataset_latent_fname)):
+    #     print(f"latent dataset not found, creating new one")
+    #     # create latent_dataset
+    #     bsedata = ManyBodyData.from_existing_dataset(os.path.join(dataset_dir, dataset_fname))
+    #     eb = ManyBodyData_WFN_Embedder_pretrained(d_model, SimpleSumXYEmbedder)
+    #     bsedata = eb.create_latent_for_ManyBodyData_h5(bsedata, dataset_dir=dataset_dir, dataset_fname=dataset_latent_fname)
+    #     # bsedata = eb.create_latent_for_ManyBodyData(bsedata, del_wfn_original=True)
 
-    else:
-        print(f"latent dataset found, using {os.path.join(dataset_dir, dataset_latent_fname)}")
-        # directly read the latent_dataset
-        bsedata = ManyBodyData.from_existing_dataset(os.path.join(dataset_dir, dataset_latent_fname), data_slice=data_slice)
+    # else:
+    #     print(f"latent dataset found, using {os.path.join(dataset_dir, dataset_latent_fname)}")
+    #     # directly read the latent_dataset
+    #     bsedata = ManyBodyData.from_existing_dataset(os.path.join(dataset_dir, dataset_latent_fname), data_slice=data_slice)
 
-    print('loaded latent dataset')
+    # print('loaded latent dataset')
 
-    bsedata_train = bsedata[:int(len(bsedata)*train_val_split)]
-    bsedata_val = bsedata[int(len(bsedata)*train_val_split):]
-    dataloader_train = DataLoader(bsedata_train, batch_size=1, collate_fn=bse_collate_fn)
-    dataloader_val = DataLoader(bsedata_val, batch_size=1, collate_fn=bse_collate_fn)
+    # bsedata_train = bsedata[:int(len(bsedata)*train_val_split)]
+    # bsedata_val = bsedata[int(len(bsedata)*train_val_split):]
+    # dataloader_train = DataLoader(bsedata_train, batch_size=1, collate_fn=bse_collate_fn)
+    # dataloader_val = DataLoader(bsedata_val, batch_size=1, collate_fn=bse_collate_fn)
 
-    # dataloader = DataLoader(bsedata, 
-    #                         batch_size=1, 
-    #                         collate_fn=bse_collate_fn)
+    # # dataloader = DataLoader(bsedata, 
+    # #                         batch_size=1, 
+    # #                         collate_fn=bse_collate_fn)
 
-    enc2 = MBformerEncoder(d_input=d_model, 
-                           d_model=d_model*2, 
-                           BasisAssembly=ElectronHoleBasisAssembly_Concatenate)
+    # enc2 = MBformerEncoder(d_input=d_model, 
+    #                        d_model=d_model*2, 
+    #                        BasisAssembly=ElectronHoleBasisAssembly_Concatenate)
     
-    optimizer = torch.optim.Adam(enc2.parameters(), lr=1e-3)
-    loss = torch.nn.MSELoss()
-    # additional_metrics=MeanAbsoluteError()  # Ensure it's on GPU if needed
-    additional_metrics = partial(torch.nn.functional.l1_loss, reduction='mean')
+    # optimizer = torch.optim.Adam(enc2.parameters(), lr=1e-3)
+    # loss = torch.nn.MSELoss()
+    # # additional_metrics=MeanAbsoluteError()  # Ensure it's on GPU if needed
+    # additional_metrics = partial(torch.nn.functional.l1_loss, reduction='mean')
 
-    # bse_trainer_eigval = BSETransformerTrainer(enc2, loss, optimizer,  
-    #                                             model_name="bse_transformer_eval", 
-    #                                             task=BSEPredictTask.eigenvalues,
-    #                                             additional_metrics=additional_metrics)
-    # bse_trainer_eigval.load_model(True)
-    # bse_trainer_eigval.train(num_epoches, dataloader_train, dataloader_val, continued=True)
+    # # bse_trainer_eigval = BSETransformerTrainer(enc2, loss, optimizer,  
+    # #                                             model_name="bse_transformer_eval", 
+    # #                                             task=BSEPredictTask.eigenvalues,
+    # #                                             additional_metrics=additional_metrics)
+    # # bse_trainer_eigval.load_model(True)
+    # # bse_trainer_eigval.train(num_epoches, dataloader_train, dataloader_val, continued=True)
 
 
-    bse_trainer_eigvec = BSETransformerTrainer(enc2, loss, optimizer,
-                                               model_name="bse_transformer_evec",
-                                               task=BSEPredictTask.eigenvectors,
-                                               additional_metrics=additional_metrics)
-    bse_trainer_eigvec.load_model(load_best=True)
-    bse_trainer_eigvec.train(num_epoches, dataloader_train, dataloader_val, continued=True)
+    # bse_trainer_eigvec = BSETransformerTrainer(enc2, loss, optimizer,
+    #                                            model_name="bse_transformer_evec",
+    #                                            task=BSEPredictTask.eigenvectors,
+    #                                            additional_metrics=additional_metrics)
+    # bse_trainer_eigvec.load_model(load_best=True)
+    # bse_trainer_eigvec.train(num_epoches, dataloader_train, dataloader_val, continued=True)
 
     # loss = 0
     # r2 = 0
@@ -372,16 +397,10 @@ if __name__ == "__main__":
     # bse_trainer_eigval.load_model(load_best=True)
     # print('eigenvec:', mean_absolute_error(bse_trainer_eigval.evaluate(d).ravel(), eigvec_sort.ravel()))
 
-
-    """A Better wrap-up way for managinging training"""
         
     vae = Trainer.configure_model(EquivariantVAE, "./vae_e2_wfn.save")
     eb = ManyBodyData_WFN_Embedder_pretrained(48, E2VAEEmbedder, model=vae, model_name='vae_e2_wfn', 
                                               save_path='../vae_e2_wfn.save')
-
-    bse = bse_training_manager_for_deepgwbse_paper(d_model=48, model_name='bse_transformer_eval_vae_test', task=BSEPredictTask.eigenvalues,
-                                            BasisAssembly=ElectronHoleBasisAssembly_Concatenate,
-                                            optimizer=torch.optim.Adam, loss=torch.nn.MSELoss, lr=1e-3)
 
     dataset_kwargs = {
         'dataset_dir': './dataset',
@@ -389,8 +408,41 @@ if __name__ == "__main__":
         'dataset_latent_fname_suffix': '_latent_vae.h5',
     }
 
+
+    """Training for BSE eigenvalues with pretrained VAE"""
+    bse = bse_training_manager_for_deepgwbse_paper(d_model=48, model_name='bse_transformer_eval_vae_test', task=BSEPredictTask.eigenvalues,
+                                            BasisAssembly=ElectronHoleBasisAssembly_Concatenate,
+                                            optimizer=torch.optim.Adam, loss=torch.nn.MSELoss, lr=1e-3)
+
+
     bse.load_data(eb=eb, data_slice=None, train_val_split=0.5, **dataset_kwargs)
-    bse.train(600, continued=False)
+    bse.train(5, continued=False)
 
     _, dataloader_val = bse.load_data(eb=eb, data_slice=slice(-20,-1), train_val_split=0.5, **dataset_kwargs)
     bse.evaluate_dataset(dataloader_val)
+
+    shutil.rmtree("bse_transformer_eval_vae_test.save")
+
+    """Training for BSE eigenvectors with pretrained VAE"""
+    bse = bse_training_manager_for_deepgwbse_paper(d_model=48, model_name='bse_transformer_evec_vae_test', task=BSEPredictTask.eigenvectors,
+                                            BasisAssembly=ElectronHoleBasisAssembly_Concatenate,
+                                            optimizer=torch.optim.Adam, loss=torch.nn.CrossEntropyLoss, lr=1e-3)
+    bse.load_data(eb=eb, data_slice=None, train_val_split=0.5, **dataset_kwargs)
+    bse.train(5, continued=False)
+
+    _, dataloader_val = bse.load_data(eb=eb, data_slice=slice(-20,-1), train_val_split=0.5, **dataset_kwargs)
+    # bse.evaluate_dataset(dataloader_val)
+
+    shutil.rmtree("bse_transformer_evec_vae_test.save")
+
+    """Training for BSE dipole with pretrained VAE"""
+    bse = bse_training_manager_for_deepgwbse_paper(d_model=48, model_name='bse_transformer_dipole_vae_test', task=BSEPredictTask.dipole,
+                                            BasisAssembly=ElectronHoleBasisAssembly_Concatenate,
+                                            optimizer=torch.optim.Adam, loss=torch.nn.MSELoss, lr=1e-3)
+    bse.load_data(eb=eb, data_slice=None, train_val_split=0.5, **dataset_kwargs)
+    bse.train(5, continued=False)
+
+    _, dataloader_val = bse.load_data(eb=eb, data_slice=slice(-20,-1), train_val_split=0.5, **dataset_kwargs)
+    bse.evaluate_dataset(dataloader_val)
+
+    shutil.rmtree("bse_transformer_dipole_vae_test.save")

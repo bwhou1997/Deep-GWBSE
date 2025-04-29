@@ -643,7 +643,7 @@ class AScvk(BGWIO):
         dataset = {
             "eigenvectors": abs(self.eigenvectors),
             "eigenvalues": self.eigenvalues[:, None],
-            "dipole_squared": dipole_sequred
+            "dipole_squared": dipole_sequred[:, None]
         }
 
         return dataset  
