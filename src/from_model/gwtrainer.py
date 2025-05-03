@@ -16,9 +16,10 @@ from transformer import MBformerEncoder, MBformer
 from basisassembly import ElectronHoleBasisAssembly_Concatenate, sort_exciton_eigenvalues_by_eh_pair_energy, b1b2_grid, PassBasisAssembly
 from enum import Enum
 from sklearn.metrics import mean_absolute_error
-from wfnembedder import ManyBodyData_WFN_Embedder_pretrained, SimpleSumXYEmbedder
+from wfnembedder import ManyBodyData_WFN_Embedder_pretrained, SimpleSumXYEmbedder, E2VAEEmbedder
 from functools import partial
 import os
+from from_model.e2vae import EquivariantVAE
 
 
 class GWPredictTask(Enum):
@@ -171,19 +172,21 @@ def gw_collate_fn(batch):
 
 if __name__ == "__main__":
     torch.manual_seed(42)
-    d_model = 24
-    num_epoches = 1000
+    d_model = 48
+    num_epoches = 10000
     train_val_split = 0.7
     config_model_path = "./gw_transformer_sigma.save"
-    dataset_dir = './gw_xian_train/dataset'
-    dataset_fname = 'dataset_GW_1000_1.h5'
+    dataset_dir = './all_dataset'
+    dataset_fname =  'dataset_GW_500_1000.h5'
     dataset_latent_fname = dataset_fname.split('.')[0] + '_latent.h5'
 
     if not os.path.exists(os.path.join(dataset_dir, dataset_latent_fname)):
         print(f"latent dataset not found, creating new one")
         # create latent_dataset
         gwdata = ManyBodyData.from_existing_dataset(os.path.join(dataset_dir, dataset_fname))
-        eb = ManyBodyData_WFN_Embedder_pretrained(d_model, SimpleSumXYEmbedder)
+        # eb = ManyBodyData_WFN_Embedder_pretrained(d_model, SimpleSumXYEmbedder)
+        vae = Trainer.configure_model(EquivariantVAE, "./vae_e2_wfn.save")
+        eb = ManyBodyData_WFN_Embedder_pretrained(48, E2VAEEmbedder, model=vae, model_name='vae_e2_wfn', save_path='./vae_e2_wfn.save')
         gwdata = eb.create_latent_for_ManyBodyData_h5(gwdata, dataset_dir=dataset_dir, dataset_fname=dataset_latent_fname)
 
     else:
@@ -194,18 +197,18 @@ if __name__ == "__main__":
 
     gwdata_train = gwdata[:int(len(gwdata)*train_val_split)]
     gwdata_val = gwdata[int(len(gwdata)*train_val_split):]
-    dataloader_train = DataLoader(gwdata_train, batch_size=32, collate_fn=gw_collate_fn)
-    dataloader_val = DataLoader(gwdata_val, batch_size=32, collate_fn=gw_collate_fn)
+    dataloader_train = DataLoader(gwdata_train, batch_size=64, collate_fn=gw_collate_fn, shuffle=True, num_workers=os.cpu_count(), pin_memory=True, persistent_workers=True)
+    dataloader_val = DataLoader(gwdata_val, batch_size=64, collate_fn=gw_collate_fn, shuffle=True, num_workers=os.cpu_count(), pin_memory=True, persistent_workers=True)
     
     # if os.path.exists(config_model_path):
     #     print("Loading model from", config_model_path)
     #     enc2 = Trainer.configure_model(MBformer, config_model_path)
     # else:
-    enc2 = MBformer(d_input_src=d_model,d_input_tgt=d_model, d_model=d_model)
+    enc2 = MBformer(d_input_src=d_model,d_input_tgt=d_model, d_model=d_model, activation="gelu")
     
-    optimizer = torch.optim.Adam(enc2.parameters(), lr=2e-5)
-    lr_scheduler  = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=num_epoches)
-    #lr_scheduler = None
+    optimizer = torch.optim.Adam(enc2.parameters(), lr=5e-6)
+    # lr_scheduler  = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=num_epoches)
+    lr_scheduler = None
     loss = torch.nn.MSELoss()
     additional_metrics = partial(torch.nn.functional.l1_loss, reduction='mean')
 
