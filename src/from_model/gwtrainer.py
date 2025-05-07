@@ -173,7 +173,7 @@ def gw_collate_fn(batch):
 if __name__ == "__main__":
     torch.manual_seed(42)
     d_model = 48
-    num_epoches = 10000
+    num_epoches = 10
     train_val_split = 0.7
     config_model_path = "./gw_transformer_sigma.save"
     dataset_dir = './all_dataset'
@@ -217,7 +217,7 @@ if __name__ == "__main__":
                                                 task=GWPredictTask.G0W0_energy,
                                                 additional_metrics=additional_metrics, scheduler=lr_scheduler)    
     gw_trainer_sigma.load_model(True)
-    gw_trainer_sigma.train(num_epoches, dataloader_train, dataloader_val, continued=False)
+    gw_trainer_sigma.train(num_epoches, dataloader_train, dataloader_val, continued=True)
 
     loss = 0
     gw_trainer_sigma.load_model(load_best=True)
