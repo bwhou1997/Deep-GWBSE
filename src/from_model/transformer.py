@@ -78,9 +78,13 @@ class MBformerEncoder(nn.Module):
         return self.BasisAssembly(*x_emb)
 
     @timeCudaWatch
-    def encode(self, x_emb: Tensor) -> Tensor:
+    def encode(self, x_emb: Tensor,src_mask) -> Tensor:
         x_emb = x_emb.view(x_emb.shape[0], -1, x_emb.shape[-1])
-        x_emb = self.encoder(x_emb)
+        if src_mask is not None:
+            src_key_padding = (~src_mask).view(x_emb.shape[0], -1)
+            x_emb = self.encoder(x_emb, src_key_padding_mask=src_key_padding)
+        else:
+            x_emb = self.encoder(x_emb)
         return x_emb
     
     @timeCudaWatch
@@ -91,7 +95,7 @@ class MBformerEncoder(nn.Module):
     def apply_final_linear(self, y: Tensor) -> Tensor:
         return self.fc(y)
 
-    def forward(self, src_datas: list[list[Tensor, Tensor, Tensor, Tensor]]) -> torch.Tensor:
+    def forward(self, src_datas: list[list[Tensor, Tensor, Tensor, Tensor]], src_mask = None) -> torch.Tensor:
 
         """
         Input:
@@ -117,7 +121,7 @@ class MBformerEncoder(nn.Module):
         x_emb = self.assemble_basis(x_emb) # -> Tensor, (batch, nk, (nb1, nb2..)., d_model)
         
         # Encode src
-        y = self.encode(x_emb) # -> Tensor, (batch, nk*nb1*nb2.., d_model)
+        y = self.encode(x_emb, src_mask) # -> Tensor, (batch, nk*nb1*nb2.., d_model)
 
         # calculate attention and output
         _, attn_weights = self.calculate_attention(y)  # -> Tensor, (batch, nk*nb1*nb2.., nk*nb1*nb2..)
@@ -157,13 +161,22 @@ class MBformerDecoder(MBformerEncoder):
         self.deoder = nn.TransformerDecoder(self.decoder_layer, num_layers=num_decoder_layers)
 
     @timeCudaWatch
-    def decode(self, tgt: Tensor, src: Tensor) -> Tensor:
+    def decode(self, tgt: Tensor, src: Tensor, tgt_mask, src_mask) -> Tensor:
         tgt = tgt.view(tgt.shape[0], -1, tgt.shape[-1])
+        # L = tgt.shape[1]
+        # tgt_mask = torch.full((L, L), float('-inf'))
+        # tgt_mask.fill_diagonal_(0.0)
         src = src.view(src.shape[0], -1, src.shape[-1])
-        out = self.deoder(tgt, src)
+        if (tgt_mask is not None) and (src_mask is not None):
+            src_key_padding = (~src_mask).view(src.shape[0], -1)
+            tgt_key_padding = (~tgt_mask).view(tgt.shape[0], -1)
+            out = self.deoder(tgt, src,tgt_key_padding_mask=tgt_key_padding, memory_key_padding_mask=src_key_padding)
+        else:
+            out = self.deoder(tgt, src)
+        # out = self.deoder(tgt, src, tgt_mask=tgt_mask.to(tgt.device))
         return out
 
-    def forward(self, tgt_datas:list[list[Tensor, Tensor, Tensor, Tensor]], memory: Tensor) -> torch.Tensor:
+    def forward(self, tgt_datas:list[list[Tensor, Tensor, Tensor, Tensor]], memory: Tensor, tgt_mask = None, src_mask= None) -> torch.Tensor:
         """
         Input:
             memory: Tensor, the output of the encoder.
@@ -182,7 +195,7 @@ class MBformerDecoder(MBformerEncoder):
 
         # Decode src and tgt
         assert tgt_emb.shape[-1] == memory.shape[-1], "The dimension of the model should be the same"
-        out = self.decode(tgt_emb, memory) # -> Tensor, (batch, nk*nb1*nb2.., d_model)
+        out = self.decode(tgt_emb, memory, tgt_mask, src_mask) # -> Tensor, (batch, nk*nb1*nb2.., d_model)
     
         # Calculate attention and output
         _, attn_weights = self.calculate_attention(out)  # -> Tensor, (batch, nk*nb1*nb2.., nk*nb1*nb2..)
@@ -253,7 +266,7 @@ class MBformer(nn.Module):
     def summary(self):
         print_model_size(model=self, model_name=self._get_name())
     
-    def forward(self, tgt_datas:list[list[Tensor, Tensor, Tensor, Tensor]], src_datas:list[list[Tensor, Tensor, Tensor, Tensor]]):
+    def forward(self, tgt_datas:list[list[Tensor, Tensor, Tensor, Tensor]], src_datas:list[list[Tensor, Tensor, Tensor, Tensor]], tgt_mask=None, src_mask=None):
         """
         Input:
             tgt_datas: [basis_data1, basis_data2, ...], len(tgt_datas) = number of basis (1 or 2) (currently)
@@ -264,8 +277,8 @@ class MBformer(nn.Module):
             y(default): (batch, nk, (nb1, nb2...), d_output)
             attention(default): (batch, (nk, nb1, nb2...), (nk, nb1, nb2...)) 
         """
-        memory, _ = self.encoder(src_datas)
-        output = self.decoder(tgt_datas, memory)
+        memory, _ = self.encoder(src_datas, src_mask=src_mask)
+        output = self.decoder(tgt_datas, memory, tgt_mask=tgt_mask, src_mask=src_mask)
         return output
 
 

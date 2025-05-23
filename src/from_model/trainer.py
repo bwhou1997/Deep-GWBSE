@@ -18,7 +18,7 @@ class Trainer(ABC):
     BEST_MODEL = True
 
     def __init__(self, model, optimizer, loss, 
-                model_name="model", save_path=None, additional_metrics=None) -> None:
+                model_name="model", save_path=None, additional_metrics=None, scheduler=None) -> None:
         """
         The model will be saved each time a epoch finishes.
         In addition, the model with the lowest loss is saved in `model_name_best.pth`.
@@ -95,6 +95,7 @@ class Trainer(ABC):
         self.training_dataloader = None
         self.validation_dataloader = None
         self.optimizer = optimizer
+        self.scheduler = scheduler
         self.loss = loss
         self.additional_metrics = additional_metrics
         
@@ -177,7 +178,9 @@ class Trainer(ABC):
 
             self.optimizer.step()
             total_loss += this_loss.item()
-
+        if self.scheduler is not None:
+            self.scheduler.step()
+        
         if self.additional_metrics is not None:
             validation_loss, additional_metrics_info =  self.validate(validation_dataloader, get_additional_loss=self.get_additional_loss)
         else:
@@ -300,6 +303,7 @@ class Trainer(ABC):
  
         training_loss = kwargs["training_loss"]
         validation_loss = kwargs["validation_loss"]
+        learning_rate = self.optimizer.param_groups[0]["lr"]
         elapsed_time = kwargs["elapsed_time"]
         additional_metrics_info = kwargs["additional_metrics_info"]
         additional_metrics_info = f'{additional_metrics_info:.2e}' if additional_metrics_info != "" else ""
@@ -310,9 +314,9 @@ class Trainer(ABC):
         if self.minimum_validation_loss > validation_loss:
             torch.save(self.model.state_dict(), self.best_model_path)
             self.minimum_validation_loss = validation_loss
-            self.verbose_logger.info(f"Eopch {epoch+1} | train. loss {training_loss:.2e} | val. loss {validation_loss:.2e} | val. metrics: {additional_metrics_info}| (Best model)")
+            self.verbose_logger.info(f"Eopch {epoch+1} | train. loss {training_loss:.2e} | val. loss {validation_loss:.2e} | val. metrics: {additional_metrics_info}| learning rate: {learning_rate:.2e} | (Best model)")
         else:
-            self.verbose_logger.info(f"Eopch {epoch+1} | train. loss {training_loss:.2e} | val. loss {validation_loss:.2e} | val. metrics: {additional_metrics_info}|")
+            self.verbose_logger.info(f"Eopch {epoch+1} | train. loss {training_loss:.2e} | val. loss {validation_loss:.2e} | val. metrics: {additional_metrics_info}| learning rate: {learning_rate:.2e} |")
         
 
 
