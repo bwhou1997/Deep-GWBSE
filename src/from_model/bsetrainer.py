@@ -85,7 +85,8 @@ class BSETransformerTrainer(Trainer):
         elif self.task == BSEPredictTask.dipole:
             _, _, self.dipole_sorted_by_eh_pair_energy = sort_exciton_eigenvalues_by_eh_pair_energy(ele, hole, eigenvalues, None, dipole)
             assert self.value.shape == self.dipole_sorted_by_eh_pair_energy.shape, f"value.shape: {self.value.shape}, dipole_sorted_by_eh_pair_energy.shape: {self.dipole_sorted_by_eh_pair_energy.shape}. Make sure [ele, hole] order right"
-            value =torch.nn.functional.log_softmax(self.value + 1e-7, dim=1)
+            # value =torch.nn.functional.log_softmax(self.value + 1e-7, dim=1)
+            value = self.value
             return self.loss(value, self.dipole_sorted_by_eh_pair_energy)
 
         else:
@@ -106,7 +107,7 @@ class BSETransformerTrainer(Trainer):
                 return self.additional_metrics(self.atten.ravel(), self.eigenvectors_sorted_by_eh_pair_energy.ravel())
                 # raise NotImplementedError("Only support eigenvalues additional metrics task for now")
             elif self.task == BSEPredictTask.dipole:
-                return self.additional_metrics(torch.exp(self.value.ravel()), self.dipole_sorted_by_eh_pair_energy.ravel())
+                return self.additional_metrics(self.value.ravel(), self.dipole_sorted_by_eh_pair_energy.ravel())
             else:
                 raise NotImplementedError("Task not implemented")
 
@@ -183,12 +184,18 @@ def bse_collate_fn(batch):
            torch.from_numpy(src['el'][hole_partition].reshape(1,nk, nv, -1)).float()]
 
     eigenvalues = (torch.from_numpy(label['eigenvalues']).float())[None,...]
-    dipole = (torch.from_numpy(label['dipole_squared']).float()).reshape(*eigenvalues.shape)
+
+    if 'dipole_squared' in label: # dipole is not always present, especially for old dataset
+        dipole = (torch.from_numpy(label['dipole_squared']).float()).reshape(*eigenvalues.shape)
+    else:
+        dipole = torch.ones_like(eigenvalues)  # Fallback if dipole_squared is not present
+    
     eigenvectors = (torch.from_numpy(label['eigenvectors']).float())[None,...]
 
     # normalize eigenvectors
     # eigenvectors = eigenvectors / eigenvectors.amax(dim=(2, 3, 4), keepdim=True)
-    dipole = dipole / dipole.sum(dim=(1, 2), keepdim=True) # this is not a distribution, don't normalize it to one
+    # dipole = dipole / dipole.sum(dim=(1, 2), keepdim=True) # this is not a distribution, don't normalize it to one
+    dipole = dipole / dipole.amax(dim=(1, 2), keepdim=True) # normalize dipole to max value
     eigenvectors = eigenvectors / eigenvectors.sum(axis=(2,3,4), keepdim=True)
 
     # eigenvectors = torch.log(eigenvectors + 1e-7)  # Avoid log(0)
@@ -228,6 +235,7 @@ class bse_training_manager_for_deepgwbse_paper:
                                             model_name=model_name, 
                                             task=self.task,
                                             additional_metrics=self.additional_metrics)
+        self.trainer.load_model(load_best=True)
 
     def load_data(self, dataset_dir:str, dataset_fname:str,  dataset_latent_fname_suffix:str,
                  eb:ManyBodyData_WFN_Embedder_pretrained, data_slice:slice=None, train_val_split:float=0.2,**kwargs):
