@@ -131,7 +131,7 @@ class ManyBodyData(Dataset):
 
     def __init__(self, flows_dir: str, dataset_dir: str, dataset_type: str='WFN',
                  dataset_fname: str='dataset.h5', multiprocessing: bool = False, load_dataset: bool = True, 
-                 onlySave:bool=False, data_slice=None, **kwargs):
+                 onlySave:bool=False, data_slice=None, operator = None, **kwargs):
         """
         :param **kwargs: all parameters related to specific dataset ['WFN','GW','BSE'], see DataSetInfo
         :param flows_dir: Path to the raw data directory (flows)
@@ -212,6 +212,7 @@ class ManyBodyData(Dataset):
         self.dataset_fname = dataset_fname
         self.onlySave = onlySave
         self.kwargs = kwargs
+        self.operator = operator
         
         # dataset and hyperparameters
         # - required:
@@ -427,13 +428,14 @@ class ManyBodyData(Dataset):
         mat_id = os.path.basename(folder)
         info = copy.deepcopy(dict(self.info.__dict__))
         nc, nv = info.pop('nc_wfn'), info.pop('nv_wfn')
+        operator = self.operator
 
         # get wfn file
         wfn_fname = pjoin(pjoin(folder, '02-wfn', "wfn.h5"))
 
         # create datapoint
         wf = wfn(wfn_fname)
-        datapoint =  wf.get_dataset(nc=nc, nv=nv, **info)
+        datapoint =  wf.get_dataset(nc=nc, nv=nv, operator = operator,**info)
 
         # save data to h5 file
         # if use multiprocessing, save data to mat_id+dataset_fname
