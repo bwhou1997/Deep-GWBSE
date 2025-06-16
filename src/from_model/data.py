@@ -51,10 +51,11 @@ class DataSetInfo:
             if kwargs.get('from_dft'):
                 if not self.predict_only:
                     """
-                    for BSE src (not onlyPredict), nc_wfn and nv_wfn are determined by nS
+                    nc_bse and nv_bse are only used fro predict_only=True
+                    Otherwise, they are automatically set to the number in AScvk
                     """
-                    kwargs['nc_wfn'] = kwargs.get('nc_wfn', np.nan)
-                    kwargs['nv_wfn'] = kwargs.get('nv_wfn', np.nan)
+                    kwargs['nc_bse'] = kwargs.get('nc_bse', np.nan)
+                    kwargs['nv_bse'] = kwargs.get('nv_bse', np.nan)
                 self.wfn_base_set(**kwargs)
             else:
                 raise NotImplementedError("BSE dataset from non-DFT is not implemented yet")
@@ -90,12 +91,15 @@ class DataSetInfo:
         self.predict_only = kwargs.get('predict_only', False)
     
     def bse_base_set(self, **kwargs):
+        assert {"nc_wfn","nv_wfn"} <= set(kwargs.keys()), f"nc, nv are required kwargs for BSE dataset"
         self.from_dft = kwargs.get('from_dft', True)
         self.predict_only = kwargs.get('predict_only', False)
+        self.nc_wfn = kwargs.get('nc_wfn')
+        self.nv_wfn = kwargs.get('nv_wfn')
         if self.predict_only:
-            assert {"nc_wfn","nv_wfn"} <= set(kwargs.keys()), f"nc, nv are required kwargs for BSE dataset"
-            self.nc_wfn = kwargs.get('nc_wfn')
-            self.nv_wfn = kwargs.get('nv_wfn')            
+            assert {"nc_bse","nv_bse"} <= set(kwargs.keys()), f"nc, nv are required kwargs for BSE dataset"
+            self.nc_bse = kwargs.get('nc_bse')
+            self.nv_bse = kwargs.get('nv_bse')            
 
     def vae_base_set(self, **kwargs):
         pass
@@ -509,7 +513,16 @@ class ManyBodyData(Dataset):
         datapoint = {}
         mat_id = os.path.basename(folder)
         info = copy.deepcopy(self.info.__dict__)
+        nc_wfn, nv_wfn = info.pop('nc_wfn'), info.pop('nv_wfn')
 
+        # build src
+        if info.get('from_dft'):
+            wfn_fname = pjoin(pjoin(folder, '17-wfn_fi', "wfn.h5"))
+            wf = wfn(wfn_fname)
+            datapoint_src =  wf.get_dataset(nc=nc_wfn, nv=nv_wfn, **info)
+            datapoint['src'] = datapoint_src
+
+        # build tgt and label
         if not info.get('predict_only'):
             if info.get('from_dft'):
                 # build label first
@@ -525,18 +538,18 @@ class ManyBodyData(Dataset):
                 wfn_fname = pjoin(pjoin(folder, '17-wfn_fi', "wfn.h5"))
                 wf = wfn(wfn_fname)
                 datapoint_src =  wf.get_dataset(nc=nc, nv=nv, **info)
-                datapoint['src'] = datapoint_src
+                datapoint['tgt'] = datapoint_src
             else:
                 raise NotImplementedError
 
         else:
-            nc_wfn, nv_wfn = info.pop('nc_wfn'), info.pop('nv_wfn')
+            nc_wfn, nv_wfn = info.pop('nc_bse'), info.pop('nv_bse')
             if info.get('from_dft'):
                 # build src
                 wfn_fname = pjoin(pjoin(folder, '17-wfn_fi', "wfn.h5"))
                 wf = wfn(wfn_fname)
                 datapoint_src =  wf.get_dataset(nc=nc_wfn, nv=nv_wfn, **info)
-                datapoint['src'] = datapoint_src
+                datapoint['tgt'] = datapoint_src
 
             else:
                 raise NotImplementedError
@@ -725,13 +738,13 @@ if __name__ == "__main__":
     bsedata = ManyBodyData(flows_dir='../../examples/flows', dataset_dir='./dataset', dataset_type='BSE', dataset_fname='dataset_BSE.h5',
                             load_dataset=False, cell_slab_truncation=30, useWignerXY=True,  AngstromPerPixel=0.1, 
                             AngstromPerPixel_z=0.2, upsampling_factor=2, multiprocessing=True,
-                            from_dft=True, predict_only=True, nc_wfn=4,nv_wfn=2)   
+                            from_dft=True, predict_only=True, nc_wfn=6, nv_wfn=4, nc_bse=4, nv_bse=2)   
 
-    assert abs(bsedata[1]['src']['wfn'][0,0,14,13,15] - 5.971020835603282e-07) < 1e-10, "BSE Unit Test Failed"
+    assert abs(bsedata[1]['tgt']['wfn'][0,0,14,13,15] - 5.971020835603282e-07) < 1e-10, "BSE Unit Test Failed"
 
     # slice
     bsedata = ManyBodyData.from_existing_dataset('./dataset/dataset_BSE.h5', slice(1,2))
-    assert abs(bsedata[0]['src']['wfn'][0,0,14,13,15] - 5.971020835603282e-07) < 1e-10
+    assert abs(bsedata[0]['tgt']['wfn'][0,0,14,13,15] - 5.971020835603282e-07) < 1e-10
     assert len(bsedata) == 1, "BSE Unit Test Failed"
 
     # please see ToyDataSet.get_bse_dataset() for how to use ManyBodyData (Two ways)
@@ -742,11 +755,11 @@ if __name__ == "__main__":
     bsedata = ManyBodyData(flows_dir='../../examples/flows', dataset_dir='./dataset', dataset_type='BSE', dataset_fname='dataset_BSE.h5',
                             load_dataset=False, cell_slab_truncation=30, useWignerXY=True,  AngstromPerPixel=0.1, 
                             AngstromPerPixel_z=0.2, upsampling_factor=2, multiprocessing=True, onlySave=True,
-                            from_dft=True, predict_only=False, nc_wfn=4,nv_wfn=2) 
+                            from_dft=True, predict_only=False, nc_wfn=6, nv_wfn=4, nc_bse=4, nv_bse=2) 
     assert len(bsedata) == 0, "onlySave Test Failed"
 
     bsedata = ManyBodyData.from_existing_dataset('./dataset/dataset_BSE.h5', slice(1,2))
-    assert abs(bsedata[0]['src']['wfn'][0,0,14,13,15] - 5.971020835603282e-07) < 1e-10
+    assert abs(bsedata[0]['tgt']['wfn'][0,0,14,13,15] - 5.971020835603282e-07) < 1e-10
     assert len(bsedata) == 1, "BSE Unit Test Failed"
 
     print("WFN: unit test passed")    

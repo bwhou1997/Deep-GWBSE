@@ -211,7 +211,8 @@ class MBformer(nn.Module):
     # @capture_config
     def __init__(self, d_input_src: int = 24,  num_encoder_layers: int =3,
                  d_input_tgt: int = 24, num_decoder_layers: int =3, 
-                 BasisAssembly: nn.Module = PassBasisAssembly, d_output: int = 1, d_model: int = 576, nhead: int = 2, 
+                 BasisAssembly: nn.Module = PassBasisAssembly, BasisAssembly_Encoder = None,
+                 d_output: int = 1, d_model: int = 576, nhead: int = 2, 
                  dim_feedforward: int = 2048, dropout: float = 0.1, activation: str = "relu", layer_norm_eps: float = 1e-5, 
                  norm_first: bool = False, bias: bool = True,  max_band: int = 30, kpt_dim: int = 2, 
                  base_kpt: int = 10000, base_energy: int = 10000,
@@ -224,6 +225,9 @@ class MBformer(nn.Module):
         Note: the source and target data are treated separately in the model, they can have different dimension
         
         """
+        if not BasisAssembly_Encoder:
+            BasisAssembly_Encoder = BasisAssembly
+
         super(MBformer, self).__init__()
         self.encoder = MBformerEncoder(
             d_input = d_input_src, ## different from decoder
@@ -241,7 +245,7 @@ class MBformer(nn.Module):
             kpt_dim = kpt_dim,
             base_kpt = base_kpt,
             base_energy = base_energy,
-            BasisAssembly = BasisAssembly,
+            BasisAssembly = BasisAssembly_Encoder,
         )
 
         self.decoder = MBformerDecoder(
@@ -360,6 +364,15 @@ def unit_test_MBFormer():
     val, atten = t4([ele, hole], [ele, hole])
     val, atten = t3([ele, hole], [ele, hole])
     assert atten.shape == (d.batch_size, d.nk_max, d.nv_max, d.nc_max, d.nk_max, d.nv_max, d.nc_max)
+
+    t2 = MBformer(d_input_src=d.d_model,
+                 d_input_tgt=d.d_model,  
+                 d_model=d.d_model*4, 
+                 BasisAssembly=ElectronHoleBasisAssembly_Concatenate,
+                 BasisAssembly_Encoder=PassBasisAssembly)
+    val, atten = t2([ele, hole], [ele])
+    assert atten.shape == (d.batch_size, d.nk_max, d.nv_max, d.nc_max, d.nk_max, d.nv_max, d.nc_max)
+
     print('enc3(ele, hole) shape:',val.shape)
     print('enc3(ele, hole) shape:',atten.shape)
     print("Test passed")

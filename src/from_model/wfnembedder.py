@@ -138,11 +138,29 @@ class ManyBodyData_WFN_Embedder_pretrained:
                 manybodydata = list(tqdm(map(self._embed_tgt, manybodydata), total=len(manybodydata), desc='Embedding GW tgt WFN'))
 
         elif manybodydata.info.dataset_type == 'BSE':
-            if not self.on_cuda:
-                with Pool(processes=32) as pool:
-                    manybodydata = list(tqdm(pool.imap(self._embed_src, manybodydata), total=len(manybodydata), desc='Embedding BSE src WFN'))
-            else:
-                manybodydata = list(tqdm(map(self._embed_src, manybodydata), total=len(manybodydata), desc='Embedding BSE src WFN'))
+            print('debug:', len(manybodydata[0]))
+            if len(manybodydata[0]) == 2 and 'src' in manybodydata[0]:
+                # deprecated warning
+                print("Warning: Old BSE data format detected, using 'src' key for embedding.")
+                if not self.on_cuda:
+                    with Pool(processes=32) as pool:
+                        manybodydata = list(tqdm(pool.imap(self._embed_src, manybodydata), total=len(manybodydata), desc='Embedding BSE src WFN'))
+                else:
+                    manybodydata = list(tqdm(map(self._embed_src, manybodydata), total=len(manybodydata), desc='Embedding BSE src WFN'))
+            elif len(manybodydata[0]) == 2 and 'tgt' in manybodydata[0]:
+                if not self.on_cuda:
+                    with Pool(processes=32) as pool:
+                        manybodydata = list(tqdm(pool.imap(self._embed_tgt, manybodydata), total=len(manybodydata), desc='Embedding BSE tgt WFN'))
+                else:
+                    manybodydata = list(tqdm(map(self._embed_tgt, manybodydata), total=len(manybodydata), desc='Embedding BSE tgt WFN'))
+            elif len(manybodydata[0]) == 3:
+                if not self.on_cuda:
+                    with Pool(processes=32) as pool:
+                        manybodydata = list(tqdm(pool.imap(self._embed_src, manybodydata), total=len(manybodydata), desc='Embedding BSE src WFN'))
+                        manybodydata = list(tqdm(pool.imap(self._embed_tgt, manybodydata), total=len(manybodydata), desc='Embedding BSE tgt WFN'))
+                else:  
+                    manybodydata = list(tqdm(map(self._embed_src, manybodydata), total=len(manybodydata), desc='Embedding BSE src WFN'))
+                    manybodydata = list(tqdm(map(self._embed_tgt, manybodydata), total=len(manybodydata), desc='Embedding BSE tgt WFN'))                
 
         return manybodydata
 
