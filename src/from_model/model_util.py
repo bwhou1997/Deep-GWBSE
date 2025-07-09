@@ -11,7 +11,7 @@ import os
 from tqdm import tqdm
 from functools import wraps
 import logging
-
+import inspect
 import time
 import functools
 import tracemalloc
@@ -92,3 +92,30 @@ def memory_watch(top_n=None):
             return result
         return wrapper
     return decorator
+
+
+def convert_to_serializable(obj):
+    if isinstance(obj, dict):
+        return {k: convert_to_serializable(v) for k, v in obj.items()}
+    elif isinstance(obj, list):
+        return [convert_to_serializable(v) for v in obj]
+    elif isinstance(obj, (np.integer, np.floating)):
+        return obj.item()
+    else:
+        return obj
+
+def capture_config(init):
+    """
+    This only works for __init__ methods which takes int, float, str, list, dict as arguments. (doesn't support obj such as Transformer)
+    """
+    @functools.wraps(init)
+    def wrapper(self, *args, **kwargs):
+        sig = inspect.signature(init)
+        bound = sig.bind(self, *args, **kwargs)
+        bound.apply_defaults()
+        # Save all args except 'self'
+        self.model_config = {k: v for k, v in bound.arguments.items() if k != 'self'}
+        self.model_config = convert_to_serializable(self.model_config)
+        return init(self, *args, **kwargs)
+    return wrapper
+

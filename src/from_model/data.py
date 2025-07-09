@@ -2,8 +2,8 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.utils.data import Dataset, DataLoader, TensorDataset
-from interface import wfn, eqp, AScvk
-from model_util import time_watch, memory_watch
+from from_model.interface import wfn, eqp, AScvk
+from from_model.model_util import time_watch, memory_watch
 from pathos.multiprocessing import ProcessingPool as Pool
 import os
 from tqdm import tqdm
@@ -12,7 +12,7 @@ import h5py as h5
 import logging
 import numpy as np
 import copy
-from collect_tool import check_flows_status
+from utils import check_flows_status
 """
 Author:  Bowen Hou
 Contact: bowen.hou@yale.edu
@@ -51,10 +51,11 @@ class DataSetInfo:
             if kwargs.get('from_dft'):
                 if not self.predict_only:
                     """
-                    for BSE src (not onlyPredict), nc_wfn and nv_wfn are determined by nS
+                    nc_bse and nv_bse are only used fro predict_only=True
+                    Otherwise, they are automatically set to the number in AScvk
                     """
-                    kwargs['nc_wfn'] = kwargs.get('nc_wfn', np.nan)
-                    kwargs['nv_wfn'] = kwargs.get('nv_wfn', np.nan)
+                    kwargs['nc_bse'] = kwargs.get('nc_bse', np.nan)
+                    kwargs['nv_bse'] = kwargs.get('nv_bse', np.nan)
                 self.wfn_base_set(**kwargs)
             else:
                 raise NotImplementedError("BSE dataset from non-DFT is not implemented yet")
@@ -90,12 +91,15 @@ class DataSetInfo:
         self.predict_only = kwargs.get('predict_only', False)
     
     def bse_base_set(self, **kwargs):
+        assert {"nc_wfn","nv_wfn"} <= set(kwargs.keys()), f"nc, nv are required kwargs for BSE dataset"
         self.from_dft = kwargs.get('from_dft', True)
         self.predict_only = kwargs.get('predict_only', False)
+        self.nc_wfn = kwargs.get('nc_wfn')
+        self.nv_wfn = kwargs.get('nv_wfn')
         if self.predict_only:
-            assert {"nc_wfn","nv_wfn"} <= set(kwargs.keys()), f"nc, nv are required kwargs for BSE dataset"
-            self.nc_wfn = kwargs.get('nc_wfn')
-            self.nv_wfn = kwargs.get('nv_wfn')            
+            assert {"nc_bse","nv_bse"} <= set(kwargs.keys()), f"nc, nv are required kwargs for BSE dataset"
+            self.nc_bse = kwargs.get('nc_bse')
+            self.nv_bse = kwargs.get('nv_bse')            
 
     def vae_base_set(self, **kwargs):
         pass
@@ -131,7 +135,7 @@ class ManyBodyData(Dataset):
 
     def __init__(self, flows_dir: str, dataset_dir: str, dataset_type: str='WFN',
                  dataset_fname: str='dataset.h5', multiprocessing: bool = False, load_dataset: bool = True, 
-                 onlySave:bool=False, data_slice: slice=None, **kwargs):
+                 onlySave:bool=False, data_slice=None, **kwargs):
         """
         :param **kwargs: all parameters related to specific dataset ['WFN','GW','BSE'], see DataSetInfo
         :param flows_dir: Path to the raw data directory (flows)
@@ -193,8 +197,9 @@ class ManyBodyData(Dataset):
         :param dataset_name: name of the dataset
         :param multiprocessing: Whether to use multiprocessing to process data
         :param load_dataset: Whether to load existing dataset
-        :param onlySave (TODO): Whether to only save the dataset without loading (used for large dataset)
+        :param onlySave: Whether to only save the dataset without loading (used for creating large dataset)
         :param data_slice: slice of the data to load (only used for loading large dataset)
+                           support format: slice, list, np.ndarray(int)
 
         Output: 
             self.data: [datapoint1, datapoint2, ...]
@@ -209,6 +214,7 @@ class ManyBodyData(Dataset):
         self.dataset_dir = dataset_dir
         self.dataset_type = dataset_type
         self.dataset_fname = dataset_fname
+        self.onlySave = onlySave
         self.kwargs = kwargs
         
         # dataset and hyperparameters
@@ -225,7 +231,12 @@ class ManyBodyData(Dataset):
             print(f"Creating new dataset: {os.path.abspath(pjoin(dataset_dir, dataset_fname))}")
             self.process()
         
-        assert self.data is not None, "Data is not loaded or processed"
+        if not self.onlySave:
+            assert self.data is not None, "Data is not loaded or processed"
+        else:
+            self.data = []
+            print(f"Only saving dataset")
+            
         self.info.show_info()
 
     def __len__(self):
@@ -258,9 +269,10 @@ class ManyBodyData(Dataset):
                    data_slice=data_slice,
                    **info_dict)
 
-    def load_dataset(self, data_slice: slice=None):
+    def load_dataset(self, data_slice=None):
         """
         load existing dataset
+        data_slice: None, sclie, list, np.ndarray(int)
         """
 
         with h5.File(pjoin(self.dataset_dir, self.dataset_fname), 'r') as f:
@@ -299,13 +311,23 @@ class ManyBodyData(Dataset):
             processor = self.process_worker_BSE
         
         #===Process data===
+
+        def processor_return_None_wrapper(folder):
+            processor(folder)
+            return None
+
         if self.multiprocessing:
-            with Pool(16) as pool:
-                # It seems 32 or 16 works the best.
-                self.data = list(tqdm(pool.imap(processor, folder_list), total=len(folder_list), desc='Processing WFN data'))
+            with Pool(16) as pool: # It seems 32 or 16 works the best.
+                if self.onlySave: # used to handle large dataset
+                    list(tqdm(pool.imap(processor_return_None_wrapper, folder_list), total=len(folder_list), desc='Processing WFN data'))
+                else:
+                    self.data = list(tqdm(pool.imap(processor, folder_list), total=len(folder_list), desc='Processing WFN data'))
                 self.merge_dataset_h5(list(map(lambda x: x.decode('utf-8'), self.info.mat_id)), save_original=False, dataset_fname=self.dataset_fname)
         else:
-            self.data = [processor(folder) for folder in tqdm(folder_list, desc='Processing WFN data')]
+            if self.onlySave: # used to handle large dataset
+                list(tqdm(map(processor_return_None_wrapper, folder_list), total=len(folder_list), desc='Processing WFN data'))
+            else:
+                self.data = [processor(folder) for folder in tqdm(folder_list, desc='Processing WFN data')]
 
     def mat_statistics(self, flows_dir:str, dataset_type:type='WFN')-> tuple[list, np.ndarray]:
         """
@@ -491,7 +513,16 @@ class ManyBodyData(Dataset):
         datapoint = {}
         mat_id = os.path.basename(folder)
         info = copy.deepcopy(self.info.__dict__)
+        nc_wfn, nv_wfn = info.pop('nc_wfn'), info.pop('nv_wfn')
 
+        # build src
+        if info.get('from_dft'):
+            wfn_fname = pjoin(pjoin(folder, '17-wfn_fi', "wfn.h5"))
+            wf = wfn(wfn_fname)
+            datapoint_src =  wf.get_dataset(nc=nc_wfn, nv=nv_wfn, **info)
+            datapoint['src'] = datapoint_src
+
+        # build tgt and label
         if not info.get('predict_only'):
             if info.get('from_dft'):
                 # build label first
@@ -507,18 +538,18 @@ class ManyBodyData(Dataset):
                 wfn_fname = pjoin(pjoin(folder, '17-wfn_fi', "wfn.h5"))
                 wf = wfn(wfn_fname)
                 datapoint_src =  wf.get_dataset(nc=nc, nv=nv, **info)
-                datapoint['src'] = datapoint_src
+                datapoint['tgt'] = datapoint_src
             else:
                 raise NotImplementedError
 
         else:
-            nc_wfn, nv_wfn = info.pop('nc_wfn'), info.pop('nv_wfn')
+            nc_wfn, nv_wfn = info.pop('nc_bse'), info.pop('nv_bse')
             if info.get('from_dft'):
                 # build src
                 wfn_fname = pjoin(pjoin(folder, '17-wfn_fi', "wfn.h5"))
                 wf = wfn(wfn_fname)
                 datapoint_src =  wf.get_dataset(nc=nc_wfn, nv=nv_wfn, **info)
-                datapoint['src'] = datapoint_src
+                datapoint['tgt'] = datapoint_src
 
             else:
                 raise NotImplementedError
@@ -707,18 +738,29 @@ if __name__ == "__main__":
     bsedata = ManyBodyData(flows_dir='../../examples/flows', dataset_dir='./dataset', dataset_type='BSE', dataset_fname='dataset_BSE.h5',
                             load_dataset=False, cell_slab_truncation=30, useWignerXY=True,  AngstromPerPixel=0.1, 
                             AngstromPerPixel_z=0.2, upsampling_factor=2, multiprocessing=True,
-                            from_dft=True, predict_only=True, nc_wfn=4,nv_wfn=2)   
+                            from_dft=True, predict_only=True, nc_wfn=6, nv_wfn=4, nc_bse=4, nv_bse=2)   
 
-    assert abs(bsedata[1]['src']['wfn'][0,0,14,13,15] - 5.971020835603282e-07) < 1e-10, "BSE Unit Test Failed"
+    assert abs(bsedata[1]['tgt']['wfn'][0,0,14,13,15] - 5.971020835603282e-07) < 1e-10, "BSE Unit Test Failed"
 
     # slice
     bsedata = ManyBodyData.from_existing_dataset('./dataset/dataset_BSE.h5', slice(1,2))
-    assert abs(bsedata[0]['src']['wfn'][0,0,14,13,15] - 5.971020835603282e-07) < 1e-10
+    assert abs(bsedata[0]['tgt']['wfn'][0,0,14,13,15] - 5.971020835603282e-07) < 1e-10
     assert len(bsedata) == 1, "BSE Unit Test Failed"
 
     # please see ToyDataSet.get_bse_dataset() for how to use ManyBodyData (Two ways)
     bsedata = ToyDataSet.get_bse_dataset(read=False)
     bsedata = ToyDataSet.get_bse_dataset(read=True)
+
+    """onlySave Test"""
+    bsedata = ManyBodyData(flows_dir='../../examples/flows', dataset_dir='./dataset', dataset_type='BSE', dataset_fname='dataset_BSE.h5',
+                            load_dataset=False, cell_slab_truncation=30, useWignerXY=True,  AngstromPerPixel=0.1, 
+                            AngstromPerPixel_z=0.2, upsampling_factor=2, multiprocessing=True, onlySave=True,
+                            from_dft=True, predict_only=False, nc_wfn=6, nv_wfn=4, nc_bse=4, nv_bse=2) 
+    assert len(bsedata) == 0, "onlySave Test Failed"
+
+    bsedata = ManyBodyData.from_existing_dataset('./dataset/dataset_BSE.h5', slice(1,2))
+    assert abs(bsedata[0]['tgt']['wfn'][0,0,14,13,15] - 5.971020835603282e-07) < 1e-10
+    assert len(bsedata) == 1, "BSE Unit Test Failed"
 
     print("WFN: unit test passed")    
     print("GW: unit test passed")

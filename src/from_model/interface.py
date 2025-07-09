@@ -4,10 +4,10 @@ import h5py as h5
 import os
 import matplotlib.pyplot as plt
 from scipy.io import FortranFile
-from model_util import H5ls, time_watch, memory_watch, eV2Ry
+from from_model.model_util import H5ls, time_watch, memory_watch, eV2Ry
 from tqdm import tqdm
 import logging
-import wigner
+import from_model.wigner as wigner
 from scipy.ndimage import zoom
 import time
 import matplotlib.pyplot as plt
@@ -504,6 +504,8 @@ class wfn(BGWIO):
             target_z_dim = round(self.lattice[2,2] / AngstromPerPixel_z)
             # resize_wfn_r = lambda image: cv2.resize(image.reshape(1, -1), (target_z_dim,1), interpolation=cv2.INTER_CUBIC).squeeze()
             resize_wfn_r = lambda image: zoom(image, target_z_dim/self.FFTgrid[2], order=3)
+            # print('\n',self.wfn_file_h5,'wfn_r.shape:',wfn_r.shape)
+            # print('wfn_r.shape:',wfn_r.shape, target_z_dim, self.FFTgrid[2], wfn_r[0,0,0,0,:3])
             wfn_r = np.apply_along_axis(resize_wfn_r, axis=4, arr=wfn_r)
             logging.debug(f'ratio: {target_z_dim/self.FFTgrid[2]:.2f}, wfn_r shape: {wfn_r.shape},z_AngstromPerPixel: {self.lattice[2,2]/wfn_r.shape[4]:.2f}')
 
@@ -631,9 +633,17 @@ class AScvk(BGWIO):
         if not self.eigenvectors or not self.eigenvalues:
             self.get_acvkS()
 
+        # get dipole strength
+        abs_dirname = os.path.dirname(self.eigenvech5_file)
+        dipole_sequred = np.loadtxt(os.path.join(abs_dirname, 'eigenvalues_b1.dat'))[:,1]
+
+        assert np.allclose(np.loadtxt(os.path.join(abs_dirname, 'eigenvalues_b1.dat'))[:,0],
+                           self.eigenvalues)
+
         dataset = {
             "eigenvectors": abs(self.eigenvectors),
             "eigenvalues": self.eigenvalues[:, None],
+            "dipole_squared": dipole_sequred[:, None]
         }
 
         return dataset  

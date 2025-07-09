@@ -7,7 +7,7 @@ import torch
 import torchvision
 import torchvision.transforms as transforms
 from torch.utils.data import DataLoader
-from model_util import print_model_size
+from from_model.model_util import print_model_size, capture_config
 import os
 from tqdm import tqdm
 
@@ -280,6 +280,7 @@ class EquivariantDecoder(nn.Module):
         return x
 
 class EquivariantVAE(nn.Module):
+    @capture_config
     def __init__(self, input_channels=1, N_rotation=12,
                 hidden_cnn_channels: list=[96, 48, 48, 12], 
                 hidden_pooling: list=[-1.00, 0.66, -1.00, 0.66],
@@ -430,6 +431,10 @@ def unit_test():
         print("Reconstruction Shape: Pass")
         loss = vae_loss(x_recon, data, mu, logvar)
         print(loss)
+        print("shape data:", data.shape)
+        print("shape x_recon:", x_recon.shape)
+        print("shape mu:", mu.shape)
+        print("shape logvar:", logvar.shape)
     else:
         print("Reconstruction Shape: Fail")
         print(f"Expected: {data.shape}, Got: {x_recon.shape}")

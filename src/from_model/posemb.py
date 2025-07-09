@@ -3,7 +3,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch import Tensor
 from torch.utils.data import Dataset, DataLoader, TensorDataset
-from data import ToyDataSet as d
+from from_model.data import ToyDataSet as d
 import torch
 import torch.nn as nn
 import numpy as np
@@ -122,8 +122,7 @@ class BandPositionalEmbeddings(nn.Module):
             pos_emb = self.positional_embeddings_pos(pos[positive_mask])
             neg_emb = self.positional_embeddings_neg(-pos[negative_mask])
             # create a new tensor with the same shape as pos
-            emb = torch.zeros((pos.shape[-1], self.d_model), device=pos.device)
-
+            emb = torch.zeros((pos.shape[0], pos.shape[1], self.d_model), device=pos.device)
             emb[positive_mask] = pos_emb
             emb[negative_mask] = neg_emb
             res = emb

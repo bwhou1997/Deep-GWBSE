@@ -1,6 +1,6 @@
 #%%
 import math
-from trainer import Trainer
+from from_model.trainer import Trainer
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -15,9 +15,9 @@ from tqdm import tqdm
 import matplotlib.pyplot as plt
 import torchvision.transforms.functional as TF
 import matplotlib.pyplot as plt
-from e2vae import EquivariantVAE, vae_loss
+from from_model.e2vae import EquivariantVAE, vae_loss
 from torch.utils.data import DataLoader
-from data import ManyBodyData
+from from_model.data import ManyBodyData
 from sklearn.metrics import r2_score
 
 class WFNVAETrainer(Trainer):
@@ -100,29 +100,32 @@ def wfn_collate_fn(batch):
     return wfn, mask
 
 if __name__ == "__main__":
-
+    config_model_path = "./vae_e2_wfn.save"
     num_epoches = 200
     beta = 0.0
     train_val_split = 0.8 # 
 
-    wfdata = ManyBodyData.from_existing_dataset('./dataset/dataset_semi.h5')
+    wfdata = ManyBodyData.from_existing_dataset('./dataset/1000_wfn_1/dataset_WFN_1000.h5')
 
     wfdata_train = wfdata[:int(len(wfdata)*train_val_split)]
     wfdata_val = wfdata[int(len(wfdata)*train_val_split):]
     dataloader_train = DataLoader(wfdata_train, batch_size=1, collate_fn=wfn_collate_fn)
     dataloader_val = DataLoader(wfdata_val, batch_size=1, collate_fn=wfn_collate_fn)
 
-
-    vae = EquivariantVAE(input_channels=wfdata.info.cell_slab_truncation,
-                            hidden_cnn_channels=[60,60,48,48,4],
-                            hidden_pooling=[-1,0.66,-1,-1,0.66],
-                            kernel_size=[7,5,5,3,3])
+    if os.path.exists(config_model_path):
+        print("Loading model from", config_model_path)
+        vae = Trainer.configure_model(EquivariantVAE, config_model_path)
+    else:
+        vae = EquivariantVAE(input_channels=wfdata.info.cell_slab_truncation,
+                                hidden_cnn_channels=[60,60,48,48,48],
+                                hidden_pooling=[-1,0.66,-1,-1,0.66],
+                                kernel_size=[7,5,5,3,3])
     optimizer = torch.optim.Adam(vae.parameters(), lr=1e-3)
 
 
     vae_trainer = WFNVAETrainer(vae, optimizer, beta=beta, model_name="vae_e2_wfn")
-    vae_trainer.load_model()
-    vae_trainer.train(num_epoches, dataloader_train, dataloader_val, continued=False)
+    vae_trainer.load_model(load_best=True)
+    vae_trainer.train(num_epoches, dataloader_train, dataloader_val, continued=True)
 
     #%%
     vae_trainer.load_model(load_best=True)

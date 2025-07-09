@@ -20,8 +20,8 @@ twist.cif─┌──(deephe3-xx.py, diag_plot.py)─> band.png
 ```
 --Path 2--:
 1. Train:
-external database──>fp-input─(flows.py, data.py)─> ml_dataset.h5 ──┌─(xx_trainer.py)─> model
-                                                   └─(flows-aug.py)┘
+external database─>stru_input─(flows.py,flows-aug.py)─>flows─>(data.py)─>dataset.h5─(trainer.py)─> model
+
 2. Use:
 Features: G0W0, BSE (binding energy, |<cvk|S>|)
 ```
@@ -43,7 +43,8 @@ Related files on top of the folder:
 - `flows.py` (**unit-test**): `-c` reads .json file, create multiple material flows.
 - `flows-augmentations.py`: `-c` reads .json file, create `GW` or `BSE` augmentation flows for finished flows.
 - `fptask.py`: customized task for the `flow.py` script.
-- `collect_tool.py`: `md` collect molecular dynamics data to build stru-input 
+- `collect_tool.py`:
+    - md: `collect_tool.py md -md_input MD_INPUT -md_output MD_OUTPUT -md_suffix MD_SUFFIX`
 - `config/single_mat_config.json`: The configuration file for the `flow.py`(single material flow).
 - `config/fpconfig.json`: The configuration file for the `flows.py` script(multiple material flows).
 
@@ -109,7 +110,13 @@ flows/
 
 Related files on top of the folder:
 - `QE, BGW, HPRO, SIESTA`: First-principle calculator
-- `collect_tool.py`: `deeph`, `metalseek`, `st`, see `-h` for more details.
+- `collect_tool.py`(see `-h`): 
+    - deeph: `collect_tool.py deeph -flows FLOWS`
+    - metalseek: `collect_tool.py metalseek -flows FLOWS `
+    - st: `collect_tool.py st -flows FLOWS`
+    - sub: `collect_tool.py sub -job JOB -hours HOURS -nodes NODES`
+    - compact: `collect_tool.py compact -flows FLOWS (-folder FOLDER) (-unwanted UNWANTED)` (delete unwanted files for all flow and delete 02-wfn/wfn.h5 for all unifhished flow to save space)
+    - restart: `collect_tool.py restart -flows FLOWS`
 - `from_model/data.py` (**unit-test**): create for WFN, GW, BSE datatype
     - `from_model/wigner.py` (**unit-test**): create wigner cell for WFN
     - `from_model/interface.py` (**unit-test**): interface for `data.py`, including eqp, vloc, wfn, and AScvk classes
@@ -126,6 +133,8 @@ dataset.h5 (see data.py)
 ```
 
 Related files on top of the file:
+- `collect_tool.py`(see `-h`): 
+    - merge: `collect_tool.py merge -folder FOLDER -dataset_fname DATASET_FNAME` (merge all dataset h5 files into one)
 - `from_model/data.py` (**unit-test**): load from h5 file
 - `from_model/trainer.py`: train the model on the dataset
 - `from_model/bsetrainer.py` (**unit-test**)

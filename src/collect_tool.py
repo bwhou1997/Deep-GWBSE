@@ -15,6 +15,13 @@ from os.path import join as pjoin
 import os
 import subprocess
 from tqdm import tqdm
+import glob
+import h5py as h5
+import sys
+import os
+from utils import jobdone, check_flows_status
+from from_model.data import ManyBodyData 
+
 
 
 def collect_from_md(md_input_fname = './flow-hBN-md/flow-hBN-AB-661/01-density/scf.in',
@@ -153,100 +160,10 @@ def metal_seek(flows='./flows-bwhou'):
     with open("metal_seek.json", "w") as f:
         json.dump(summary, f, indent=4)
 
-import os 
-import json
-import subprocess
 
-def jobdone(task_dir: str) -> bool:
-    task = os.path.basename(task_dir)
-    if task == '01-density':
-        result = subprocess.run(['grep', 'DONE', os.path.join(task_dir, 'scf.out')], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-        return result.returncode == 0
-    elif task == "02-wfn":
-        res1 = subprocess.run(['grep', 'DONE', os.path.join(task_dir, 'wfn.out')], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-        res2 = subprocess.run(['grep', 'TOTAL', os.path.join(task_dir, 'parabands.out')], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-        res3 = subprocess.run(['grep', 'DONE', os.path.join(task_dir, 'wfn.pp.out')], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-        return res1.returncode == 0 and res2.returncode == 0 and res3.returncode == 0
-    elif task == "03-wfnq":
-        res1 = subprocess.run(['grep', 'DONE', os.path.join(task_dir, 'wfn.out')], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-        res2 = subprocess.run(['grep', 'DONE', os.path.join(task_dir, 'wfn.pp.out')], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-        res3 = subprocess.run(['grep', 'alpha', os.path.join(task_dir, 'pseudo.out')], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-        return res1.returncode == 0 and res2.returncode == 0 and res3.returncode == 0
-    elif task == '05-band':
-        res1 = subprocess.run(['grep', 'DONE', os.path.join(task_dir, 'wfn.out')], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-        res2 = subprocess.run(['grep', 'DONE', os.path.join(task_dir, 'wfn.pp.out')], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-        res3 = subprocess.run(['grep', 'DONE', os.path.join(task_dir, 'bands.out')], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-        return res1.returncode == 0 and res2.returncode == 0 and res3.returncode == 0
-    elif task == '06-wfnq-nns':
-        res1 = subprocess.run(['grep', 'DONE', os.path.join(task_dir, 'wfn.out')], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-        res2 = subprocess.run(['grep', 'DONE', os.path.join(task_dir, 'wfn.pp.out')], stdout=subprocess.PIPE, stderr=subprocess.PIPE)     
-        return res1.returncode == 0 and res2.returncode == 0   
-    elif task == "11-epsilon":
-        result = subprocess.run(['grep', 'Job Done', os.path.join(task_dir, 'epsilon.out')], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-        return result.returncode == 0
-    elif task == "12-epsilon-nns":
-        result = subprocess.run(['grep', 'Job Done', os.path.join(task_dir, 'epsilon.out')], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-        return result.returncode == 0        
-    elif task == "13-sigma":
-        result = subprocess.run(['grep', 'Job Done', os.path.join(task_dir, 'sigma.out')], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-        return result.returncode == 0
-    elif task == "14-inteqp":
-        # grep 'Job Done' inteqp.log
-        result = subprocess.run(['grep', 'Job Done', os.path.join(task_dir, 'inteqp.log')], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-        return result.returncode == 0
-    elif task == "17-wfn_fi":
-        res1 = subprocess.run(['grep', 'DONE', os.path.join(task_dir, 'wfn.out')], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-        res2 = subprocess.run(['grep', 'DONE', os.path.join(task_dir, 'wfn.pp.out')], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-        return res1.returncode == 0 and res2.returncode == 0
-    elif task == "18-kernel":
-        # grep 'TOTAL' kernel.out
-        result = subprocess.run(['grep', 'TOTAL', os.path.join(task_dir, 'kernel.out')], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-        return result.returncode == 0
-    elif task == '19-absorption':
-        # grep 'TOTAL' absorption.out
-        result = subprocess.run(['grep', 'TOTAL', os.path.join(task_dir, 'absorption.out')], stdout=subprocess.PIPE, stderr=subprocess.PIPE)    
-        return result.returncode == 0
-    else:
-        return 'unknown task'
-
-
-def check_flows_status(flows: str = './flows-semi', dump: bool = True):
-    print(f"Checking flows status in {flows}...")
-    flows_status = {}
-    
-    for root, dirs, _ in os.walk(flows):
-        if '01-density' not in dirs:
-            if "02-wfn" not in dirs:
-                # gw augmentation
-                if "17-wfn_fi" not in dirs:
-                    # bse augmentation
-                    continue
-        
-        flow_status = {"Yes": [], "No": [], "Unknown Job": []}
-        for dir in filter(lambda d: d != 'pp', dirs):
-            job_status = jobdone(os.path.join(root, dir))
-            if job_status is True:
-                flow_status["Yes"].append(dir)
-            elif job_status is False:
-                flow_status["No"].append(dir)
-            else:
-                flow_status["Unknown Job"].append(dir)
-        
-        # Sort once at the end for efficiency
-        for key in flow_status:
-            if flow_status[key]:  
-                flow_status[key].sort()
-        
-        flows_status[root] = {k: ",".join(v) for k, v in flow_status.items()}
-    
-    if dump:
-        output_file = f"{os.path.basename(flows)}_status.json"
-        print(output_file, flows)
-        with open(output_file, 'w') as f:
-            json.dump(flows_status, f, indent=4, separators=(',', ': '))
-        print(f"Flows status saved to {output_file}")
-    
-    return flows_status
+def set_sbatch(cluster, nodes, hours):
+    assert cluster in ['perlmutter'], "Only perlmutter is supported"
+    return f"#!/bin/bash\n#SBATCH -N {nodes}\n#SBATCH -C cpu\n#SBATCH -q regular\n#SBATCH -t {hours}:00:00\n"
 
 def generate_sbatch_jobs(fname='./run_aug.sh', nsbatch=3, hours=4, cluster='perlmutter', nodes=4):
     """
@@ -259,10 +176,6 @@ def generate_sbatch_jobs(fname='./run_aug.sh', nsbatch=3, hours=4, cluster='perl
         cluster (str): Cluster name (only 'perlmutter' is supported).
         nodes (int): Number of nodes for the job.
     """
-    
-    def set_sbatch(cluster, nodes, hours):
-        assert cluster in ['perlmutter'], "Only perlmutter is supported"
-        return f"#!/bin/bash\n#SBATCH -N {nodes}\n#SBATCH -C cpu\n#SBATCH -q regular\n#SBATCH -t {hours}:00:00\n"
     
     with open(fname, 'r') as f:
         lines = f.readlines()
@@ -300,6 +213,141 @@ def generate_sbatch_jobs(fname='./run_aug.sh', nsbatch=3, hours=4, cluster='perl
     
     print(f"Generated {nsbatch} job scripts.")
 
+def compact_data_folder(folder: str = '.', unwanted: dict = None):
+    if unwanted is None:
+        unwanted = {
+        "unwanted_files": [
+        "01-density/VSC",
+        "01-density/VXC",
+        "01-density/wfn.cplx",
+        "01-density/*.wfc*",
+        "01-density/*.save/wfc*.dat",
+        "02-wfn/VSC",
+        "02-wfn/VXC",
+        "02-wfn/VKB",
+        # "02-wfn/wfn.h5", # This is parabands wfn, we don't need it
+        "02-wfn/*.wfc*",
+        "02-wfn/*.save/wfc*.dat",
+        "03-wfnq/wfn.h5",
+        "03-wfnq/wfn.cplx",
+        "03-wfnq/wfn_q.h5",
+        "03-wfnq/*.wfc*",
+        "03-wfnq/*.save/wfc*.dat",
+        # "05-band/wfn.cplx", # saved for data-aug
+        "05-band/*.wfc*",
+        "05-band/*.save/wfc*.dat",
+        "06-wfnq-nns/wfn.cplx",
+        "06-wfnq-nns/*.wfc*",
+        "06-wfnq-nns/*.save/wfc*.dat",
+        "12-epsilon-nns/eps0mat.h5",
+        # "17-wfn_fi/wfn.cplx", # saved for data-aug
+        "17-wfn_fi/*.wfc*",
+        "17-wfn_fi/*.save/wfc*.dat"]}
+
+    unwanted_files = unwanted.get('unwanted_files', [])
+    for file in unwanted_files:
+        pattern = glob.glob(pjoin(folder, file))
+        if not pattern:
+            print(f"{pjoin(folder, file)} does not exist")
+        else:
+            for file_path in pattern:
+                os.remove(file_path)
+            print(f"Removed {pjoin(folder, file)}")
+
+def compact_data_flows(flows: str = './flows', unwanted: dict = None):
+    f = os.scandir(flows)
+    for entry in f:
+        if entry.is_dir():
+            print("")
+            print(f"Compacting {entry.path}")
+            compact_data_folder(entry.path, unwanted)
+    
+    # remove wfn.h5 from all unfinished flow
+    # status = check_flows_status(flows, dump=False)
+    # unwanted_wfn = {"unwanted_files":['02-wfn/wfn.h5']}
+    # for flow, status in status.items():
+    #     if status["Yes"] and status["No"]: # unfinished
+    #         compact_data_folder(flow, unwanted_wfn)
+
+
+def restart_sbatch_jobs(flows):
+    """
+    Restart sbatch jobs for unfinished flows.
+    """
+    # check the status of the flows
+    flows_status = check_flows_status(flows, dump=False)
+
+    length_of_flows = len(flows_status)
+    
+    # find the unfinished flows
+    unfinished_flows = []
+    for flow, status in flows_status.items():
+        if not status["Yes"]: # TODO: modify this after updating "bug_list" to check_flows_status 
+            unfinished_flows.append(flow)
+    length_of_unfinished_flows = len(unfinished_flows)
+    print(f"Found {length_of_unfinished_flows} unfinished flows out of {length_of_flows} flows.")
+    # generate sbatch jobs for the unfinished flows
+
+    with open('restart_run.sh', 'w') as f:
+        f.write("#!/bin/bash\n")
+        f.write("\n")
+        for flow in unfinished_flows:
+            f.write(f"cd {os.path.basename(flow)}\n")
+            f.write(f'echo "{os.path.basename(flow)}"\n')
+            f.write("bash run.sh\n")
+            f.write("cd ..\n")
+            f.write("\n")
+    
+    print(f"Generated restart_run.sh for {length_of_unfinished_flows} unfinished flows.")
+
+
+
+def merge_dataset(path:str, dataset_fname:str):
+    """
+    Merge multiple dataset h5files into one dataset h5 file.
+    Requirements: info must be the same in all h5 files.
+    """
+    h5_files = [os.path.join(path, f) for f in os.listdir(path) if f.endswith('.h5')]
+
+    data = ManyBodyData.from_existing_dataset(h5_files[0], slice(0,0))
+    info = copy.deepcopy(data.info)
+    info.merged_data = True
+    del data
+
+    print("h5 files to be merged:", h5_files)
+
+    # compare the info with the rest of the files
+    for h5_file in h5_files:
+        with h5.File(h5_file,'r') as f:
+            assert f['info'], f"info not found in file {h5_file}"
+            for key, val in f['info'].items():
+                if key == 'merged_data':
+                    raise ValueError(f"detected h5file created from merging, please double check the file {h5_file}")
+                assert key in info.__dict__, f"key {key} not found in file {h5_file}"
+                if key == 'mat_id':
+                    mat_id_list = val[()]
+                    info.__dict__[key] = np.concatenate([info.__dict__[key], mat_id_list])
+                    continue
+                v = val[()]
+
+                if isinstance(val[()], bytes):
+                    v = val[()].decode('utf-8')
+                assert np.array_equal(v, info.__dict__[key]), f"key {key} not equal in file {h5_file}"
+            assert len(f['info']) + 1 == len(info.__dict__), f"key {key} not found in file {h5_file}"
+    # start merging
+    ManyBodyData.init_dataset_h5(dataset_dir=path,
+                                dataset_fname=dataset_fname,
+                                info=info,
+                                multiprocessing = False)
+
+    for h5_file in h5_files:
+        print(f"merging {h5_file}")
+        with h5.File(h5_file, 'r') as f:
+            for mat_id in tqdm(f['info']['mat_id'][()]):
+                ManyBodyData.datapoint_interface_h5(os.path.join(path, dataset_fname), mat_id, f[mat_id], mode='a')
+            
+
+
 if __name__ == '__main__':
     import argparse
 
@@ -312,21 +360,26 @@ if __name__ == '__main__':
         formatter_class=argparse.RawTextHelpFormatter
     )
 
-    parser.add_argument('mode', choices=['md', 'deeph', 'metalseek', 'st', 'sub'], help="""\
+    parser.add_argument('mode', choices=['md', 'deeph', 'metalseek', 'st', 'sub','compact', 'restart', 'merge'], help="""\
     md: collect structures from MD output.
     deeph: collect DFT-Ham from DFT/SIESTA/HPRO flows.
     metalseek: determine metallicity from DFT flows
     st: check the status of the flows
+    compact: compact data. delete the unwanted files to save space
+    restart: generate new sbatch jobs for all the unfinished flows
     """)
     # parser.add_argument('mode', choices=['md', 'deeph', 'metal'], help='md: collect structures from MD output. \ndeeph: collect DFT-Ham from DFT/SIESTA/HPRO flows. \nmetal:')
     parser.add_argument('-md_input', type=str, help='md: input file name')
     parser.add_argument('-md_output', type=str, help='md: output file name')
     parser.add_argument('-md_suffix', type=str, default='', help='md: suffix for MD files')
-    parser.add_argument('-flows', type=str, help='deeph/metalseek: directory containing DFT/SIESTA/HPRO flows')
+    parser.add_argument('-flows', type=str, help='deeph/metalseek/compact/restart: directory containing DFT/SIESTA/HPRO/GW/BSE flows')
     parser.add_argument('-job', type=str, help='sub: sbatch job file name')
     parser.add_argument('-nsbatch', type=int, default=3, help='sub: number of sub-sbatch jobs')
     parser.add_argument('-hours', type=int, default=4, help='sub: hours for each job')
     parser.add_argument('-nodes', type=int, default=4, help='sub: number of nodes for each job')
+    parser.add_argument('-folder', type=str, help='compact: flow dir to compact; merge: folder containing h5 files to merge')
+    parser.add_argument('-dataset_fname',type=str, default='merged_dataset.h5', help='merge: output dataset file name')
+    parser.add_argument('-unwanted', type=str, default=None, help='compact: json includes unwanted files to delete')
 
     args = parser.parse_args()
 
@@ -354,4 +407,32 @@ if __name__ == '__main__':
         if not args.job:
             parser.error('--job is required in "sub" mode')
         generate_sbatch_jobs(args.job, args.nsbatch, args.hours, 'perlmutter', args.nodes)
+
+    
+    elif args.mode == 'compact':
+        if not args.unwanted:
+            # parser.error('--unwanted is required in "compact" mode')
+            print('default unwanted list is used')
+            unwanted = None
+        else:
+            print('Using user provided unwanted list')
+            with open(args.unwanted, 'r') as f:
+                unwanted = json.load(f)
+        if args.flows != None and args.folder == None:
+            compact_data_flows(args.flows, unwanted)
+        elif args.flows == None and args.folder != None:
+            compact_data_folder(args.folder, unwanted)
+        elif args.flows != None and args.folder != None:
+            parser.error('--folder and --flows are mutually exclusive')
+        elif args.flows == None and args.folder == None:
+            parser.error('--folder or --flows is required in "compact" mode')
+
+    elif args.mode == 'restart':
+        if not args.flows:
+            parser.error('--flows is required in "restart" mode')
+        restart_sbatch_jobs(args.flows)
         
+    elif args.mode == 'merge':
+        if not args.folder:
+            parser.error('--folder is required in "merge" mode')
+        merge_dataset(args.folder, args.dataset_fname)

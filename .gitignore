@@ -77,3 +77,6 @@ src/from_model/bse_training/
 examples/c2db/
 c2db-1000-7-0.4
 examples/other-1000/
+src/from_model/data1.dat
+src/from_model/data2.dat
+src/from_model/bsetrainer-copy.py

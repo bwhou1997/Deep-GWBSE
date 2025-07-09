@@ -209,6 +209,9 @@ class DFT_GW_HPRO_Flow(Workflow):
         # ==== BSE Caculcations ==========
         if kwargs.get('BSE', False):
             self.make_bse_tasks_bgw(**kwargs)
+
+        if kwargs.get('compact_data', False):
+            self.compact_data(**kwargs)
         
 
     def make_dft_tasks_espresso_DFTonly(self, **kwargs):
@@ -519,6 +522,12 @@ class DFT_GW_HPRO_Flow(Workflow):
         )
         self.add_tasks([self.kerneltask, self.absorptiontask], merge=False)
 
+    def compact_data(self, **kwargs):
+        if kwargs.get('unwanted_files', None):
+            self.runscript.append('collect_tool.py compact -folder ./ -unwanted {}'.format(kwargs['unwanted_files']))
+        else:
+            self.runscript.append('collect_tool.py compact -folder ./')
+
 
     def summary(self, verbose):
         pass
@@ -555,6 +564,7 @@ def check_pseudo(pseudo_dir_src='./from_oncvpsp/', pseudos=['S.upf','H.upf']):
             print('Warning: pseudo file is not found:', pseudo)
     # print(pseudos_z_valence)
     return pseudos_z_valence
+
 
 if __name__ == "__main__":
 
