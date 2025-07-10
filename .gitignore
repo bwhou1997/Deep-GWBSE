@@ -69,7 +69,7 @@ src/from_model/xian.py
 
 src/from_model/wfn_dataset_generate.py
 examples/fpconfig-semi.json
-examples/nc300-semi-gw-bse
+examples/nc300-semiconductor
 examples/Notes.md
 src/fpconfig.json
 src/fp-input/mat-5/stru.cif
