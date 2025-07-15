@@ -77,12 +77,13 @@ class WFNVAETrainer(Trainer):
 
 # wfdata = ManyBodyData.from_existing_dataset('./dataset/dataset_semi.h5')
 
+# Change the internal structure of a batch
 def wfn_collate_fn(batch):
     assert len(batch)==1, "Batch size should be 1 for WFN data"
     wfn = batch[0]["wfn"]
     nk, nb, X, Y, C = wfn.shape
     # Rearrange dimensions to make the z-coordinate the channel dimension,
-    # treating each material as a batch due to varying wave function sizes.
+    # treating each material as a batch due to varying wave function sizes dependong on materials's structures.
     wfn = (wfn.reshape(nk*nb, X, Y, C)).transpose(0, 3, 1, 2)
     wfn = torch.from_numpy(wfn).float()
     scaling_factor = 4 # TODO: make the process determining the scaling factor automatic
@@ -101,11 +102,11 @@ def wfn_collate_fn(batch):
 
 if __name__ == "__main__":
     config_model_path = "./vae_e2_wfn.save"
-    num_epoches = 200
+    num_epoches = 0 #200
     beta = 0.0
     train_val_split = 0.8 # 
 
-    wfdata = ManyBodyData.from_existing_dataset('./dataset/1000_wfn_1/dataset_WFN_1000.h5')
+    wfdata = ManyBodyData.from_existing_dataset('./dataset/dataset_WFN.h5')
 
     wfdata_train = wfdata[:int(len(wfdata)*train_val_split)]
     wfdata_val = wfdata[int(len(wfdata)*train_val_split):]
@@ -141,5 +142,6 @@ if __name__ == "__main__":
 
     axes[0, 0].set_ylabel("Original")
     axes[1, 0].set_ylabel("Reconstructed")
-    plt.show()
+    plt.savefig(config_model_path + "/reconstructed_comparison.png")
+
     # %%

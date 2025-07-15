@@ -175,8 +175,8 @@ if __name__ == "__main__":
     num_epoches = 1000
     train_val_split = 0.7
     config_model_path = "./gw_transformer_sigma.save"
-    dataset_dir = './gw_xian_train/dataset'
-    dataset_fname = 'dataset_GW_1000_1.h5'
+    dataset_dir = './dataset'
+    dataset_fname = 'dataset_GW.h5'
     dataset_latent_fname = dataset_fname.split('.')[0] + '_latent.h5'
 
     if not os.path.exists(os.path.join(dataset_dir, dataset_latent_fname)):
