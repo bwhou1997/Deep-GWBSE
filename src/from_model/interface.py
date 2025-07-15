@@ -442,10 +442,30 @@ class wfn(BGWIO):
 
         assert ((abs(wfn_r)**2).sum(axis=(2,3,4)) - 1 < 1e-6).all(), 'Check Norm Failed'
         return abs(wfn_r)**2, el_r, occ
+    
+    def get_dipole(self, nc, nv):
+        with h5.File(self.wfn_file_h5, 'r') as f:
+            bdot =f['/mf_header/crystal/bdot'][()]
+            nk = f['mf_header/kpoints/nrk'][()]
+            nb = nv+nc
+            rk = f['mf_header/kpoints/rk'][()]
+            ngk = f['mf_header/kpoints/ngk'][()]
+            k_index =np.hstack((np.array([0]), np.cumsum(ngk)))
+            hovb = self.hovb
+            dipole_matrix = np.zeros([nk,nb,nb],dtype=np.complex128)
+            for ik in range(nk):
+                coeffs_k = f['wfns/coeffs'][hovb-nv:hovb+nc, :, k_index[ik]:k_index[ik + 1], 0]+1j*f['wfns/coeffs'][hovb-nv:hovb+nc, :, k_index[ik]:k_index[ik + 1], 1]
+                gvecs_k = f['wfns/gvecs'][k_index[ik]:k_index[ik + 1],:]
+                kmatrix = np.repeat(rk[ik:ik + 1, :], k_index[ik + 1] - k_index[ik], axis=0)
+                Gpulsk = np.matmul(bdot, (gvecs_k + kmatrix).T).T
+
+                dipole_b1 = np.einsum("mg,g,ng -> mn", np.conj(coeffs_k[:, 0, :]), Gpulsk[:, 0], coeffs_k[:, 0, :], optimize='optimal')
+                dipole_matrix[ik,:,:] = dipole_b1/np.sqrt(bdot[0, 0])
+        return dipole_matrix
 
     @time_watch
     def get_dataset(self, nc:int=6 ,nv:int=2, cell_slab_truncation:int=40, useWignerXY:bool=False, 
-                        AngstromPerPixel:float=0.1, **kwargs)->dict:
+                        AngstromPerPixel:float=0.1, operator = None, **kwargs)->dict:
         """
         Get the dataset of the wavefunction for ML
         Input:
@@ -480,7 +500,15 @@ class wfn(BGWIO):
                 "band_indices: (nk, nc+nv, 1), # [-2,-1,1,2,3,4] (start with 1 or -1)
                 "band_indices_abs": (nk, nc+nv, 1), #[3,4,5,6,7,8] (start with 1)
             }
+        possible operators:
+            'dipole': (nk, nc+nv, nc+nv) dipole matrix elements
         """
+        if operator == 'dipole':
+            dipole = self.get_dipole(nc=nc, nv=nv)
+            print(f'Dipole matrix shape: {dipole.shape}')
+        elif operator is not None:
+            raise NotImplementedError(f'Operator {operator} is not implemented yet')
+
         logging.debug(f'Creating dataset for {self.wfn_file_h5}')
 
         wfn_r, el_r, occ = self.get_wfn_r_in_grid(nc=nc, nv=nv, **kwargs)
@@ -564,6 +592,8 @@ class wfn(BGWIO):
             "band_indices": band_indices.astype(int),
             "band_indices_abs": band_indices_abs.astype(int),
         }
+        if operator == 'dipole':
+            dataset['dipole'] = dipole
 
         return dataset
 
