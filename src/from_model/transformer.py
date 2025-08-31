@@ -13,13 +13,24 @@ from from_model.posemb import PositionalEmbeddings_band_energy_kpt
 from from_model.basisassembly import PassBasisAssembly, ElectronHoleBasisAssembly_Concatenate, ElectronHoleBasisAssembly_TensorProduct
 from from_model.model_util import capture_config
 
+class NoAttentionEncoder(nn.Module):
+    def __init__(self, d_model):
+        super().__init__()
+        self.proj = nn.Linear(d_model, d_model)
+        # activation function
+        self.activation = nn.ReLU()  # or nn.GELU(), depending on your preference
+    def forward(self, query):
+        query = self.proj(query)
+        query = self.activation(query)
+        return query
+    
 class MBformerEncoder(nn.Module):
     # @capture_config
     def __init__(self, d_input: int = 24, d_output: int = 1, d_model: int = 576, 
                  nhead: int = 2, num_encoder_layers: int =3, dim_feedforward: int = 2048, dropout: float = 0.1,
                  activation: str = "relu", layer_norm_eps: float = 1e-5, norm_first: bool = False, bias: bool = True, 
                  max_band: int = 30, kpt_dim: int = 2, base_kpt: int = 10000, base_energy: int = 10000,
-                 BasisAssembly: nn.Module = PassBasisAssembly):
+                 BasisAssembly: nn.Module = PassBasisAssembly, use_Attention: bool = True, **kwargs):
         """
         TODO: use **kwargs to simplify the parameters
         Encoder only Transformer: encode ground-state propertes, such as independent electron, electron-hole pairs.
@@ -37,6 +48,7 @@ class MBformerEncoder(nn.Module):
 
         self.kpt_dim = kpt_dim
         self.max_band = max_band
+        self.use_attention = use_Attention
         assert activation in ["relu", "gelu"], f"activation should be relu, gelu but got {activation}"
 
         # BasisAssembly: get d_input based on BasisAssembly and d_model
@@ -52,9 +64,15 @@ class MBformerEncoder(nn.Module):
         self.posembedding_kpt_band_energy = PositionalEmbeddings_band_energy_kpt(d_model=d_fixed, max_band=max_band, kpt_dim=kpt_dim, base_kpt=base_kpt, base_energy=base_energy)
 
         # Transformer-Encoder
-        self.encoder_layer = nn.TransformerEncoderLayer(d_model=d_model, nhead=nhead, dim_feedforward=dim_feedforward, dropout=dropout, bias=bias,
-                                                   activation=activation, layer_norm_eps=layer_norm_eps, batch_first=True, norm_first=norm_first)
-        self.encoder = nn.TransformerEncoder(self.encoder_layer, num_layers=num_encoder_layers)
+        if self.use_attention:
+            self.encoder_layer = nn.TransformerEncoderLayer(d_model=d_model, nhead=nhead, dim_feedforward=dim_feedforward, dropout=dropout, bias=bias,
+                                                    activation=activation, layer_norm_eps=layer_norm_eps, batch_first=True, norm_first=norm_first)
+            self.encoder = nn.TransformerEncoder(self.encoder_layer, num_layers=num_encoder_layers)
+        else:
+            self.encoder_layer = NoAttentionEncoder(d_model=d_model)
+            # stack multiple NoAttentionEncoder layers
+            self.encoder = nn.Sequential(*[NoAttentionEncoder(d_model=d_model) for _ in range(num_encoder_layers)])
+
 
         # last layer calculate attention, which is used to predict wavefunction (e.g. AcvkS)
         self.final_attention = nn.MultiheadAttention(embed_dim=d_model, num_heads=nhead, batch_first=True)        
@@ -298,11 +316,15 @@ def unit_test_MBformerEncoder():
                            BasisAssembly=ElectronHoleBasisAssembly_TensorProduct)
     enc4 = MBformerEncoder(d_input=d.d_model, d_model=144, num_encoder_layers=3,
                             BasisAssembly=ElectronHoleBasisAssembly_TensorProduct)
+    enc5 = MBformerEncoder(d_input=d.d_model, d_model=d.d_model*4, num_encoder_layers=3,
+                            BasisAssembly=ElectronHoleBasisAssembly_Concatenate,
+                            use_Attention=False)
                            
     val, atten = enc1([ele])
     val, atten = enc2([ele, hole])
     val, atten = enc4([ele, hole])
     val, atten = enc3([ele, hole])
+    val, atten = enc5([ele, hole])
     assert atten.shape == (d.batch_size, d.nk_max, d.nv_max, d.nc_max, d.nk_max, d.nv_max, d.nc_max)
     print('enc3(ele, hole) shape:',val.shape)
     print('enc3(ele, hole) shape:',atten.shape)
