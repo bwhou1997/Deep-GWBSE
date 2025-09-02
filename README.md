@@ -47,8 +47,8 @@ For developer and advanced user, please carefully read this [**Documentation**](
 First-principles Packages:
 - [Quantum ESPRESSO](https://www.quantum-espresso.org/) version 6.8
 - [BerkeleyGW](https://berkeleygw.org/documentation/tutorial/) version 3
-- [SIESTA(Optional)](https://docs.siesta-project.org/projects/siesta/en/stable/index.html) version 5+ `conda install -c conda-forge siesta=5.2.1`
-- [Pseudo-dojo(Optional)](https://www.pseudo-dojo.org/)
+- [SIESTA](https://docs.siesta-project.org/projects/siesta/en/stable/index.html)(Optional) version 5+ `conda install -c conda-forge siesta=5.2.1`
+- [Pseudo-dojo](https://www.pseudo-dojo.org/)(Optional)
 
 Deep-GWBSE Installation:
 
@@ -82,7 +82,7 @@ modify `"QE_path"`, `"BGW_path"`, `"pseudo_dir_source"` based on your own softwa
 
 ### 1. GW-BSE workflow part (stay at `src` directory)
 
-For single material (here is hBN), run it on a **interactive node**:
+For single material (here is hBN), run it on an **interactive node**:
 
 ```
 python flow.py -c single_mat_config.json
@@ -91,7 +91,7 @@ sbatch run.sh
 ```
 (It might take a while, you can do something else...)
 
-For multiple materials, run them as a batch on a **interactive node**
+For multiple materials, run them as a batch on an **interactive node**
 
 ```
 python flows.py -c fpconfig.json
@@ -102,9 +102,11 @@ sbatch run.sh
 
 ### 2. Preprocessing the raw data from GWBSE
 Note1: If you don't want to do ML, you can stop here and enjoy your life.
+
 Note2: for advanced user and developer, again, **please carefully read this [**Documentation**](./src/note.md) for more details.** Most of python files have a `test` part following `if __name__ == "__main__"`. **Please run it everytime you modify the code to prevent introducing bugs**.
 
-Machine learning part is at `from_model`:
+All the machine learning code is located at `from_model`, so:
+
 `cd from_model`
 
 Here, I have already prepared some dummy raw data from GW-BSE, which is saved in `Deep-GWBSE/examples/flows`, and you can take a look. Then, read the main function of `data.py` for more details and run it:
