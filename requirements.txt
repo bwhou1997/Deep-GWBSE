@@ -1,0 +1,10 @@
+numpy
+pymatgen
+ase==3.23.0
+torch
+torchvision
+h5py
+e2cnn
+pathos
+tensorboard
+scikit-learn
