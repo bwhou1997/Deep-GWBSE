@@ -20,6 +20,16 @@ import json
 import copy
 import os
 
+# warning management
+import warnings
+
+# Suppress FutureWarning only
+# Ignore FutureWarning (like from pwscfinput.py)
+warnings.simplefilter(action='ignore', category=FutureWarning)
+
+# Ignore UserWarning (like from pymatgen CIF parser)
+warnings.simplefilter(action='ignore', category=UserWarning)
+
 """
 This file only defines workflow for single material:
 Input: only one .cif structure file

@@ -105,7 +105,8 @@ if __name__ == "__main__":
     beta = 0.0
     train_val_split = 0.8 # 
 
-    wfdata = ManyBodyData.from_existing_dataset('./dataset/1000_wfn_1/dataset_WFN_1000.h5')
+    # wfdata = ManyBodyData.from_existing_dataset('./dataset/1000_wfn_1/dataset_WFN_1000.h5')
+    wfdata = ManyBodyData.from_existing_dataset('./dataset/dataset_WFN.h5')
 
     wfdata_train = wfdata[:int(len(wfdata)*train_val_split)]
     wfdata_val = wfdata[int(len(wfdata)*train_val_split):]
