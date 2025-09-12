@@ -78,7 +78,7 @@ cd src/
 cp config/single_mat_config.json ./
 cp config/fpconfig.json ./
 ```
-modify `"QE_path"`, `"BGW_path"`, `"pseudo_dir_source"` based on your own software path. Note: for `"pseudo_dir_source"`, we have already had a built-in pseudo potential package from oncvpsp, and you can simply link it to `'./src/from_oncvpsp'` 
+modify `"QE_path"`, `"BGW_path"`, `"pseudo_dir_source"` based on your own software path. Note: for `"pseudo_dir_source"`, we have already had a built-in pseudo potential package from oncvpsp, and you can simply link it to `'./from_oncvpsp'` 
 
 ### 1. GW-BSE workflow part (stay at `src` directory)
 
@@ -95,7 +95,7 @@ For multiple materials, run them as a batch on an **interactive node**
 
 ```
 python flows.py -c fpconfig.json
-cd flow
+cd flows
 sbatch run.sh
 ```
 (It will **for sure** take a while, you can do something else...)

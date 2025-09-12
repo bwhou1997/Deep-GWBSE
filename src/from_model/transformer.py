@@ -57,6 +57,8 @@ class MBformerEncoder(nn.Module):
         self.BasisAssembly = BasisAssembly()
         # d_fixed is used to decouple the input and model dimension
         d_fixed = self.BasisAssembly.get_dinput_from_dmodel(d_model)
+        assert d_fixed % 2 == 0, f"d_fixed should be an even number, but got {d_fixed}"
+        d_fixed = int(d_fixed/2)
         logging.debug(f"d_input, d_fixed, d_model: {d_input}, {d_fixed}, {d_model}")
 
         # Modules
@@ -87,8 +89,11 @@ class MBformerEncoder(nn.Module):
 
     @timeCudaWatch
     def compute_embedding(self, datas: list[list[Tensor, Tensor, Tensor, Tensor]]) -> list[Tensor]:
-        return [self.softmax(self.raw_vae_emb(data[0])) +
-                self.posembedding_kpt_band_energy(data[1][..., :self.kpt_dim], data[2], data[3])
+        # return [(self.raw_vae_emb(data[0]))/ (self.raw_vae_emb(data[0])).sum(axis=-1, keepdim=True)+
+        #         self.posembedding_kpt_band_energy(data[1][..., :self.kpt_dim], data[2], data[3])/ (self.posembedding_kpt_band_energy(data[1][..., :self.kpt_dim], data[2], data[3])).sum(axis=-1, keepdim=True)
+        #         for data in datas]
+        # concatenate instead of adding
+        return [torch.cat((self.raw_vae_emb(data[0])/self.raw_vae_emb(data[0]).sum(axis=-1, keepdim=True), self.posembedding_kpt_band_energy(data[1][..., :self.kpt_dim], data[2], data[3])), dim=-1)
                 for data in datas]
     
     @timeCudaWatch

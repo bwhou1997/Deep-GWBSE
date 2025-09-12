@@ -1,7 +1,7 @@
-numpy
+numpy==1.26.4
 pymatgen
 ase==3.23.0
-torch
+torch==2.6.0
 torchvision
 h5py
 e2cnn
