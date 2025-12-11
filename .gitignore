@@ -35,6 +35,7 @@ input
 flow
 # fp-input
 *flow*
+!src/Tavianscode/manager/generate_flow.py
 trash
 other
 test_data

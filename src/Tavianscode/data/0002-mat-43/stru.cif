@@ -1,0 +1,28 @@
+data_image0
+_chemical_formula_structural       BrIFe
+_chemical_formula_sum              "Br1 I1 Fe1"
+_cell_length_a       3.91109
+_cell_length_b       3.90202
+_cell_length_c       12
+_cell_angle_alpha    90
+_cell_angle_beta     90
+_cell_angle_gamma    120.045
+
+_space_group_name_H-M_alt    "P 1"
+_space_group_IT_number       1
+
+loop_
+  _space_group_symop_operation_xyz
+  'x, y, z'
+
+loop_
+  _atom_site_type_symbol
+  _atom_site_label
+  _atom_site_symmetry_multiplicity
+  _atom_site_fract_x
+  _atom_site_fract_y
+  _atom_site_fract_z
+  _atom_site_occupancy
+  Br  Br1       1.0  0.83455  0.50276  1.70392  1.0000
+  I   I1        1.0  0.50169  0.83574  1.44603  1.0000
+  Fe  Fe1       1.0  0.16731  0.16892  1.58587  1.0000
