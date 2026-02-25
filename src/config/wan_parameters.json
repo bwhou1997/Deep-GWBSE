@@ -6,13 +6,13 @@
   "paths": {
     "wannier90x":  "/global/homes/t/taviandj/software/wannier90-3.1.0/wannier90.x",
     "kmeshpl":     "/global/homes/t/taviandj/software/wannier90-3.1.0/utility/kmesh.pl",
-    "json_path":   "/pscratch/sd/t/taviandj/main_project/subset2/manager/parameters.json",
-    "runtime.py":  "/pscratch/sd/t/taviandj/main_project/subset2/manager/1runtime.py",
-    "py_pp.py":    "/pscratch/sd/t/taviandj/main_project/subset2/manager/2py_pp.py",
-    "mse_out":     "/pscratch/sd/t/taviandj/main_project/subset2/mse_out.txt",
-    "data_source": "/pscratch/sd/t/taviandj/main_project/subset2/data",
-    "data_active": "/pscratch/sd/t/taviandj/main_project/subset2/data_active",
-    "storage":     "/pscratch/sd/t/taviandj/main_project/subset2/storage"
+    "json_path":   "/pscratch/sd/t/taviandj/Deep-GWBSE/src/config/wan_parameters.json",
+    "runtime.py":  "/pscratch/sd/t/taviandj/Deep-GWBSE/src/from_wanniers/manager/1runtime.py",
+    "py_pp.py":    "/pscratch/sd/t/taviandj/Deep-GWBSE/src/from_wanniers/manager/2py_pp.py",
+    "mse_out":     "/pscratch/sd/t/taviandj/Deep-GWBSE/src/from_wanniers/mse_out.txt",
+    "data_source": "/pscratch/sd/t/taviandj/Deep-GWBSE/src/from_wanniers/data",
+    "data_active": "/pscratch/sd/t/taviandj/Deep-GWBSE/src/from_wanniers/data_active",
+    "storage":     "/pscratch/sd/t/taviandj/Deep-GWBSE/src/from_wanniers/storage"
   },
   "control": {
     "calculation": "[IN PLACE]",

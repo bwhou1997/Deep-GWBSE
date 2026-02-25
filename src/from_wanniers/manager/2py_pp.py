@@ -110,34 +110,31 @@ if __name__ == "__main__":
     ###################################
 
     # ##################### Plot high symmetry k-points ######################    
-    # # Read in high symmetry k-points from {prefix}_band.gnu
-    # hs_k = []
-    # hs_lbls = []
-    # with open(sys.argv[3], 'r') as f:
-    #     lines = f.readlines()
-    # for line in lines:
-    #     if "set xtics" in line:
-    #         # Grab the string of tics inside the parentheses
-    #         xtics_str = line.split("set xtics",1)[1].strip()
-    #         # Turn the string into a list of strings
-    #         xtics_list = xtics_str.strip('()').split(',')
-    #         for xtic in xtics_list:
-    #             xtic = xtic.split()
-    #             # Turn the first element from double string into string
-    #             hs_lbls.append(xtic[0].strip('"'))
-    #             # Turn the second element from string into float
-    #             hs_k.append(float(xtic[1]))
+    # Read in high symmetry k-points from {prefix}_band.gnu
+    hs_k = []
+    hs_lbls = []
+    with open(sys.argv[3], 'r') as f:
+        lines = f.readlines()
+    # Round each value of data_w to 5 decimal places for matching
+    k_path = np.round(data_w[0, :, 0], 5)
+    for line in lines:
+        if "set xtics" in line:
+            # Grab the string of tics inside the parentheses
+            xtics_str = line.split("set xtics",1)[1].strip()
+            # Turn the string into a list of strings
+            xtics_list = xtics_str.strip('()').split(',')
+            for xtic in xtics_list:
+                xtic = xtic.split()
+                # Turn the first element from double string into string
+                hs_lbls.append(xtic[0].strip('"'))
+                projected_k = round(float(xtic[1]), 5)
+                # Find the closest matching k-point in data_w
+                idx = np.abs(k_path - projected_k).argmin()
+                hs_k.append(idx)
 
-    # # # RESCALE THE HIGH SYMMETRY K-POINTS
-    # # scale_factor = hs_k[-1]
-    # # hs_k = [x / scale_factor for x in hs_k]
-
-    # for x in hs_k:
-    #     plt.axvline(x, linewidth=0.75, alpha=0.2, color="k")
-    # # Add starting and ending x values to the ticks and labels
-    # xticks = [data_w[0, 0, 0]] + hs_k + [data_w[0, -1, 0]]
-    # xlabels = [f"{data_w[0, 0, 0]:.2f}"] + hs_lbls + [f"{data_w[0, -1, 0]:.2f}"]
-    # plt.xticks(ticks=xticks, labels=xlabels)
+    for x in hs_k:
+        plt.axvline(x, linewidth=0.75, alpha=0.2, color="k")
+    plt.xticks(ticks=hs_k, labels=hs_lbls)
     # ####################################
     
     # Disentanglement windows [DEPRICATED]

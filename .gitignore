@@ -36,6 +36,9 @@ flow
 # fp-input
 *flow*
 !src/Tavianscode/manager/generate_flow.py
+!src/from_wanniers/manager/generate_flow.py
+src/from_wanniers/data_active
+src/from_wanniers/storage/*
 trash
 other
 test_data

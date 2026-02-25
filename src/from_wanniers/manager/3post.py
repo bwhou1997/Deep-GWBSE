@@ -2,6 +2,7 @@ import os
 import sys
 import h5py
 import numpy as np
+import json
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 from helpers import get_materials, get_chemical_formula
 

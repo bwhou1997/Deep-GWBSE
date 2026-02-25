@@ -62,24 +62,28 @@ def clean(json_path='manager/parameters.json'):
 
 if __name__ == "__main__":
     print("Starting build process...")
+    
+    json_path = '../config/wan_parameters.json'
+    
     if len(sys.argv) == 2 and sys.argv[1] == '-c':
-        clean("manager/parameters.json")
+        clean(json_path)
         sys.exit(0)
 
-    with open("manager/parameters.json", 'r') as f:
+    
+    with open(json_path, 'r') as f:
         params = json.load(f)
 
     data_source_path = params['paths']['data_source']
     data_active_path = params['paths']['data_active']
     shutil.copytree(data_source_path, data_active_path)
     
-    populate_dirs("manager/parameters.json")
+    populate_dirs(json_path)
 
-    make_high_run("manager/parameters.json")
-    make_middle_runs("manager/parameters.json")
-    make_low_runs("manager/parameters.json")
+    make_high_run(json_path)
+    make_middle_runs(json_path)
+    make_low_runs(json_path)
 
-    populate_inputs("manager/parameters.json")
+    populate_inputs(json_path)
 
 
 

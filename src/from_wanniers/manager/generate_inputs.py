@@ -127,12 +127,12 @@ def generate_win(cif_path, json_path):
         f.write(f'bands_num_points = {params["win"]["bands_num_points"]}\n\n')
 
         f.write(f'begin kpoint_path\n')
-        f.write(f'  G 0.00000 0.00000 0.00000     X     0.50000 0.00000 0.00000\n')
-        f.write(f'  X 0.50000 0.00000 0.00000     J     0.33333 0.33333 0.00000\n')
-        f.write(f'  J 0.33333 0.33333 0.00000     G     0.00000 0.00000 0.00000\n')
-        # hskp = HighSymmetryKPoints(cif_path)
-        # for line in hskp.get_hskps_win():
-        #     f.write(f'{line}\n')
+        # f.write(f'  G 0.00000 0.00000 0.00000     X     0.50000 0.00000 0.00000\n')
+        # f.write(f'  X 0.50000 0.00000 0.00000     J     0.33333 0.33333 0.00000\n')
+        # f.write(f'  J 0.33333 0.33333 0.00000     G     0.00000 0.00000 0.00000\n')
+        hskp = HighSymmetryKPoints(cif_path)
+        for line in hskp.get_hskps_win():
+            f.write(f'{line}\n')
         f.write(f'end kpoint_path\n\n')
 
         f.write(f'write_u_matrices = {params["win"]["write_u_matrices"]}\n')
