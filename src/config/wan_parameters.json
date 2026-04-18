@@ -9,6 +9,7 @@
     "json_path":   "/pscratch/sd/t/taviandj/Deep-GWBSE/src/config/wan_parameters.json",
     "runtime.py":  "/pscratch/sd/t/taviandj/Deep-GWBSE/src/from_wanniers/manager/1runtime.py",
     "py_pp.py":    "/pscratch/sd/t/taviandj/Deep-GWBSE/src/from_wanniers/manager/2py_pp.py",
+    "step1.py":    "/pscratch/sd/t/taviandj/Deep-GWBSE/src/from_wanniers/manager/step1.py",
     "mse_out":     "/pscratch/sd/t/taviandj/Deep-GWBSE/src/from_wanniers/mse_out.txt",
     "data_source": "/pscratch/sd/t/taviandj/Deep-GWBSE/src/from_wanniers/data",
     "data_active": "/pscratch/sd/t/taviandj/Deep-GWBSE/src/from_wanniers/data_active",
@@ -43,6 +44,22 @@
     "diagonalization": "david",
     "diago_david_ndim": 4,
     "diago_full_acc": ".true."
+  },
+  "wfck2r": {
+    "prefix": "[IN PLACE]",
+    "outdir": "./",
+    "first_k": 1,
+    "last_k": 3,
+    "first_band": "[AT RUNTIME]",
+    "last_band": "[AT RUNTIME]",
+    "loctave": ".true."
+  },
+  "pw2bgw": {
+    "prefix": "[IN PLACE]",
+    "outdir": "./",
+    "real_or_complex": 2,
+    "wfng_flag": ".true.",
+    "wfng_file": "WFN"
   },
   "atomic_species": {
     "H": 1.00794,

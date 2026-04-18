@@ -39,6 +39,7 @@ flow
 !src/from_wanniers/manager/generate_flow.py
 src/from_wanniers/data_active
 src/from_wanniers/storage/*
+src/from_wanniers/data_activea
 trash
 other
 test_data

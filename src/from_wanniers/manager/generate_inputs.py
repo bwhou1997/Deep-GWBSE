@@ -83,6 +83,40 @@ def generate_qe_ins(calc_type, cif_path, json_path):
             #     f.write(f'  {line}\n')
 
 
+def generate_wfck2r_in(cif_path, json_path):
+    atoms = read(cif_path)
+    with open(json_path, "r") as param_file:
+        params = json.load(param_file)
+    formula = get_chemical_formula(cif_path)
+
+    with open(f"wfck2r.in", "w") as f:
+        f.write('&inputpp\n')
+        f.write(f'  prefix     = \'{formula}\'\n')
+        f.write(f'  outdir     = \'{params["wfck2r"]["outdir"]}\'\n')
+        f.write(f'  first_k    = {params["wfck2r"]["first_k"]}\n')
+        f.write(f'  last_k     = {params["wfck2r"]["last_k"]}\n')
+        f.write(f'  first_band = {params["wfck2r"]["first_band"]}\n')
+        f.write(f'  last_band  = {params["wfck2r"]["last_band"]}\n')
+        # f.write(f'  write_unk  = {params["wfck2r"]["write_unk"]}\n')
+        f.write(f'  loctave    = {params["wfck2r"]["loctave"]}\n')
+        f.write(f'/\n')
+
+
+def generate_pw2bgw_in(cif_path, json_path):
+    atoms = read(cif_path)
+    with open(json_path, "r") as param_file:
+        params = json.load(param_file)
+    formula = get_chemical_formula(cif_path)
+
+    with open(f"pw2bgw.in", "w") as f:
+        f.write('&input_pw2bgw\n')
+        f.write(f'  prefix          = \'{formula}\'\n')
+        f.write(f'  outdir          = \'{params["pw2bgw"]["outdir"]}\'\n')
+        f.write(f'  real_or_complex = {params["pw2bgw"]["real_or_complex"]}\n')
+        f.write(f'  wfng_flag       = {params["pw2bgw"]["wfng_flag"]}\n')
+        f.write(f'  wfng_file       = \'{params["pw2bgw"]["wfng_file"]}\'\n')
+        f.write(f'/\n')
+
 def generate_bands_pp_in(cif_path, json_path):
     atoms = read(cif_path)
     with open(json_path, "r") as param_file:

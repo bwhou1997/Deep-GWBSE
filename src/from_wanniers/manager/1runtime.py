@@ -12,15 +12,16 @@ if __name__ == "__main__":
     
     This is an executable script for 
         1) updating the nbnd parameter in nscf.in 
-        2) updating and nbnd parameter in bands.in & importing k-points 
+        2) updating the first_band and last_band parameters in wfck2r.in
+        3) updating and nbnd parameter in bands.in & importing k-points 
             from Wannier90 (to plot comparable bandstructures)
-        3) updating the num_bands and exclude_bands parameters in {prefix}.win.
+        4) updating the num_bands and exclude_bands parameters in {prefix}.win.
     
     This has to be done in real-time since it relies on the number of electrons coming 
     from scf.out.
     '''
     if len(sys.argv) != 4:
-        print("Usage: python nbnd.py <edit_file> <json_path> <mode: int>")
+        print("Usage: python 1runtime.py <edit_file> <json_path> <mode: int>")
         sys.exit(1)
     
 
@@ -45,6 +46,13 @@ if __name__ == "__main__":
             if "nbnd" in line:
                 lines[i] = f"  nbnd        = {nbnd_num_bands}\n"
                 break
+
+    elif mode == 5:  # wfck2r.in
+        for i, line in enumerate(lines):
+            if "first_band" in line: # TODO REMOVE - NUM_WANN//2
+                lines[i] = f"  first_band = {int(num_electrons//2 - num_wann//2 + 1)}\n"
+            elif "last_band" in line:
+                lines[i] = f"  last_band  = {int(num_electrons//2 - num_wann//2 + 2)}\n"
 
     elif mode == 4:  # bands.in
         for i, line in enumerate(lines):

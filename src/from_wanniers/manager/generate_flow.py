@@ -1,7 +1,7 @@
 import os
 import stat
 import json
-from .generate_inputs import generate_qe_ins, generate_bands_pp_in, generate_win, generate_pw2wan
+from .generate_inputs import generate_qe_ins, generate_wfck2r_in, generate_pw2bgw_in, generate_bands_pp_in, generate_win, generate_pw2wan
 from .helpers import get_chemical_formula, get_materials
 
 def populate_dirs(json_path='manager/parameters.json'):
@@ -108,6 +108,7 @@ def make_low_runs(json_path='manager/parameters.json'):
             abs_json_path = params['paths']['json_path']
             abs_runtime_py_path = params['paths']['runtime.py']
             abs_py_pp_path = params['paths']['py_pp.py']
+            abs_step1_path = params['paths']['step1.py']
             abs_mse_out_path = params['paths']['mse_out']
 
             script_path = 'run.sh'
@@ -118,13 +119,25 @@ def make_low_runs(json_path='manager/parameters.json'):
                     f.write(f'srun pw.x $PWFLAGS -inp scf.in > scf.out\n')
                 elif calculation == '2-nscf':
                     f.write(f'mkdir -p {formula}.save\n')
+                    f.write(f'mkdir -p rotated.save\n\n')
+
                     f.write(f'cd {formula}.save\n')
                     f.write(f'ln -sf ../../1-scf/{formula}.save/data* .\n')
                     f.write(f'ln -sf ../../1-scf/{formula}.save/charge* .\n')
                     f.write(f'cd ..\n\n')
+
                     f.write(f'PWFLAGS="-npools 16"\n\n')
+
                     f.write(f'python {abs_runtime_py_path} nscf.in {abs_json_path} 1\n')
                     f.write(f'srun pw.x $PWFLAGS -inp nscf.in > nscf.out\n\n')
+
+                    f.write(f'srun -n 1 pw2bgw.x -inp pw2bgw.in > pw2bgw.out\n\n')
+
+                    f.write(f'srun -n 1 wfn2hdf.x BIN WFN wfn.h5 > wfn2hdf.out\n\n')
+
+                    f.write(f'python {abs_runtime_py_path} wfck2r.in {abs_json_path} 5\n')
+                    f.write(f'srun -n 1 wfck2r.x < wfck2r.in > wfck2r.out\n\n')
+
                     f.write(f'rm -rf {formula}.wfc*\n')
                 elif calculation == '3-wan':
                     f.write(f'ln -sf ../2-nscf/{formula}.save .\n\n')
@@ -150,8 +163,13 @@ def make_low_runs(json_path='manager/parameters.json'):
                     f.write(f'ln -sf ../3-wan/{formula}_band.dat .\n')
                     f.write(f'ln -sf ../4-bands/{formula}.bands.dat.gnu .\n')
                     f.write(f'ln -sf ../3-wan/{formula}_band.gnu .\n\n')
+                    f.write(f'ln -sf ../2-nscf/wfck2r.oct .\n')
+                    f.write(f'ln -sf ../3-wan/{formula}_u.mat .\n')
+                    f.write(f'ln -sf ../2-nscf/{formula}.save .\n')
+                    f.write(f'ln -sf ../2-nscf/rotated.save .\n\n')
                     #                                   <wannier90_bands_file>    <qe_bands_file>   <high_symmetry_wan_kps>   <mse_path>       <json_path>   <material_name>
                     f.write(f'python {abs_py_pp_path} {formula}_band.dat {formula}.bands.dat.gnu {formula}_band.gnu {abs_mse_out_path} {abs_json_path} {material}\n')
+                    f.write(f'python {abs_step1_path} {abs_json_path}\n')
             st = os.stat(script_path)
             os.chmod(script_path, st.st_mode | stat.S_IEXEC)
 
@@ -184,6 +202,8 @@ def populate_inputs(json_path='manager/parameters.json'):
                 generate_qe_ins("scf", mini_cif_path, abs_json_path)
             elif calculation == '2-nscf':
                 generate_qe_ins("nscf", mini_cif_path, abs_json_path)
+                generate_wfck2r_in(mini_cif_path, abs_json_path)
+                generate_pw2bgw_in(mini_cif_path, abs_json_path)
             elif calculation == '3-wan':
                 generate_win(mini_cif_path, abs_json_path)
                 generate_pw2wan(mini_cif_path, abs_json_path)
