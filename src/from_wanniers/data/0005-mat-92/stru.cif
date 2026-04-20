@@ -1,0 +1,31 @@
+data_image0
+_chemical_formula_structural       STeIn2I2
+_chemical_formula_sum              "S1 Te1 In2 I2"
+_cell_length_a       4.37631
+_cell_length_b       7.23644
+_cell_length_c       12
+_cell_angle_alpha    90
+_cell_angle_beta     90
+_cell_angle_gamma    90.0415
+
+_space_group_name_H-M_alt    "P 1"
+_space_group_IT_number       1
+
+loop_
+  _space_group_symop_operation_xyz
+  'x, y, z'
+
+loop_
+  _atom_site_type_symbol
+  _atom_site_label
+  _atom_site_symmetry_multiplicity
+  _atom_site_fract_x
+  _atom_site_fract_y
+  _atom_site_fract_z
+  _atom_site_occupancy
+  S   S1        1.0  0.75003  0.30440  1.68830  1.0000
+  Te  Te1       1.0  0.73748  0.79883  1.93214  1.0000
+  In  In1       1.0  0.74187  0.16084  1.86924  1.0000
+  In  In2       1.0  0.75044  0.63357  1.72752  1.0000
+  I   I1        1.0  0.24330  0.32021  2.00417  1.0000
+  I   I2        1.0  0.24938  0.77791  1.59014  1.0000

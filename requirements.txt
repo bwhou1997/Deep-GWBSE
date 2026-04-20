@@ -8,3 +8,4 @@ e2cnn
 pathos
 tensorboard
 scikit-learn
+seekpath

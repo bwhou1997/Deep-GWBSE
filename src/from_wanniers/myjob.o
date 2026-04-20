@@ -1,0 +1,62 @@
+0001-mat-14
+1-scf
+2-nscf
+3-wan
+4-bands
+5-python
+Using band indices for manual FFT: [31, 32]
+Using Wannier window band indices: [31 32 33 34 35 36 37 38]
+0002-mat-43
+1-scf
+2-nscf
+3-wan
+4-bands
+5-python
+Using band indices for manual FFT: [11, 12]
+Using Wannier window band indices: [11 12 13 14 15 16 17 18]
+0004-mat-50
+1-scf
+2-nscf
+3-wan
+4-bands
+5-python
+Using band indices for manual FFT: [13, 14]
+Using Wannier window band indices: [13 14 15 16 17 18 19 20]
+0005-mat-92
+1-scf
+2-nscf
+3-wan
+4-bands
+5-python
+Using band indices for manual FFT: [27, 28]
+Using Wannier window band indices: [27 28 29 30 31 32 33 34]
+0006-mat-119
+1-scf
+2-nscf
+3-wan
+4-bands
+5-python
+Using band indices for manual FFT: [29, 30]
+Using Wannier window band indices: [29 30 31 32 33 34 35 36]
+0008-mat-137
+1-scf
+2-nscf
+3-wan
+4-bands
+5-python
+Using band indices for manual FFT: [21, 22]
+Using Wannier window band indices: [21 22 23 24 25 26 27 28]
+0009-mat-178
+1-scf
+2-nscf
+3-wan
+4-bands
+5-python
+Using band indices for manual FFT: [22, 23]
+Using Wannier window band indices: [22 23 24 25 26 27 28 29]
+0011-mat-292
+1-scf
+2-nscf
+3-wan
+4-bands
+5-python
